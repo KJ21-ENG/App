@@ -319,7 +319,8 @@ function IOURequestStepParticipants({
             }
 
             const newReportID = selectedReportID.current;
-            const shouldUpdateTransactionReportID = participants?.at(0)?.reportID !== newReportID;
+            const hasUnreportedTransaction = transactions?.some((transaction) => !transaction?.reportID || transaction.reportID === CONST.REPORT.UNREPORTED_REPORT_ID) ?? false;
+            const shouldUpdateTransactionReportID = participants?.at(0)?.reportID !== newReportID || (shouldAutoReport.current && hasUnreportedTransaction);
             const transactionReportID = shouldAutoReport.current ? newReportID : CONST.REPORT.UNREPORTED_REPORT_ID;
             // TODO: probably should also change participants here for selectedParticipants.current, but out of scope of this PR
             for (const transaction of transactions) {
