@@ -5,8 +5,10 @@ import RenderHTML from '@components/RenderHTML';
 import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import useEnvironment from '@hooks/useEnvironment';
 import useLocalize from '@hooks/useLocalize';
+import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import {openLink} from '@libs/actions/Link';
 import {explain} from '@libs/actions/Report';
+import {canUseTouchScreen} from '@libs/DeviceCapabilities';
 import {hasReasoning} from '@libs/ReportActionsUtils';
 import CONST from '@src/CONST';
 import type {Report, ReportAction} from '@src/types/onyx';
@@ -34,9 +36,11 @@ function ReportActionItemMessageWithExplain({message, action, childReport, origi
     const {translate} = useLocalize();
     const personalDetail = useCurrentUserPersonalDetails();
     const {environmentURL} = useEnvironment();
+    const {shouldUseNarrowLayout} = useResponsiveLayout();
 
     const actionHasReasoning = hasReasoning(action);
     const computedMessage = actionHasReasoning ? `${message}${translate('iou.AskToExplain')}` : message;
+    const isDesktopSelectable = !canUseTouchScreen() || !shouldUseNarrowLayout;
 
     const handleLinkPress = (event: GestureResponderEvent | KeyboardEvent, href: string) => {
         // Handle the special "Explain" link
@@ -53,7 +57,7 @@ function ReportActionItemMessageWithExplain({message, action, childReport, origi
         <ReportActionItemBasicMessage>
             <RenderHTML
                 html={`<comment><muted-text>${computedMessage}</muted-text></comment>`}
-                isSelectable={false}
+                isSelectable={isDesktopSelectable}
                 onLinkPress={handleLinkPress}
             />
         </ReportActionItemBasicMessage>
