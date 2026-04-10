@@ -174,7 +174,7 @@ function IOURequestStepTime({
                     label={translate('iou.startDate')}
                     defaultValue={currentStartDate}
                     maxDate={CONST.CALENDAR_PICKER.MAX_DATE}
-                    minDate={CONST.CALENDAR_PICKER.MIN_DATE}
+                    minDate={CONST.CALENDAR_PICKER.MIN_EXPENSE_DATE}
                 />
                 <View style={[styles.mt2, styles.mhn5]}>
                     <InputWrapper
@@ -190,7 +190,7 @@ function IOURequestStepTime({
                     label={translate('iou.endDate')}
                     defaultValue={currentEndDate}
                     maxDate={CONST.CALENDAR_PICKER.MAX_DATE}
-                    minDate={CONST.CALENDAR_PICKER.MIN_DATE}
+                    minDate={CONST.CALENDAR_PICKER.MIN_EXPENSE_DATE}
                 />
                 <View style={[styles.mt2, styles.mhn5]}>
                     <InputWrapper

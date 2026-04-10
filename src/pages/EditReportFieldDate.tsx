@@ -61,7 +61,7 @@ function EditReportFieldDatePage({fieldName, isRequired, onSubmit, fieldValue, f
                     accessibilityLabel={fieldName}
                     role={CONST.ROLE.PRESENTATION}
                     maxDate={CONST.CALENDAR_PICKER.MAX_DATE}
-                    minDate={CONST.CALENDAR_PICKER.MIN_DATE}
+                    minDate={CONST.CALENDAR_PICKER.MIN_EXPENSE_DATE}
                     autoFocus
                 />
             </View>

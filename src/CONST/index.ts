@@ -52,6 +52,7 @@ const ANDROID_PACKAGE_NAME = 'org.me.mobiexpensifyg';
 const CURRENT_YEAR = new Date().getFullYear();
 const MAX_DATE = dateAdd(new Date(), {years: 1});
 const MIN_DATE = dateSubtract(new Date(), {years: 20});
+const MIN_EXPENSE_DATE = dateSubtract(new Date(), {years: 100});
 const EXPENSIFY_POLICY_DOMAIN = 'expensify-policy';
 const EXPENSIFY_POLICY_DOMAIN_EXTENSION = '.exfy';
 
@@ -445,6 +446,7 @@ const CONST = {
         MAX_YEAR: CURRENT_YEAR + 100,
         MAX_DATE,
         MIN_DATE,
+        MIN_EXPENSE_DATE,
     },
 
     DATE_BIRTH: {
