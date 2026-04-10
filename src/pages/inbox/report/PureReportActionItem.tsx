@@ -12,6 +12,7 @@ import * as ActionSheetAwareScrollView from '@components/ActionSheetAwareScrollV
 import {AttachmentContext} from '@components/AttachmentContext';
 import Button from '@components/Button';
 import DisplayNames from '@components/DisplayNames';
+import ErrorMessageRow from '@components/ErrorMessageRow';
 import Hoverable from '@components/Hoverable';
 import MentionReportContext from '@components/HTMLEngineProvider/HTMLRenderers/MentionReportRenderer/MentionReportContext';
 import Icon from '@components/Icon';
@@ -2096,6 +2097,7 @@ function PureReportActionItem({
     const formattedTimestamp = datetimeToCalendarTime(action.created, false);
     const plainMessage = getReportActionText(action);
     const accessibilityLabel = `${displayName}, ${formattedTimestamp}, ${plainMessage}`;
+    const reportActionErrors = (linkedTransactionRouteError ?? !isOnSearch) ? getLatestErrorMessageField(action as OnyxDataWithErrors) : {};
 
     return (
         <View>
@@ -2167,7 +2169,8 @@ function PureReportActionItem({
                                         draftMessage !== undefined ? undefined : (action.pendingAction ?? (action.isOptimisticAction ? CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD : undefined))
                                     }
                                     shouldHideOnDelete={!isDeletedParentAction}
-                                    errors={(linkedTransactionRouteError ?? !isOnSearch) ? getLatestErrorMessageField(action as OnyxDataWithErrors) : {}}
+                                    errors={reportActionErrors}
+                                    shouldShowErrorMessages={false}
                                     errorRowStyles={[styles.ml10, styles.mr2]}
                                     needsOffscreenAlphaCompositing={isMoneyRequestAction(action)}
                                     shouldDisableStrikeThrough
@@ -2209,6 +2212,12 @@ function PureReportActionItem({
                     <InlineSystemMessage message={action.error} />
                 </View>
             </PressableWithSecondaryInteraction>
+            <ErrorMessageRow
+                errors={reportActionErrors}
+                errorRowStyles={[styles.ml10, styles.mr2]}
+                onDismiss={onClose}
+                dismissError={dismissError}
+            />
         </View>
     );
 }
