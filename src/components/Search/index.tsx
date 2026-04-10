@@ -237,9 +237,11 @@ function Search({
     // Cleared once the server-confirmed (non-optimistic) version arrives.
     const cachedOptimisticItemRef = useRef<TransactionListItemType | null>(null);
     const cachedOptimisticItemIndexRef = useRef(0);
+    const hasTriggeredOptimisticHighlightRef = useRef(false);
     const optimisticTrackingCleanedUpRef = useRef(false);
     const rollbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const [isOptimisticTrackingCleared, setIsOptimisticTrackingCleared] = useState(false);
+    const [optimisticHighlightKey, setOptimisticHighlightKey] = useState<string | null>(null);
 
     const clearOptimisticTracking = useCallback(() => {
         if (optimisticTrackingCleanedUpRef.current) {
@@ -248,6 +250,8 @@ function Search({
         optimisticTrackingCleanedUpRef.current = true;
         cachedOptimisticItemRef.current = null;
         optimisticWatchKeyRef.current = undefined;
+        hasTriggeredOptimisticHighlightRef.current = false;
+        setOptimisticHighlightKey(null);
         setShowPendingExpensePlaceholder(false);
         setIsOptimisticTrackingCleared(true);
     }, []);
@@ -1214,13 +1218,13 @@ function Search({
                     ? `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${(item as ReportActionListItemType).reportActionID}`
                     : `${ONYXKEYS.COLLECTION.TRANSACTION}${(item as TransactionListItemType).transactionID}`;
 
-                const isBaseKeyMatch = !!newSearchResultKeys?.has(baseKey);
+                const isBaseKeyMatch = !!newSearchResultKeys?.has(baseKey) || optimisticHighlightKey === baseKey;
 
                 const isAnyTransactionMatch =
                     !isChat &&
                     (item as TransactionGroupListItemType)?.transactions?.some((transaction) => {
                         const transactionKey = `${ONYXKEYS.COLLECTION.TRANSACTION}${transaction.transactionID}`;
-                        return !!newSearchResultKeys?.has(transactionKey);
+                        return !!newSearchResultKeys?.has(transactionKey) || optimisticHighlightKey === transactionKey;
                     });
 
                 const shouldAnimateInHighlight = isBaseKeyMatch || isAnyTransactionMatch;
@@ -1231,7 +1235,7 @@ function Search({
 
                 return {...item, shouldAnimateInHighlight, hash};
             }),
-        [type, status, filteredData, localeCompare, translate, sortBy, sortOrder, validGroupBy, isChat, newSearchResultKeys, hash],
+        [type, status, filteredData, localeCompare, translate, sortBy, sortOrder, validGroupBy, isChat, newSearchResultKeys, optimisticHighlightKey, hash],
     );
 
     // Track the optimistic item through its lifecycle in sortedData.
@@ -1250,6 +1254,10 @@ function Search({
                 clearTimeout(rollbackTimeoutRef.current);
                 rollbackTimeoutRef.current = undefined;
             }
+            if (!hasTriggeredOptimisticHighlightRef.current && optimisticWatchKeyRef.current) {
+                hasTriggeredOptimisticHighlightRef.current = true;
+                setOptimisticHighlightKey(optimisticWatchKeyRef.current);
+            }
             if (!cachedOptimisticItemRef.current) {
                 setShowPendingExpensePlaceholder(false);
             }
@@ -1266,6 +1274,18 @@ function Search({
             }, OPTIMISTIC_ROLLBACK_GRACE_MS);
         }
     }, [sortedData, clearOptimisticTracking]);
+
+    useEffect(() => {
+        if (!optimisticHighlightKey) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            setOptimisticHighlightKey(null);
+        }, CONST.ANIMATED_HIGHLIGHT_START_DURATION);
+
+        return () => clearTimeout(timer);
+    }, [optimisticHighlightKey]);
 
     // Re-inject the cached optimistic item when a stale snapshot temporarily removes it
     // from sortedData. Once the item is back (real data), this is a no-op.
