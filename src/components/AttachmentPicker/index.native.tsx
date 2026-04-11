@@ -2,8 +2,8 @@ import type {FileToCopy} from '@react-native-documents/picker';
 import {keepLocalCopy, pick, types} from '@react-native-documents/picker';
 import {Str} from 'expensify-common';
 import {ImageManipulator, SaveFormat} from 'expo-image-manipulator';
-import React, {useCallback, useMemo, useRef, useState} from 'react';
-import {Alert, View} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {Alert, AppState, View} from 'react-native';
 import RNFetchBlob from 'react-native-blob-util';
 import {launchImageLibrary} from 'react-native-image-picker';
 import type {Asset, Callback, CameraOptions, ImageLibraryOptions, ImagePickerResponse} from 'react-native-image-picker';
@@ -134,6 +134,7 @@ function AttachmentPicker({
     const onModalHide = useRef<(() => void) | undefined>(undefined);
     const onCanceled = useRef<() => void>(() => {});
     const onClosed = useRef<() => void>(() => {});
+    const shouldRetryCameraOnForeground = useRef(false);
     const popoverRef = useRef(null);
 
     const {translate} = useLocalize();
@@ -165,7 +166,9 @@ function AttachmentPicker({
                     if (response.errorCode) {
                         switch (response.errorCode) {
                             case 'permission':
-                                showCameraPermissionsAlert(translate);
+                                showCameraPermissionsAlert(translate, () => {
+                                    shouldRetryCameraOnForeground.current = imagePickerFunc === launchCamera;
+                                });
                                 return resolve();
                             default:
                                 showGeneralAlert();
@@ -441,6 +444,37 @@ function AttachmentPicker({
         },
         [handleImageProcessingError, shouldValidateImage, showGeneralAlert, showImageCorruptionAlert],
     );
+
+    const retryCameraOnForeground = useCallback(() => {
+        if (!shouldRetryCameraOnForeground.current) {
+            return;
+        }
+
+        shouldRetryCameraOnForeground.current = false;
+        showImagePicker(launchCamera)
+            .catch((error: Error) => {
+                if (JSON.stringify(error).includes('OPERATION_CANCELED')) {
+                    return;
+                }
+
+                showGeneralAlert(error.message);
+                throw error;
+            })
+            .then((result) => pickAttachment(result))
+            .catch(console.error);
+    }, [pickAttachment, showGeneralAlert, showImagePicker]);
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (appState) => {
+            if (appState !== 'active') {
+                return;
+            }
+
+            retryCameraOnForeground();
+        });
+
+        return () => subscription.remove();
+    }, [retryCameraOnForeground]);
 
     /**
      * Setup native attachment selection to start after this popover closes

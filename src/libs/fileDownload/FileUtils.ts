@@ -70,7 +70,7 @@ function showPermissionErrorAlert(translate: LocalizedTranslate) {
 /**
  * Inform the users when they need to grant camera access and guide them to settings
  */
-function showCameraPermissionsAlert(translate: LocalizedTranslate) {
+function showCameraPermissionsAlert(translate: LocalizedTranslate, onSettingsPress?: () => void) {
     Alert.alert(
         translate('attachmentPicker.cameraPermissionRequired'),
         translate('attachmentPicker.expensifyDoesNotHaveAccessToCamera'),
@@ -82,9 +82,9 @@ function showCameraPermissionsAlert(translate: LocalizedTranslate) {
             {
                 text: translate('common.settings'),
                 onPress: () => {
+                    onSettingsPress?.();
                     Linking.openSettings();
-                    // In the case of ios, the App reloads when we update camera permission from settings
-                    // we are saving last route so we can navigate to it after app reload
+                    // Save the current route to restore navigation when returning from system settings.
                     saveLastRoute();
                 },
             },
