@@ -40,6 +40,7 @@ function ReportActionsList() {
 
     const allReportTransactions = useReportTransactionsCollection(reportIDFromRoute);
     const reportTransactions = getAllNonDeletedTransactions(allReportTransactions, reportActions, isOffline, true);
+    const reportID = report?.reportID ?? reportIDFromRoute;
 
     const isMoneyRequestOrInvoiceReport = isMoneyRequestReport(report) || isInvoiceReport(report);
     const shouldWaitForTransactions = shouldWaitForTransactionsUtil(report, reportTransactions, reportMetadata, isOffline);
@@ -50,10 +51,10 @@ function ReportActionsList() {
     }
 
     if (shouldDisplayMoneyRequestActionsList) {
-        return <MoneyRequestReportActionsList reportID={report.reportID} />;
+        return <MoneyRequestReportActionsList reportID={reportID} />;
     }
 
-    return <ReportActionsView reportID={report.reportID} />;
+    return <ReportActionsView reportID={reportID} />;
 }
 
 export default ReportActionsList;

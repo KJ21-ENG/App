@@ -855,10 +855,14 @@ function removeReportScreen(reportIDSet: Set<string>) {
                 }
                 return true;
             });
+            if (!routes.length) {
+                return state;
+            }
+            const nextIndex = Math.min(state.index, routes.length - 1);
             return CommonActions.reset({
                 ...state,
                 routes,
-                index: routes.length < state.routes.length ? state.index - 1 : state.index,
+                index: routes.length < state.routes.length ? Math.max(nextIndex, 0) : nextIndex,
             });
         });
     });
