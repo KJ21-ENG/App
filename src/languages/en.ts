@@ -1486,6 +1486,7 @@ const translations = {
             invalidCategoryLength: 'The category name exceeds 255 characters. Please shorten it or choose a different category.',
             invalidTagLength: 'The tag name exceeds 255 characters. Please shorten it or choose a different tag.',
             invalidAmount: 'Please enter a valid amount before continuing',
+            amountChanged: 'The requested amount has changed. Please review and try again.',
             invalidDistance: 'Please enter a valid distance before continuing',
             invalidReadings: 'Please enter both start and end readings',
             negativeDistanceNotAllowed: 'End reading must be greater than start reading',

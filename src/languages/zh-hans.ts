@@ -1387,6 +1387,7 @@ const translations: TranslationDeepObject<typeof en> = {
             invalidCategoryLength: '类别名称超过 255 个字符。请缩短名称或选择其他类别。',
             invalidTagLength: '标签名称超过了 255 个字符。请缩短它或选择其他标签。',
             invalidAmount: '请在继续之前输入有效金额',
+            amountChanged: 'The requested amount has changed. Please review and try again.',
             invalidDistance: '请在继续之前输入有效的距离',
             invalidReadings: '请输入起始读数和结束读数',
             negativeDistanceNotAllowed: '结束读数必须大于开始读数',

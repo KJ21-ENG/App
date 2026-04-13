@@ -10,6 +10,7 @@ import ONYXKEYS from '@src/ONYXKEYS';
 import type {AnyOnyxUpdatesFromServer, OnyxUpdateEvent, OnyxUpdatesFromServer, Request} from '@src/types/onyx';
 import type Response from '@src/types/onyx/Response';
 import {isEmptyObject} from '@src/types/utils/EmptyObject';
+import getPayAmountMismatchFailureData from './IOU/getPayAmountMismatchFailureData';
 import {queueOnyxUpdates} from './QueuedOnyxUpdates';
 
 // This key needs to be separate from ONYXKEYS.ONYX_UPDATES_FROM_SERVER so that it can be updated without triggering the callback when the server IDs are updated. If that
@@ -27,6 +28,52 @@ Onyx.connectWithoutView({
 let pusherEventsPromise = Promise.resolve();
 
 let airshipEventsPromise = Promise.resolve();
+
+const payMoneyRequestCommands = new Set<string>([WRITE_COMMANDS.PAY_MONEY_REQUEST, WRITE_COMMANDS.PAY_MONEY_REQUEST_WITH_WALLET]);
+
+function isAmountMismatchPayError<TKey extends OnyxKey>(request: Request<TKey>, response: Response<TKey>): boolean {
+    if (!payMoneyRequestCommands.has(request.command)) {
+        return false;
+    }
+
+    const payMoneyRequestData = request.data as {iouReportID?: string; amount?: number} | undefined;
+    const iouReportID = payMoneyRequestData?.iouReportID;
+    const submittedAmount = payMoneyRequestData?.amount;
+
+    if (typeof iouReportID === 'string' && typeof submittedAmount === 'number') {
+        const updatedIOUReport = response.onyxData?.find((update) => update.key === `${ONYXKEYS.COLLECTION.REPORT}${iouReportID}`)?.value as
+            | {total?: number; nonReimbursableTotal?: number}
+            | undefined;
+
+        if (updatedIOUReport && typeof updatedIOUReport.total === 'number') {
+            const latestReimbursableAmount = Math.abs(updatedIOUReport.total - (updatedIOUReport.nonReimbursableTotal ?? 0));
+            if (latestReimbursableAmount !== submittedAmount) {
+                return true;
+            }
+        }
+    }
+
+    const serverErrorText = `${response.message ?? ''} ${response.title ?? ''} ${response.type ?? ''}`.toLowerCase();
+
+    // This list intentionally covers both current phrasing and likely server-side variants.
+    return [
+        'requested amount has changed',
+        'amount has changed',
+        'amount changed',
+        'amount mismatch',
+        'mismatch amount',
+        'stale amount',
+    ].some((candidate) => serverErrorText.includes(candidate));
+}
+
+function getFailureDataForAmountMismatch<TKey extends OnyxKey>(request: Request<TKey>): Array<OnyxUpdate<TKey>> | undefined {
+    if (!request.failureData) {
+        return request.failureData;
+    }
+
+    const payMoneyRequestData = request.data as {iouReportID?: string; reportActionID?: string} | undefined;
+    return getPayAmountMismatchFailureData(request.failureData, payMoneyRequestData?.iouReportID, payMoneyRequestData?.reportActionID) as Array<OnyxUpdate<TKey>>;
+}
 
 function applyHTTPSOnyxUpdates<TKey extends OnyxKey>(request: Request<TKey>, response: Response<TKey>, lastUpdateID: number) {
     Log.info('[OnyxUpdateManager] Applying https update', false, {lastUpdateID});
@@ -62,7 +109,9 @@ function applyHTTPSOnyxUpdates<TKey extends OnyxKey>(request: Request<TKey>, res
                     requestData: request.data,
                 });
 
-                return updateHandler(request.failureData);
+                const baseFailureData = request.failureData ?? [];
+                const failureData = isAmountMismatchPayError(request, response) ? getFailureDataForAmountMismatch(request) : baseFailureData;
+                return updateHandler(failureData ?? baseFailureData);
             }
             return Promise.resolve();
         })

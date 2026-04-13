@@ -1434,6 +1434,7 @@ const translations: TranslationDeepObject<typeof en> = {
             invalidCategoryLength: 'Der Kategoriename überschreitet 255 Zeichen. Bitte kürzen Sie ihn oder wählen Sie eine andere Kategorie.',
             invalidTagLength: 'Der Tagname überschreitet 255 Zeichen. Bitte kürzen Sie ihn oder wählen Sie einen anderen Tag.',
             invalidAmount: 'Bitte gib vor dem Fortfahren einen gültigen Betrag ein',
+            amountChanged: 'The requested amount has changed. Please review and try again.',
             invalidDistance: 'Bitte gib eine gültige Entfernung ein, bevor du fortfährst',
             invalidReadings: 'Bitte geben Sie sowohl Start- als auch Endstand ein',
             negativeDistanceNotAllowed: 'Endstand muss größer als Anfangsstand sein',

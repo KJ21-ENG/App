@@ -1413,6 +1413,7 @@ const translations: TranslationDeepObject<typeof en> = {
             invalidCategoryLength: 'カテゴリー名が255文字を超えています。短くするか、別のカテゴリーを選択してください。',
             invalidTagLength: 'タグ名が255文字を超えています。短くするか、別のタグを選択してください。',
             invalidAmount: '続行する前に有効な金額を入力してください',
+            amountChanged: 'The requested amount has changed. Please review and try again.',
             invalidDistance: '続行する前に有効な距離を入力してください',
             invalidReadings: '開始値と終了値の両方を入力してください',
             negativeDistanceNotAllowed: '終了値は開始値より大きくなければなりません',

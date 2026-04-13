@@ -1,4 +1,4 @@
-import type {OnyxKey, OnyxUpdate} from 'react-native-onyx';
+import type {OnyxCollection, OnyxKey, OnyxUpdate} from 'react-native-onyx';
 import Onyx from 'react-native-onyx';
 import {setIsOpenAppFailureModalOpen} from '@libs/actions/isOpenAppFailureModalOpen';
 import {
@@ -15,11 +15,13 @@ import {
 import {flushQueue, isEmpty} from '@libs/actions/QueuedOnyxUpdates';
 import {isClientTheLeader} from '@libs/ActiveClientManager';
 import {WRITE_COMMANDS} from '@libs/API/types';
+import getPayAmountMismatchFailureData from '@libs/actions/IOU/getPayAmountMismatchFailureData';
 import Log from '@libs/Log';
 import {processWithMiddleware} from '@libs/Request';
 import RequestThrottle from '@libs/RequestThrottle';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
+import type {Report} from '@src/types/onyx';
 import type OnyxRequest from '@src/types/onyx/Request';
 import type {AnyOnyxUpdate, AnyRequest, ConflictData} from '@src/types/onyx/Request';
 import {isOffline, onReconnection} from './NetworkStore';
@@ -54,6 +56,7 @@ let isSequentialQueueRunning = false;
 let currentRequestPromise: Promise<void> | null = null;
 let isQueuePaused = false;
 const sequentialQueueRequestThrottle = new RequestThrottle('SequentialQueue');
+let allReports: OnyxCollection<Report>;
 
 /**
  * Puts the queue into a paused state so that no requests will be processed
@@ -94,6 +97,14 @@ Onyx.connectWithoutView({
     },
 });
 
+Onyx.connectWithoutView({
+    key: ONYXKEYS.COLLECTION.REPORT,
+    waitForCollectionCallback: true,
+    callback: (value) => {
+        allReports = value;
+    },
+});
+
 function saveQueueFlushedData<TKey extends OnyxKey>(...onyxUpdates: Array<OnyxUpdate<TKey>>) {
     const newValue = [...queueFlushedDataToStore, ...onyxUpdates];
     // eslint-disable-next-line rulesdir/prefer-actions-set-data
@@ -110,6 +121,38 @@ function clearQueueFlushedData() {
 }
 function getQueueFlushedData() {
     return queueFlushedDataToStore;
+}
+
+function shouldFailQueuedPayRequestForAmountMismatch<TKey extends OnyxKey>(request: OnyxRequest<TKey>): boolean {
+    if (!request.initiatedOffline) {
+        return false;
+    }
+
+    if (request.command !== WRITE_COMMANDS.PAY_MONEY_REQUEST && request.command !== WRITE_COMMANDS.PAY_MONEY_REQUEST_WITH_WALLET) {
+        return false;
+    }
+
+    const payRequestData = request.data as {iouReportID?: string; amount?: number} | undefined;
+    const iouReportID = payRequestData?.iouReportID;
+    const submittedAmount = payRequestData?.amount;
+
+    if (typeof iouReportID !== 'string' || typeof submittedAmount !== 'number') {
+        return false;
+    }
+
+    const latestReport = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${iouReportID}`];
+    if (!latestReport || typeof latestReport.total !== 'number') {
+        return false;
+    }
+
+    const latestReimbursableAmount = Math.abs(latestReport.total - (latestReport.nonReimbursableTotal ?? 0));
+    return latestReimbursableAmount !== submittedAmount;
+}
+
+function getFailureDataWithAmountMismatch<TKey extends OnyxKey>(request: OnyxRequest<TKey>): AnyOnyxUpdate[] {
+    const baseFailureData = [...(request.failureData ?? [])] as AnyOnyxUpdate[];
+    const payRequestData = request.data as {iouReportID?: string; reportActionID?: string} | undefined;
+    return getPayAmountMismatchFailureData(baseFailureData, payRequestData?.iouReportID, payRequestData?.reportActionID);
 }
 
 /**
@@ -155,6 +198,17 @@ function process(): Promise<void> {
         isRollback: requestToProcess.isRollback ?? false,
         persistWhenOngoing: requestToProcess.persistWhenOngoing ?? false,
     });
+
+    if (shouldFailQueuedPayRequestForAmountMismatch(requestToProcess)) {
+        Log.info('[SequentialQueue] Blocking queued pay request due to amount mismatch before replay', false, {
+            command: requestToProcess.command,
+            iouReportID: requestToProcess.data?.iouReportID,
+        });
+        Onyx.update(getFailureDataWithAmountMismatch(requestToProcess));
+        endPersistedRequestAndRemoveFromQueue(requestToProcess);
+        sequentialQueueRequestThrottle.clear();
+        return process();
+    }
 
     // Set the current request to a promise awaiting its processing so that getCurrentRequest can be used to take some action after the current request has processed.
     currentRequestPromise = processWithMiddleware(requestToProcess, true)

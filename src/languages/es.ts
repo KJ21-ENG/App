@@ -1371,6 +1371,7 @@ const translations: TranslationDeepObject<typeof en> = {
             invalidCategoryLength: 'La longitud de la categoría escogida excede el máximo permitido (255). Por favor, escoge otra categoría o acorta la categoría primero.',
             invalidTagLength: 'La longitud de la etiqueta escogida excede el máximo permitido (255). Por favor, escoge otra etiqueta o acorta la etiqueta primero.',
             invalidAmount: 'Por favor, ingresa un importe válido antes de continuar',
+            amountChanged: 'The requested amount has changed. Please review and try again.',
             invalidDistance: 'Por favor, ingresa una distancia válida antes de continuar',
             invalidReadings: 'Por favor ingrese ambas lecturas de inicio y fin',
             negativeDistanceNotAllowed: 'La lectura final debe ser mayor que la lectura inicial',

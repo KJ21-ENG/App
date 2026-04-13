@@ -1428,6 +1428,7 @@ const translations: TranslationDeepObject<typeof en> = {
             invalidCategoryLength: 'Nazwa kategorii przekracza 255 znaków. Skróć ją lub wybierz inną kategorię.',
             invalidTagLength: 'Nazwa taga przekracza 255 znaków. Skróć ją lub wybierz inny tag.',
             invalidAmount: 'Wprowadź poprawną kwotę przed kontynuowaniem',
+            amountChanged: 'The requested amount has changed. Please review and try again.',
             invalidDistance: 'Wprowadź prawidłowy dystans przed kontynuowaniem',
             invalidReadings: 'Wprowadź zarówno odczyt początkowy, jak i końcowy',
             negativeDistanceNotAllowed: 'Końcowy odczyt musi być większy niż początkowy odczyt',
