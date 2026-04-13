@@ -132,8 +132,14 @@ function ReportNotFoundInnerGuard({reportIDFromPath, children}: ReportNotFoundIn
         parentReportMetadata,
         isOffline,
     });
+
+    // Do not treat a missing parent action as deleted while the parent report's actions are
+    // still being fetched. Pending card transactions can have their parent IOU action absent
+    // from Onyx during the initial load window even though the parent report was previously
+    // opened (hasOnceLoadedReportActions = true), causing a false-positive not-found page.
+    const isParentReportActionsLoading = !isOffline && !!parentReportMetadata?.isLoadingInitialReportActions;
     // eslint-disable-next-line rulesdir/no-negated-variables
-    const shouldShowNotFoundPage = isParentActionDeleted || isParentActionMissingAfterLoad;
+    const shouldShowNotFoundPage = isParentActionDeleted || (isParentActionMissingAfterLoad && !isParentReportActionsLoading);
 
     useEffect(() => {
         if (!shouldShowNotFoundPage) {

@@ -11291,6 +11291,15 @@ function canJoinChat(
         return false;
     }
 
+    // Transaction threads (child of an IOU or Expense report) are never joinable.
+    // We use the parent report's type field rather than isMoneyRequest(report), which reads
+    // the module-level allReportActions cache. That cache can be transiently empty (evicted)
+    // even while the report is valid, causing isMoneyRequest to return false and letting the
+    // function fall through to isChatThread — incorrectly showing the Join button.
+    if (isChatThread(report) && (isExpenseReport(report?.parentReportID) || isIOUReport(report?.parentReportID))) {
+        return false;
+    }
+
     const isExpenseChat = isMoneyRequestReport(report) || isMoneyRequest(report) || isInvoiceReport(report) || isTrackExpenseReportNew(report, parentReport, parentReportAction);
     // Anyone viewing these chat types is already a participant and therefore cannot join
     if (isRootGroupChat(report, isReportArchived) || isSelfDM(report) || isInvoiceRoom(report) || isSystemChat(report) || isExpenseChat) {
