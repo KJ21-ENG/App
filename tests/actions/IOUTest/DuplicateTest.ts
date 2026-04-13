@@ -1176,6 +1176,43 @@ describe('actions/Duplicate', () => {
             expect(duplicatedTransaction?.transactionID).not.toBe(mockCashExpenseTransaction.transactionID);
         });
 
+        it('should not duplicate card import transactions', async () => {
+            const mockCardExpenseTransaction = {
+                ...mockTransaction,
+                amount: mockTransaction.amount * -1,
+                managedCard: true,
+                transactionType: CONST.SEARCH.TRANSACTION_TYPE.CARD,
+            };
+
+            await Onyx.clear();
+
+            duplicateExpenseTransaction({
+                transaction: mockCardExpenseTransaction,
+                optimisticChatReportID: mockOptimisticChatReportID,
+                optimisticIOUReportID: mockOptimisticIOUReportID,
+                isASAPSubmitBetaEnabled: mockIsASAPSubmitBetaEnabled,
+                introSelected: undefined,
+                activePolicyID: undefined,
+                quickAction: undefined,
+                policyRecentlyUsedCurrencies: [],
+                isSelfTourViewed: false,
+                customUnitPolicyID: '',
+                targetPolicy: mockPolicy,
+                targetPolicyCategories: fakePolicyCategories,
+                targetReport: policyExpenseChat,
+                existingTransactionDraft: undefined,
+                draftTransactionIDs: [],
+                personalDetails: mockPersonalDetails,
+                betas: [CONST.BETAS.ALL],
+                recentWaypoints,
+                targetPolicyTags,
+            });
+
+            await waitForBatchedUpdates();
+
+            expect(writeSpy).not.toHaveBeenCalled();
+        });
+
         it('should create a duplicate time expense successfully', async () => {
             const transactionID = 'time-1';
             const HOURLY_RATE = 9.99;

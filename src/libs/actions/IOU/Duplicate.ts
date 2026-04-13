@@ -689,6 +689,10 @@ function duplicateExpenseTransaction({
         return;
     }
 
+    if (isFromCreditCardImport(transaction)) {
+        return;
+    }
+
     const userAccountID = getUserAccountID();
     const currentUserEmail = getCurrentUserEmail();
 
