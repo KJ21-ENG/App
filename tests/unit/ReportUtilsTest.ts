@@ -3685,6 +3685,69 @@ describe('ReportUtils', () => {
                 expect(allEmpty).toBe(true);
             });
 
+            it('visible non-Concierge Expensify participant blocks money request options', () => {
+                const expensifyAccountID = 123456789;
+                const conciergeAccountID = CONST.ACCOUNT_ID.CONCIERGE;
+                const expensifyAccountIDsSpy = jest.spyOn(CONST, 'EXPENSIFY_ACCOUNT_IDS', 'get').mockReturnValue([conciergeAccountID, expensifyAccountID]);
+                const report: Report = {
+                    ...LHNTestUtils.getFakeReport(),
+                    chatType: CONST.REPORT.CHAT_TYPE.POLICY_EXPENSE_CHAT,
+                    isOwnPolicyExpenseChat: true,
+                    participants: {
+                        [currentUserAccountID]: {notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.ALWAYS},
+                        [expensifyAccountID]: {notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.ALWAYS},
+                    },
+                };
+                try {
+                    const moneyRequestOptions = temporary_getMoneyRequestOptions(report, undefined, [currentUserAccountID, expensifyAccountID], [CONST.BETAS.ALL]);
+                    expect(moneyRequestOptions.length).toBe(0);
+                } finally {
+                    expensifyAccountIDsSpy.mockRestore();
+                }
+            });
+
+            it('visible Concierge participant does not block money request options', () => {
+                const conciergeAccountID = CONST.ACCOUNT_ID.CONCIERGE;
+                const expensifyAccountID = 123456789;
+                const expensifyAccountIDsSpy = jest.spyOn(CONST, 'EXPENSIFY_ACCOUNT_IDS', 'get').mockReturnValue([conciergeAccountID, expensifyAccountID]);
+                const report: Report = {
+                    ...LHNTestUtils.getFakeReport(),
+                    chatType: CONST.REPORT.CHAT_TYPE.POLICY_EXPENSE_CHAT,
+                    isOwnPolicyExpenseChat: true,
+                    participants: {
+                        [currentUserAccountID]: {notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.ALWAYS},
+                        [conciergeAccountID]: {notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.ALWAYS},
+                    },
+                };
+                try {
+                    const moneyRequestOptions = temporary_getMoneyRequestOptions(report, undefined, [currentUserAccountID, conciergeAccountID], [CONST.BETAS.ALL]);
+                    expect(moneyRequestOptions).toContain(CONST.IOU.TYPE.SUBMIT);
+                    expect(moneyRequestOptions).toContain(CONST.IOU.TYPE.TRACK);
+                } finally {
+                    expensifyAccountIDsSpy.mockRestore();
+                }
+            });
+
+            it('visible Concierge participant still blocks non-expense contexts', () => {
+                const conciergeAccountID = CONST.ACCOUNT_ID.CONCIERGE;
+                const expensifyAccountID = 123456789;
+                const expensifyAccountIDsSpy = jest.spyOn(CONST, 'EXPENSIFY_ACCOUNT_IDS', 'get').mockReturnValue([conciergeAccountID, expensifyAccountID]);
+                const report: Report = {
+                    ...LHNTestUtils.getFakeReport(),
+                    chatType: CONST.REPORT.CHAT_TYPE.POLICY_ROOM,
+                    participants: {
+                        [currentUserAccountID]: {notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.ALWAYS},
+                        [conciergeAccountID]: {notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.ALWAYS},
+                    },
+                };
+                try {
+                    const moneyRequestOptions = temporary_getMoneyRequestOptions(report, undefined, [currentUserAccountID, conciergeAccountID], [CONST.BETAS.ALL]);
+                    expect(moneyRequestOptions.length).toBe(0);
+                } finally {
+                    expensifyAccountIDsSpy.mockRestore();
+                }
+            });
+
             it('it is a room with no participants except self', () => {
                 const report = {
                     ...LHNTestUtils.getFakeReport(),

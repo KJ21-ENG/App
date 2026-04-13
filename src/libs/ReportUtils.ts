@@ -10018,8 +10018,12 @@ function getMoneyRequestOptions(
     }
 
     const otherParticipants = reportParticipants.filter((accountID) => deprecatedCurrentUserAccountID !== accountID);
-    // We don't allow IOU actions if an Expensify account is a participant of the report, unless the policy that the report is on is owned by an Expensify account
-    const doParticipantsIncludeExpensifyAccounts = lodashIntersection(reportParticipants, CONST.EXPENSIFY_ACCOUNT_IDS).length > 0;
+    // We don't allow IOU actions if an Expensify account is a participant of the report,
+    // unless the policy that the report is on is owned by an Expensify account.
+    // Concierge should not block expense creation paths in policy expense chats and expense reports.
+    const isExpenseContext = isPolicyExpenseChat(report) || isExpenseReport(report);
+    const expensifyAccountsToBlock = isExpenseContext ? CONST.EXPENSIFY_ACCOUNT_IDS.filter((accountID) => accountID !== CONST.ACCOUNT_ID.CONCIERGE) : CONST.EXPENSIFY_ACCOUNT_IDS;
+    const doParticipantsIncludeExpensifyAccounts = lodashIntersection(reportParticipants, expensifyAccountsToBlock).length > 0;
     // This will be fixed as part of https://github.com/Expensify/Expensify/issues/507850
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const policyOwnerAccountID = getPolicy(report?.policyID)?.ownerAccountID;
