@@ -6,8 +6,9 @@ import Log from '@libs/Log';
 import {navigateAfterOnboardingWithMicrotaskQueue} from '@libs/navigateAfterOnboarding';
 import {createDisplayName} from '@libs/PersonalDetailsUtils';
 import {isPaidGroupPolicy, isPolicyAdmin} from '@libs/PolicyUtils';
+import {shouldPinAdminRoomByDefault} from '@libs/ReportUtils';
 import {createWorkspace, generatePolicyID, newGenerateDefaultWorkspaceName} from '@userActions/Policy/Policy';
-import {completeOnboarding, extractRHPVariantFromResponse} from '@userActions/Report';
+import {completeOnboarding, extractRHPVariantFromResponse, togglePinnedState} from '@userActions/Report';
 import {setOnboardingAdminsChatReportID, setOnboardingPolicyID} from '@userActions/Welcome';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
@@ -50,7 +51,6 @@ function useAutoCreateTrackWorkspace() {
     const [lastWorkspaceNumber] = useOnyx(ONYXKEYS.COLLECTION.POLICY, {selector: lastWorkspaceNumberWithEmailSelector});
     const [activePolicyID] = useOnyx(ONYXKEYS.NVP_ACTIVE_POLICY_ID);
     const [conciergeChatReportID = ''] = useOnyx(ONYXKEYS.CONCIERGE_REPORT_ID);
-    const [onboardingValues] = useOnyx(ONYXKEYS.NVP_ONBOARDING);
     const currentUserPersonalDetails = useCurrentUserPersonalDetails();
     const archivedReportsIdSet = useArchivedReportsIdSet();
     const {isBetaEnabled} = usePermissions();
@@ -65,8 +65,6 @@ function useAutoCreateTrackWorkspace() {
     // accessed report. This behavior is tied to screen size, not responsive layout mode.
     // eslint-disable-next-line rulesdir/prefer-shouldUseNarrowLayout-instead-of-isSmallScreenWidth
     const {isSmallScreenWidth} = useResponsiveLayout();
-
-    const mergedAccountConciergeReportID = !onboardingValues?.shouldRedirectToClassicAfterMerge && onboardingValues?.shouldValidate ? conciergeChatReportID : undefined;
 
     const autoCreateTrackWorkspace = useCallback(
         async (firstName: string, lastName: string, onboardingPurposeSelected: OnboardingPurpose) => {
@@ -121,13 +119,34 @@ function useAutoCreateTrackWorkspace() {
                 setOnboardingAdminsChatReportID();
                 setOnboardingPolicyID();
 
+                // The CompleteGuidedSetup response's onyxData for TRACK_WORKSPACE contains a
+                // single-field merge that sets `isPinned: false` on the freshly-created admins
+                // room, which clobbers the optimistic `isPinned: true` set by
+                // `buildOptimisticWorkspaceChats` via `shouldPinAdminRoomByDefault()`. Without
+                // this, the admins room falls through the LHN's pinned-early-return in
+                // `reasonForReportToBeInOptionList` and gets filtered out as an empty chat
+                // (onboarding tasks are posted to Concierge, not the admins room, for
+                // TRACK_WORKSPACE). Re-apply the intended pin here — passing `false` as the
+                // second arg because `togglePinnedState` flips the current value, and we want
+                // the new value to be `true`. This also tells the server to persist the pin
+                // via TOGGLE_PINNED_CHAT, keeping client and server in sync. See issue #87046.
+                if (shouldCreateWorkspace && newAdminsChatReportID && shouldPinAdminRoomByDefault()) {
+                    togglePinnedState(newAdminsChatReportID, false);
+                }
+
+                // The 6th parameter of `navigateAfterOnboarding` is
+                // `onboardingAdminsChatReportID`, used on large screens to open the new
+                // admins room as the post-onboarding destination. This call previously
+                // passed an unrelated Concierge report ID (typically `undefined` for fresh
+                // Track signups), which left large-screen users landing on Home instead of
+                // inside the admins room.
                 navigateAfterOnboardingWithMicrotaskQueue(
                     isSmallScreenWidth,
                     isBetaEnabled(CONST.BETAS.DEFAULT_ROOMS),
                     conciergeChatReportID,
                     archivedReportsIdSet,
                     newPolicyID,
-                    mergedAccountConciergeReportID,
+                    newAdminsChatReportID,
                     false,
                     rhpVariant,
                 );
@@ -154,7 +173,6 @@ function useAutoCreateTrackWorkspace() {
             isBetaEnabled,
             conciergeChatReportID,
             archivedReportsIdSet,
-            mergedAccountConciergeReportID,
         ],
     );
 

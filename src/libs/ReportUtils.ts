@@ -13746,6 +13746,7 @@ export {
     shouldDisableRename,
     shouldDisableThread,
     shouldDisplayThreadReplies,
+    shouldPinAdminRoomByDefault,
     shouldReportBeInOptionList,
     shouldReportShowSubscript,
     shouldShowFlagComment,
