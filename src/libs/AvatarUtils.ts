@@ -118,9 +118,11 @@ function getValidatedImageSource(source: AvatarSource | undefined, shouldResolve
     }
 
     if (typeof source === 'string') {
-        const decoded = decodeURIComponent(source);
-
-        return shouldResolveUrlFromApiRoot ? tryResolveUrlFromApiRoot(decoded) : decoded;
+        // When shouldResolveUrlFromApiRoot is false (SEARCH-type attachments), the source is
+        // a fully-resolved URL already produced by VideoRenderer/ImageRenderer — return it as-is.
+        // decodeURIComponent is only needed for relative or legacy paths (email deep-link entry
+        // points) which always arrive with shouldResolveUrlFromApiRoot = true.
+        return shouldResolveUrlFromApiRoot ? tryResolveUrlFromApiRoot(decodeURIComponent(source)) : source;
     }
 
     return undefined;
