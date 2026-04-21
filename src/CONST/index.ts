@@ -7619,6 +7619,7 @@ const CONST = {
                     TITLE: this.TABLE_COLUMNS.TITLE,
                     AMOUNT: this.TABLE_COLUMNS.TOTAL_AMOUNT,
                     EXPORTED_TO: this.TABLE_COLUMNS.EXPORTED_TO,
+                    WITHDRAWAL_ID: this.TABLE_COLUMNS.WITHDRAWAL_ID,
                     ACTION: this.TABLE_COLUMNS.ACTION,
                 },
                 EXPENSE_REPORT: {

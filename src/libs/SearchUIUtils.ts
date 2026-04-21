@@ -273,6 +273,7 @@ const transactionColumnNamesToSortingProperty: TransactionSorting = {
     [CONST.SEARCH.TABLE_COLUMNS.ACTION]: 'action' as const,
     [CONST.SEARCH.TABLE_COLUMNS.DESCRIPTION]: 'comment' as const,
     [CONST.SEARCH.TABLE_COLUMNS.TAX_AMOUNT]: 'taxAmount' as const,
+    [CONST.SEARCH.TABLE_COLUMNS.WITHDRAWAL_ID]: 'withdrawalID' as const,
     [CONST.SEARCH.TABLE_COLUMNS.RECEIPT]: null,
 };
 
@@ -4108,6 +4109,8 @@ function getSearchColumnTranslationKey(column: SearchColumnType): TranslationPat
             return 'common.tag';
         case CONST.SEARCH.TABLE_COLUMNS.EXPORTED_TO:
             return 'search.exportedTo';
+        case CONST.SEARCH.TABLE_COLUMNS.WITHDRAWAL_ID:
+            return 'common.withdrawalID';
         default:
             // This should never happen, but TypeScript requires a default case
             return 'common.expenses' as TranslationPaths;
@@ -5223,6 +5226,7 @@ function getColumnsToShow({
               [CONST.SEARCH.TABLE_COLUMNS.REPORT_ID]: false,
               [CONST.SEARCH.TABLE_COLUMNS.TITLE]: false,
               [CONST.SEARCH.TABLE_COLUMNS.EXPORTED_TO]: false,
+              [CONST.SEARCH.TABLE_COLUMNS.WITHDRAWAL_ID]: false,
               [CONST.SEARCH.TABLE_COLUMNS.TOTAL_AMOUNT]: true,
               [CONST.SEARCH.TABLE_COLUMNS.ACTION]: false,
               [CONST.SEARCH.TABLE_COLUMNS.COMMENTS]: false,
@@ -5422,6 +5426,7 @@ function getColumnsToShow({
             CONST.SEARCH.TABLE_COLUMNS.ACTION,
             CONST.SEARCH.TABLE_COLUMNS.ATTENDEES,
             CONST.SEARCH.TABLE_COLUMNS.TOTAL_PER_ATTENDEE,
+            CONST.SEARCH.TABLE_COLUMNS.WITHDRAWAL_ID,
         ]);
 
         return customResult.filter((col) => nonDataColumns.has(col) || columns[col]);

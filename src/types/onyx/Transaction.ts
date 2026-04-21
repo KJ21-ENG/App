@@ -585,6 +585,9 @@ type Transaction = OnyxCommon.OnyxValueWithOfflineFeedback<
         /** The CC for this transaction */
         cardID?: number;
 
+        /** The Withdrawal ID associated with this transaction (used for Expensify Card reconciliation) */
+        withdrawalID?: string;
+
         /** If the transaction is pending or posted */
         status?: ValueOf<typeof CONST.TRANSACTION.STATUS>;
 
