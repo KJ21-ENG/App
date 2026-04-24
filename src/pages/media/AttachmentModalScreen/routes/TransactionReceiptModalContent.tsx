@@ -143,6 +143,7 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
 
     // Use odometer image if imageType is provided (it's present only when we display odometer image) otherwise use receipt
     const receiptSource = isDraftTransaction ? transactionDraft?.receipt?.source : tryResolveUrlFromApiRoot(receiptURIs.image ?? '');
+    const receiptThumbnailSource = isDraftTransaction || isLocalFile ? receiptURIs.thumbnail : tryResolveUrlFromApiRoot(receiptURIs.thumbnail ?? '');
     const source = isOdometerImage ? odometerImageSource : receiptSource;
     const [sourceUri, setSourceUri] = useState<ReceiptSource>('');
 
@@ -160,6 +161,7 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
     const fileName = (isOdometerImage ? odometerFilename : receiptFilename) ?? '';
     const isImage = !!fileName && Str.isImage(fileName);
     const isPDF = !!fileName && Str.isPDF(fileName);
+    const cropSource = !isOdometerImage && isPDF && receiptThumbnailSource ? receiptThumbnailSource : source;
     const fileType = isOdometerImage ? odometerFileType : (transaction?.receipt?.type ?? CONST.IMAGE_FILE_FORMAT.JPEG);
     const isTrackExpenseActionValue = isTrackExpenseAction(parentReportAction);
     const iouType = useMemo(() => iouTypeParam ?? (isTrackExpenseActionValue ? CONST.IOU.TYPE.TRACK : CONST.IOU.TYPE.SUBMIT), [isTrackExpenseActionValue, iouTypeParam]);
@@ -182,25 +184,27 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
     }, []);
 
     useEffect(() => {
-        if (!source || !isImage) {
+        if (!cropSource || (!isImage && !isPDF)) {
+            setSourceUri('');
             return;
         }
 
-        if (!isAuthTokenRequired || typeof source !== 'string') {
-            setSourceUri(source);
+        if (!isAuthTokenRequired || typeof cropSource !== 'string') {
+            setSourceUri(cropSource);
             return;
         }
 
         if (!session?.encryptedAuthToken) {
+            setSourceUri('');
             return;
         }
 
-        fetchImage(source, session?.encryptedAuthToken)
+        fetchImage(cropSource, session?.encryptedAuthToken)
             .then((uri) => {
                 setSourceUri(uri);
             })
             .catch(() => setSourceUri(''));
-    }, [source, isAuthTokenRequired, session?.encryptedAuthToken, isDraftTransaction, isImage]);
+    }, [cropSource, isAuthTokenRequired, session?.encryptedAuthToken, isImage, isPDF]);
 
     const receiptPath = transaction?.receipt?.source;
 
@@ -295,7 +299,7 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
                 if (isOdometerImage) {
                     setMoneyRequestOdometerImage(transaction, imageType, durableFile, isDraftTransaction, !isEditingConfirmation);
                 } else if (isDraftTransaction) {
-                    setMoneyRequestReceipt(transaction.transactionID, durableUri, filename, isDraftTransaction, fileType);
+                    setMoneyRequestReceipt(transaction.transactionID, durableUri, filename, isDraftTransaction, durableFile.type || fileType);
                 } else {
                     replaceReceipt({
                         transactionID: transaction.transactionID,
@@ -346,20 +350,28 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
             });
     }, [transaction?.transactionID, sourceUri, isImage, receiptFilename, fileName, fileType, applyDurableReceipt]);
 
-    const shouldShowRotateAndCropReceiptButton = useMemo(
+    const hasCroppableSource = useMemo(
         () =>
-            shouldShowReplaceReceiptButton &&
-            transaction &&
+            !!shouldShowReplaceReceiptButton &&
+            !!transaction &&
             (hasReceiptSource(transaction) || (isOdometerImage && hasOdometerImageSource(transaction, imageType))) &&
             !isEReceipt &&
-            !transaction?.receipt?.isTestDriveReceipt &&
-            isImage,
-        [shouldShowReplaceReceiptButton, transaction, isEReceipt, isOdometerImage, imageType, isImage],
+            !transaction?.receipt?.isTestDriveReceipt,
+        [shouldShowReplaceReceiptButton, transaction, isEReceipt, isOdometerImage, imageType],
     );
 
+    // Image-only Rotate writes a new rotated file; PDFs use a separate cosmetic rotate path below.
+    const shouldShowRotateReceiptButton = hasCroppableSource && isImage;
+
+    const hasPDFCropSource = isPDF && !!receiptThumbnailSource;
+
+    // Crop is supported for images and PDFs. PDFs use the already-generated JPEG receipt thumbnail
+    // so the existing image crop pipeline can be reused.
+    const shouldShowCropReceiptButton = hasCroppableSource && (isImage || hasPDFCropSource);
+
     const enterCropMode = useCallback(() => {
-        setIsCropping(true);
         setCropRect(null);
+        setIsCropping(true);
     }, []);
 
     const exitCropMode = useCallback(() => {
@@ -372,12 +384,15 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
     }, []);
 
     const saveCrop = useCallback(() => {
-        if (!transaction?.transactionID || !sourceUri || !isImage || !cropRect || cropRect.width < 1 || cropRect.height < 1) {
+        if (!transaction?.transactionID || !sourceUri || (!isImage && !hasPDFCropSource) || !cropRect || cropRect.width < 1 || cropRect.height < 1) {
             exitCropMode();
             return;
         }
 
         setIsCropSaving(true);
+        const cropFileName = hasPDFCropSource ? `${(fileName || 'receipt').replace(/\.pdf$/i, '')}.jpg` : fileName;
+        const cropFileType = hasPDFCropSource ? CONST.IMAGE_FILE_FORMAT.JPEG : fileType;
+
         cropOrRotateImage(
             sourceUri as string,
             [
@@ -392,8 +407,8 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
             ],
             {
                 compress: 1,
-                name: fileName,
-                type: fileType,
+                name: cropFileName,
+                type: cropFileType,
             },
         )
             .then((croppedImage) => {
@@ -409,7 +424,7 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
                 }
 
                 const file = croppedImage as File;
-                const croppedFilename = file.name ?? receiptFilename;
+                const croppedFilename = file.name ?? cropFileName ?? receiptFilename;
 
                 return applyDurableReceipt(imageUriResult, croppedFilename, file).then(() => {
                     setIsCropSaving(false);
@@ -419,7 +434,7 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
             .catch(() => {
                 setIsCropSaving(false);
             });
-    }, [transaction?.transactionID, sourceUri, isImage, cropRect, receiptFilename, fileName, fileType, exitCropMode, applyDurableReceipt]);
+    }, [transaction?.transactionID, sourceUri, isImage, hasPDFCropSource, cropRect, receiptFilename, fileName, fileType, exitCropMode, applyDurableReceipt]);
 
     const threeDotsMenuItems: ThreeDotsMenuItemFactory = useCallback(
         ({file, source: innerSource, isLocalSource}) => {
@@ -513,13 +528,13 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
             );
         }
 
-        if (!shouldShowRotateAndCropReceiptButton && !shouldShowReplaceReceiptButton && !isOdometerImage) {
+        if (!shouldShowRotateReceiptButton && !shouldShowCropReceiptButton && !shouldShowReplaceReceiptButton && !isOdometerImage) {
             return null;
         }
 
         return (
             <View style={[styles.flexRow, styles.gap2, styles.ph5, styles.pb5, styles.justifyContentCenter]}>
-                {!!shouldShowRotateAndCropReceiptButton && (
+                {shouldShowRotateReceiptButton && (
                     <Button
                         icon={expensifyIcons.Rotate}
                         onPress={rotateReceipt}
@@ -529,19 +544,19 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
                         style={styles.transactionReceiptButton}
                     />
                 )}
-                {!!shouldShowRotateAndCropReceiptButton && (
-                    <Button
-                        icon={expensifyIcons.Crop}
-                        onPress={enterCropMode}
-                        text={translate('receipt.crop')}
-                        style={styles.transactionReceiptButton}
-                    />
-                )}
-                {isPDF && !isNative && (
+                {isPDF && !isNative && hasCroppableSource && (
                     <Button
                         icon={expensifyIcons.Rotate}
                         onPress={() => setPdfRotation((prev) => ((prev + 270) % 360) as RotationDegrees)}
                         text={translate('common.rotate')}
+                        style={styles.transactionReceiptButton}
+                    />
+                )}
+                {shouldShowCropReceiptButton && (
+                    <Button
+                        icon={expensifyIcons.Crop}
+                        onPress={enterCropMode}
+                        text={translate('receipt.crop')}
                         style={styles.transactionReceiptButton}
                     />
                 )}
@@ -573,8 +588,10 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
         );
     }, [
         isCropping,
-        shouldShowRotateAndCropReceiptButton,
+        shouldShowRotateReceiptButton,
+        shouldShowCropReceiptButton,
         shouldShowReplaceReceiptButton,
+        hasCroppableSource,
         isOdometerImage,
         isPDF,
         styles.flexRow,
@@ -610,18 +627,18 @@ function TransactionReceiptModalContent({navigation, route}: AttachmentModalScre
     ]);
 
     const customAttachmentContent = useMemo(() => {
-        if (!isCropping || (!sourceUri && !source)) {
+        if (!isCropping || !sourceUri) {
             return null;
         }
 
         return (
             <ReceiptCropView
-                imageUri={(sourceUri || source) as string}
+                imageUri={sourceUri as string}
                 onCropChange={handleCropChange}
-                isAuthTokenRequired={sourceUri ? false : isAuthTokenRequired}
+                isAuthTokenRequired={false}
             />
         );
-    }, [isCropping, sourceUri, handleCropChange, isAuthTokenRequired, source]);
+    }, [isCropping, sourceUri, handleCropChange]);
 
     const contentProps = useMemo<AttachmentModalBaseContentProps>(
         () => ({
