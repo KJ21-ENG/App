@@ -41,6 +41,7 @@ function useDiscardChangesConfirmation({getHasUnsavedChanges, onCancel, onVisibi
             danger: true,
             confirmText: translate('discardChangesConfirmation.confirmText'),
             cancelText: translate('common.cancel'),
+            shouldHandleNavigationBack: false,
             shouldIgnoreBackHandlerDuringTransition: true,
         }).then((result) => {
             isDiscardModalOpenRef.current = false;
