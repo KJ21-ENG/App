@@ -112,7 +112,6 @@ function MoneyReportHeaderSelectionDropdown({reportID, primaryAction, isReportIn
     const isInvoiceReport = isInvoiceReportUtil(moneyRequestReport);
 
     const isChatReportArchived = useReportIsArchived(chatReport?.reportID);
-    const isAnyTransactionOnHold = hasHeldExpenses(moneyRequestReport?.reportID);
 
     const {transactionThreadReportID, reportActions} = useTransactionThreadReport(reportID);
 
@@ -120,6 +119,7 @@ function MoneyReportHeaderSelectionDropdown({reportID, primaryAction, isReportIn
 
     const allTransactionValues = Object.values(reportTransactions);
     const transactions = allTransactionValues;
+    const isAnyTransactionOnHold = hasHeldExpenses(moneyRequestReport?.reportID, transactions);
     const nonPendingDeleteTransactions = allTransactionValues.filter((t) => !isTransactionPendingDelete(t));
     const singleTransaction = nonPendingDeleteTransactions.length === 1 ? nonPendingDeleteTransactions.at(0) : undefined;
     const [originalTransaction] = useOnyx(`${ONYXKEYS.COLLECTION.TRANSACTION}${getNonEmptyStringOnyxID(singleTransaction?.comment?.originalTransactionID)}`);
