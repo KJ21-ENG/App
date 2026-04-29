@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect} from 'react';
+import React, {useCallback, useEffect, useRef} from 'react';
 import {View} from 'react-native';
 import FullPageOfflineBlockingView from '@components/BlockingViews/FullPageOfflineBlockingView';
 import Button from '@components/Button';
@@ -58,6 +58,26 @@ function TravelCVVPage() {
         // Navigate to the verify account page
         Navigation.navigate(ROUTES.SETTINGS_WALLET_TRAVEL_CVV_VERIFY_ACCOUNT);
     }, [isAccountLocked, showLockedAccountModal]);
+
+    // Auto-open the magic-code prompt once on first mount so the user does not
+    // have to click "Reveal Details" first. The ref ensures we never re-fire,
+    // including after the user cancels and is navigated back to this page.
+    const hasAutoOpenedRef = useRef(false);
+    useEffect(() => {
+        if (hasAutoOpenedRef.current) {
+            return;
+        }
+        // Wait for the initial Onyx ACCOUNT load before reading delegatedAccess
+        if (!account) {
+            return;
+        }
+        if (cvv || isSignedInAsDelegate || isOffline || isAccountLocked) {
+            return;
+        }
+        hasAutoOpenedRef.current = true;
+        resetValidateActionCodeSent();
+        Navigation.navigate(ROUTES.SETTINGS_WALLET_TRAVEL_CVV_VERIFY_ACCOUNT);
+    }, [account, cvv, isSignedInAsDelegate, isOffline, isAccountLocked]);
 
     return (
         <ScreenWrapper
