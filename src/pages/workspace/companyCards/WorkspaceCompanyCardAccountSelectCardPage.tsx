@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {View} from 'react-native';
 import BlockingView from '@components/BlockingViews/BlockingView';
 import RenderHTML from '@components/RenderHTML';
@@ -56,7 +56,23 @@ function WorkspaceCompanyCardAccountSelectCardPage({route}: WorkspaceCompanyCard
     const companyFeeds = getCompanyFeeds(cardFeeds);
     const domainOrWorkspaceAccountID = getDomainOrWorkspaceAccountID(workspaceAccountID, companyFeeds[feed]);
 
+    // If a stale-stack instance of this screen is revealed after the policy export
+    // destination changed to one that has no per-card override (e.g. QBO vendor bill),
+    // exportMenuItem will report shouldShowMenuItem=false and exportType=undefined.
+    // Bounce back to the card details page so we don't render an unrelated account list.
+    const shouldRedirectToCardDetails = !!exportMenuItem && (!exportMenuItem.shouldShowMenuItem || !exportMenuItem.exportType);
+    useEffect(() => {
+        if (!shouldRedirectToCardDetails) {
+            return;
+        }
+        Navigation.goBack(ROUTES.WORKSPACE_COMPANY_CARD_DETAILS.getRoute(policyID, feed, cardID, backTo));
+    }, [shouldRedirectToCardDetails, policyID, feed, cardID, backTo]);
+
     const searchedListOptions = tokenizedSearch(exportMenuItem?.data ?? [], searchText, (option) => [option.text ?? option.value]);
+
+    if (shouldRedirectToCardDetails) {
+        return null;
+    }
 
     const listEmptyContent = (
         <BlockingView

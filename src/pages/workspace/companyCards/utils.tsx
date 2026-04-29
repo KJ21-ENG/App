@@ -67,9 +67,17 @@ function getExportMenuItem(
             let exportType: ValueOf<typeof CONST.COMPANY_CARDS.EXPORT_CARD_TYPES> | undefined;
             const qboConfig = nonReimbursableExpensesExportDestination ?? reimbursableExpensesExportDestination;
             switch (qboConfig) {
+                case CONST.QUICKBOOKS_NON_REIMBURSABLE_EXPORT_ACCOUNT_TYPE.VENDOR_BILL:
+                    if (nonReimbursableExpensesExportDestination === CONST.QUICKBOOKS_NON_REIMBURSABLE_EXPORT_ACCOUNT_TYPE.VENDOR_BILL) {
+                        shouldShowMenuItem = false;
+                        data = [];
+                        break;
+                    }
+                // falls through to the credit-card branch when the value comes from
+                // reimbursableExpensesExportDestination (reimbursable VENDOR_BILL).
+                // eslint-disable-next-line no-fallthrough
                 case CONST.QUICKBOOKS_REIMBURSABLE_ACCOUNT_TYPE.JOURNAL_ENTRY:
                 case CONST.QUICKBOOKS_REIMBURSABLE_ACCOUNT_TYPE.CHECK:
-                case CONST.QUICKBOOKS_REIMBURSABLE_ACCOUNT_TYPE.VENDOR_BILL:
                 case CONST.QUICKBOOKS_NON_REIMBURSABLE_EXPORT_ACCOUNT_TYPE.CREDIT_CARD: {
                     data = creditCards ?? [];
                     isDefaultTitle = !!(
