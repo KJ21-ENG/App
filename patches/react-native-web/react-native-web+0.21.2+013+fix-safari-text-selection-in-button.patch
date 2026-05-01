@@ -1,0 +1,26 @@
+diff --git a/node_modules/react-native-web/dist/modules/AccessibilityUtil/propsToAccessibilityComponent.js b/node_modules/react-native-web/dist/modules/AccessibilityUtil/propsToAccessibilityComponent.js
+index de51afe..1b1c1c1 100644
+--- a/node_modules/react-native-web/dist/modules/AccessibilityUtil/propsToAccessibilityComponent.js
++++ b/node_modules/react-native-web/dist/modules/AccessibilityUtil/propsToAccessibilityComponent.js
+@@ -12,7 +12,7 @@ var roleComponents = {
+   article: 'article',
+   banner: 'header',
+   blockquote: 'blockquote',
+-  button: 'button',
++  // button role intentionally NOT mapped to native <button> — Safari blocks drag text-selection inside <button> regardless of -webkit-user-select. Render as <div role="button"> instead.
+   code: 'code',
+   complementary: 'aside',
+   contentinfo: 'footer',
+diff --git a/node_modules/react-native-web/dist/cjs/modules/AccessibilityUtil/propsToAccessibilityComponent.js b/node_modules/react-native-web/dist/cjs/modules/AccessibilityUtil/propsToAccessibilityComponent.js
+index 0000001..0000002 100644
+--- a/node_modules/react-native-web/dist/cjs/modules/AccessibilityUtil/propsToAccessibilityComponent.js
++++ b/node_modules/react-native-web/dist/cjs/modules/AccessibilityUtil/propsToAccessibilityComponent.js
+@@ -17,7 +17,7 @@ var roleComponents = {
+   article: 'article',
+   banner: 'header',
+   blockquote: 'blockquote',
+-  button: 'button',
++  // button role intentionally NOT mapped to native <button> — Safari blocks drag text-selection inside <button> regardless of -webkit-user-select. Render as <div role="button"> instead.
+   code: 'code',
+   complementary: 'aside',
+   contentinfo: 'footer',
