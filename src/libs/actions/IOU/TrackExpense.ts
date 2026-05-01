@@ -28,7 +28,7 @@ import {roundToTwoDecimalPlaces} from '@libs/NumberUtils';
 import * as NumberUtils from '@libs/NumberUtils';
 import Parser from '@libs/Parser';
 import {addSMSDomainIfPhoneNumber} from '@libs/PhoneNumber';
-import {getDistanceRateCustomUnit, getMemberAccountIDsForWorkspace} from '@libs/PolicyUtils';
+import {getDistanceRateCustomUnit, getMemberAccountIDsForWorkspace, getSubmitReportManagerAccountID} from '@libs/PolicyUtils';
 import {
     getAllReportActions,
     getLastVisibleAction,
@@ -1421,6 +1421,7 @@ function addTrackedExpenseToPolicy(parameters: AddTrackedExpenseToPolicyParam, o
 }
 
 function submitTrackedExpenseReport(iouReport: OnyxTypes.Report, policy: OnyxEntry<OnyxTypes.Policy>, currentUserAccountID: number) {
+    const managerID = getSubmitReportManagerAccountID(policy, iouReport);
     const optimisticSubmittedReportAction = buildOptimisticSubmittedReportAction(
         iouReport.total ?? 0,
         iouReport.currency ?? '',
@@ -1507,6 +1508,7 @@ function submitTrackedExpenseReport(iouReport: OnyxTypes.Report, policy: OnyxEnt
         WRITE_COMMANDS.SUBMIT_REPORT,
         {
             reportID: iouReport.reportID,
+            managerAccountID: managerID,
             reportActionID: optimisticSubmittedReportAction.reportActionID,
         },
         {optimisticData, successData, failureData},
