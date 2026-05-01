@@ -2,7 +2,7 @@
 import {format} from 'date-fns';
 import Onyx from 'react-native-onyx';
 import type {OnyxCollection, OnyxEntry} from 'react-native-onyx';
-import {convertBulkTrackedExpensesToIOU, deleteTrackExpense, getDeleteTrackExpenseInformation, getTrackExpenseInformation, trackExpense} from '@libs/actions/IOU/TrackExpense';
+import {convertBulkTrackedExpensesToIOU, deleteTrackExpense, getDeleteTrackExpenseInformation, getTrackExpenseInformation, requestMoney, trackExpense} from '@libs/actions/IOU/TrackExpense';
 import initOnyxDerivedValues from '@libs/actions/OnyxDerived';
 import {addComment, openReport} from '@libs/actions/Report';
 import {subscribeToUserEvents} from '@libs/actions/User';
@@ -1179,6 +1179,104 @@ describe('actions/IOU/TrackExpense', () => {
             });
             const categorizedTransaction = finalTransactions?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${createdTransaction?.transactionID}`];
             expect(categorizedTransaction?.category).toBe(selectedCategory);
+        });
+
+        it('should send auto-submit control when submitting a tracked expense to a workspace', async () => {
+            const selfDMReport: Report = {
+                ...createRandomReport(1, CONST.REPORT.CHAT_TYPE.SELF_DM),
+                reportID: 'selfDM-submit-workspace',
+            };
+            const policy = createRandomPolicy(1);
+            const policyExpenseChat: Report = {
+                ...createRandomReport(2, CONST.REPORT.CHAT_TYPE.POLICY_EXPENSE_CHAT),
+                reportID: 'expense-chat-submit-workspace',
+                policyID: policy.id,
+                type: CONST.REPORT.TYPE.CHAT,
+                isOwnPolicyExpenseChat: true,
+            };
+            const policyCategories = createRandomPolicyCategories(1);
+            const selectedCategory = Object.keys(policyCategories).at(0) ?? '';
+
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${selfDMReport.reportID}`, selfDMReport);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${policyExpenseChat.reportID}`, policyExpenseChat);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.POLICY}${policy.id}`, policy);
+
+            trackExpense(getDefaultTrackExpenseParams(selfDMReport, {amount: 12500, merchant: 'Submit Workspace Test'}));
+            await waitForBatchedUpdates();
+
+            const selfDMReportActions = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${selfDMReport.reportID}`);
+            const moneyRequestAction = Object.values(selfDMReportActions ?? {}).find((action) => isMoneyRequestAction(action));
+            const actionableWhisper = Object.values(selfDMReportActions ?? {}).find((action) => isActionableTrackExpense(action));
+            const transactions = await getOnyxValue(ONYXKEYS.COLLECTION.TRANSACTION);
+            const createdTransaction = Object.values(transactions ?? {}).at(0);
+
+            expect(moneyRequestAction).toBeTruthy();
+            expect(actionableWhisper).toBeTruthy();
+            expect(createdTransaction).toBeTruthy();
+
+            mockFetch.mockClear();
+
+            requestMoney({
+                report: policyExpenseChat,
+                action: CONST.IOU.ACTION.SUBMIT,
+                participantParams: {
+                    payeeEmail: RORY_EMAIL,
+                    payeeAccountID: RORY_ACCOUNT_ID,
+                    participant: {reportID: policyExpenseChat.reportID, isPolicyExpenseChat: true},
+                },
+                policyParams: {
+                    policy,
+                    policyCategories,
+                },
+                transactionParams: {
+                    amount: createdTransaction?.amount ?? 12500,
+                    currency: createdTransaction?.currency ?? 'USD',
+                    created: format(new Date(), CONST.DATE.FNS_FORMAT_STRING),
+                    merchant: createdTransaction?.merchant ?? 'Submit Workspace Test',
+                    category: selectedCategory,
+                    billable: true,
+                    reimbursable: true,
+                    actionableWhisperReportActionID: actionableWhisper?.reportActionID,
+                    linkedTrackedExpenseReportAction: moneyRequestAction,
+                    linkedTrackedExpenseReportID: selfDMReport.reportID,
+                },
+                isASAPSubmitBetaEnabled: false,
+                currentUserAccountIDParam: RORY_ACCOUNT_ID,
+                currentUserEmailParam: RORY_EMAIL,
+                introSelected: undefined,
+                activePolicyID: undefined,
+                quickAction: undefined,
+                recentWaypoints: [],
+                draftTransactionIDs: [],
+                betas: [CONST.BETAS.ALL],
+                isSelfTourViewed: false,
+            });
+            await waitForBatchedUpdates();
+            await waitForBatchedUpdates();
+
+            TestHelper.expectAPICommandToHaveBeenCalled(WRITE_COMMANDS.ADD_TRACKED_EXPENSE_TO_POLICY, 1);
+            TestHelper.expectAPICommandToHaveBeenCalled(WRITE_COMMANDS.SUBMIT_REPORT, 1);
+            TestHelper.expectAPICommandToHaveBeenCalled(WRITE_COMMANDS.CONVERT_TRACKED_EXPENSE_TO_REQUEST, 0);
+
+            const addToPolicyCall = mockFetch.mock.calls.find((call) => call.at(0) === `https://www.expensify.com.dev/api/${WRITE_COMMANDS.ADD_TRACKED_EXPENSE_TO_POLICY}?`);
+            const addToPolicyRequest = addToPolicyCall?.at(1) as RequestInit | undefined;
+            expect(addToPolicyRequest?.body).toBeInstanceOf(FormData);
+
+            const addToPolicyParams = addToPolicyRequest?.body as FormData;
+            expect(addToPolicyParams.get('policyID')).toBe(policy.id);
+            expect(addToPolicyParams.get('category')).toBe(selectedCategory);
+            expect(addToPolicyParams.get('billable')).toBe('true');
+            expect(addToPolicyParams.get('reimbursable')).toBe('true');
+            expect(addToPolicyParams.get('shouldDeferAutoSubmit')).toBe('false');
+
+            const submitReportCall = mockFetch.mock.calls.find((call) => call.at(0) === `https://www.expensify.com.dev/api/${WRITE_COMMANDS.SUBMIT_REPORT}?`);
+            const submitReportRequest = submitReportCall?.at(1) as RequestInit | undefined;
+            expect(submitReportRequest?.body).toBeInstanceOf(FormData);
+
+            const submitReportParams = submitReportRequest?.body as FormData;
+            expect(submitReportParams.get('reportID')).toBe(addToPolicyParams.get('moneyRequestReportID'));
+            expect(submitReportParams.get('reportActionID')).toBeTruthy();
+
         });
 
         it('should handle expense with attendees correctly', async () => {

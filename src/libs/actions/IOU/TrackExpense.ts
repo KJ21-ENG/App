@@ -50,6 +50,7 @@ import {
     buildOptimisticMovedTransactionAction,
     buildOptimisticReportPreview,
     buildOptimisticSelfDMReport,
+    buildOptimisticSubmittedReportAction,
     canUserPerformWriteAction as canUserPerformWriteActionReportUtils,
     findSelfDMReportID,
     generateReportID,
@@ -1371,6 +1372,7 @@ type AddTrackedExpenseToPolicyParam = {
     moneyRequestPreviewReportActionID: string;
     distance: number | undefined;
     attendees: string | undefined;
+    shouldDeferAutoSubmit?: boolean;
 } & ConvertTrackedWorkspaceParams;
 
 type ConvertTrackedExpenseToRequestParams = {
@@ -1406,17 +1408,113 @@ type ConvertTrackedExpenseToRequestParams = {
         createdReportActionID: string | undefined;
         reportActionID: string;
     };
+    iouReport: OnyxTypes.Report;
     onyxData: OnyxData<BuildOnyxDataForMoneyRequestKeys>;
     workspaceParams?: ConvertTrackedWorkspaceParams;
+    policy?: OnyxEntry<OnyxTypes.Policy>;
     currentUserAccountID: number;
+    shouldDeferAutoSubmit?: boolean;
 };
 
 function addTrackedExpenseToPolicy(parameters: AddTrackedExpenseToPolicyParam, onyxData: OnyxData<BuildOnyxDataForMoneyRequestKeys>) {
     API.write(WRITE_COMMANDS.ADD_TRACKED_EXPENSE_TO_POLICY, parameters, onyxData);
 }
 
+function submitTrackedExpenseReport(iouReport: OnyxTypes.Report, policy: OnyxEntry<OnyxTypes.Policy>, currentUserAccountID: number) {
+    const optimisticSubmittedReportAction = buildOptimisticSubmittedReportAction(
+        iouReport.total ?? 0,
+        iouReport.currency ?? '',
+        iouReport.reportID,
+        policy?.role === CONST.POLICY.ROLE.ADMIN ? currentUserAccountID : undefined,
+        policy?.approvalMode,
+        undefined,
+    );
+
+    const optimisticData: Array<OnyxUpdate<BuildOnyxDataForMoneyRequestKeys>> = [
+        {
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${iouReport.reportID}`,
+            value: {
+                [optimisticSubmittedReportAction.reportActionID]: optimisticSubmittedReportAction,
+            },
+        },
+        {
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: `${ONYXKEYS.COLLECTION.REPORT}${iouReport.reportID}`,
+            value: {
+                stateNum: CONST.REPORT.STATE_NUM.SUBMITTED,
+                statusNum: CONST.REPORT.STATUS_NUM.SUBMITTED,
+                lastMessageText: getReportActionText(optimisticSubmittedReportAction),
+                lastMessageHtml: getReportActionHtml(optimisticSubmittedReportAction),
+            },
+        },
+    ];
+    const failureData: Array<OnyxUpdate<BuildOnyxDataForMoneyRequestKeys>> = [
+        {
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: `${ONYXKEYS.COLLECTION.REPORT}${iouReport.reportID}`,
+            value: {
+                stateNum: iouReport.stateNum,
+                statusNum: iouReport.statusNum,
+            },
+        },
+        {
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${iouReport.reportID}`,
+            value: {
+                [optimisticSubmittedReportAction.reportActionID]: {
+                    errors: getMicroSecondOnyxErrorWithTranslationKey('iou.error.other'),
+                },
+            },
+        },
+    ];
+    const successData: Array<OnyxUpdate<BuildOnyxDataForMoneyRequestKeys>> = [
+        {
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${iouReport.reportID}`,
+            value: {
+                [optimisticSubmittedReportAction.reportActionID]: {
+                    pendingAction: null,
+                },
+            },
+        },
+    ];
+
+    if (iouReport.parentReportID && iouReport.parentReportActionID) {
+        optimisticData.push({
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${iouReport.parentReportID}`,
+            value: {
+                [iouReport.parentReportActionID]: {
+                    childStateNum: CONST.REPORT.STATE_NUM.SUBMITTED,
+                    childStatusNum: CONST.REPORT.STATUS_NUM.SUBMITTED,
+                },
+            },
+        });
+        failureData.push({
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${iouReport.parentReportID}`,
+            value: {
+                [iouReport.parentReportActionID]: {
+                    childStateNum: iouReport.stateNum,
+                    childStatusNum: iouReport.statusNum,
+                },
+            },
+        });
+    }
+
+    API.write(
+        WRITE_COMMANDS.SUBMIT_REPORT,
+        {
+            reportID: iouReport.reportID,
+            reportActionID: optimisticSubmittedReportAction.reportActionID,
+        },
+        {optimisticData, successData, failureData},
+    );
+}
+
 function convertTrackedExpenseToRequest(convertTrackedExpenseParams: ConvertTrackedExpenseToRequestParams) {
-    const {payerParams, transactionParams, chatParams, iouParams, onyxData, workspaceParams, currentUserAccountID} = convertTrackedExpenseParams;
+    const {payerParams, transactionParams, chatParams, iouParams, iouReport, onyxData, workspaceParams, policy, currentUserAccountID, shouldDeferAutoSubmit} = convertTrackedExpenseParams;
     const {accountID: payerAccountID, email: payerEmail} = payerParams;
     const {
         transactionID,
@@ -1514,10 +1612,12 @@ function convertTrackedExpenseToRequest(convertTrackedExpenseParams: ConvertTrac
             moneyRequestPreviewReportActionID: iouParams.reportActionID,
             modifiedExpenseReportActionID: convertTrackedExpenseInformation.modifiedExpenseReportActionID,
             reportPreviewReportActionID: chatParams.reportPreviewReportActionID,
+            shouldDeferAutoSubmit,
             ...workspaceParams,
         };
 
         addTrackedExpenseToPolicy(params, {optimisticData, successData, failureData});
+        submitTrackedExpenseReport(iouReport, policy, currentUserAccountID);
         return;
     }
 
@@ -1761,9 +1861,12 @@ function requestMoney(requestMoneyInformation: RequestMoneyInformation): {iouRep
                         createdReportActionID: createdIOUReportActionID,
                         reportActionID: iouAction.reportActionID,
                     },
+                    iouReport,
                     onyxData,
                     workspaceParams,
+                    policy: policyParams.policy,
                     currentUserAccountID: currentUserAccountIDParam,
+                    shouldDeferAutoSubmit: shouldDeferAutoSubmit ?? false,
                 });
             };
             break;
@@ -2067,6 +2170,7 @@ function convertBulkTrackedExpensesToIOU({
                 createdReportActionID: createdIOUReportActionID,
                 reportActionID: iouAction.reportActionID,
             },
+            iouReport: moneyRequestIOUReport,
             onyxData,
             currentUserAccountID: currentUserAccountIDParam,
         };
