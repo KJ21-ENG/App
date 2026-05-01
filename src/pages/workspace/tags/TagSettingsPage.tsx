@@ -125,6 +125,15 @@ function TagSettingsPage({route, navigation}: TagSettingsPageProps) {
 
     const isThereAnyAccountingConnection = Object.keys(policy?.connections ?? {}).length !== 0;
     const isMultiLevelTags = isMultiLevelTagsPolicyUtils(policyTags);
+    const getQuickSettingsBackRoute = () => {
+        if (!isQuickSettingsFlow) {
+            return undefined;
+        }
+
+        const tagRootRoute = ROUTES.SETTINGS_TAGS_ROOT.getRoute(policyID, backTo);
+        return isMultiLevelTags ? createDynamicRoute(DYNAMIC_ROUTES.SETTINGS_TAG_LIST_VIEW.getRoute(orderWeight), tagRootRoute) : tagRootRoute;
+    };
+    const quickSettingsBackRoute = getQuickSettingsBackRoute();
 
     const shouldShowDeleteMenuItem = !isThereAnyAccountingConnection && !isMultiLevelTags;
     const workflowApprovalsUnavailable = getWorkflowApprovalsUnavailable(policy);
@@ -144,7 +153,7 @@ function TagSettingsPage({route, navigation}: TagSettingsPageProps) {
                 <HeaderWithBackButton
                     title={getCleanedTagName(tagName)}
                     shouldSetModalVisibility={false}
-                    onBackButtonPress={() => Navigation.goBack(isQuickSettingsFlow ? ROUTES.SETTINGS_TAGS_ROOT.getRoute(policyID, backTo) : undefined)}
+                    onBackButtonPress={() => Navigation.goBack(quickSettingsBackRoute)}
                 />
 
                 <ScrollView>
@@ -242,7 +251,7 @@ function TagSettingsPage({route, navigation}: TagSettingsPageProps) {
                                         return;
                                     }
                                     deletePolicyTags(policyData, [currentPolicyTag.name]);
-                                    Navigation.goBack(isQuickSettingsFlow ? ROUTES.SETTINGS_TAGS_ROOT.getRoute(policyID, backTo) : undefined);
+                                    Navigation.goBack(quickSettingsBackRoute);
                                 }
                             }}
                         />
