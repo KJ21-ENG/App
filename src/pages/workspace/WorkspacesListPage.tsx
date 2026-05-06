@@ -20,6 +20,8 @@ import {usePersonalDetails} from '@components/OnyxListItemProvider';
 import type {PopoverMenuItem} from '@components/PopoverMenu';
 import {PressableWithoutFeedback} from '@components/Pressable';
 import ScreenWrapper from '@components/ScreenWrapper';
+import SortableHeaderText from '@components/Search/SortableHeaderText';
+import type {SortOrder} from '@components/Search/types';
 import SearchBar from '@components/SearchBar';
 import type {ListItem} from '@components/SelectionList/types';
 import Text from '@components/Text';
@@ -52,6 +54,7 @@ import {getLatestErrorMessage} from '@libs/ErrorUtils';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackRouteProp} from '@libs/Navigation/PlatformStackNavigation/types';
 import type {WorkspaceNavigatorParamList} from '@libs/Navigation/types';
+import {getDisplayNameOrDefault} from '@libs/PersonalDetailsUtils';
 import {
     getConnectionExporters,
     getPolicyBrickRoadIndicatorStatus,
@@ -69,7 +72,7 @@ import shouldRenderTransferOwnerButton from '@libs/shouldRenderTransferOwnerButt
 import {isSubscriptionTypeOfInvoicing, shouldCalculateBillNewDot as shouldCalculateBillNewDotFn} from '@libs/SubscriptionUtils';
 import type {SkeletonSpanReasonAttributes} from '@libs/telemetry/useSkeletonSpan';
 import type {AvatarSource} from '@libs/UserAvatarUtils';
-import {setNameValuePair} from '@userActions/User';
+import {setNameValuePair, setWorkspacesListSort} from '@userActions/User';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
@@ -81,6 +84,7 @@ import {reimbursementAccountErrorSelector} from '@src/selectors/ReimbursementAcc
 import type {Policy as PolicyType} from '@src/types/onyx';
 import type * as OnyxCommon from '@src/types/onyx/OnyxCommon';
 import type {PolicyDetailsForNonMembers} from '@src/types/onyx/Policy';
+import type {WorkspacesListSortBy} from '@src/types/onyx/WorkspacesListSort';
 import {isEmptyObject} from '@src/types/utils/EmptyObject';
 import WorkspacesEmptyStateComponent from './WorkspacesEmptyStateComponent';
 import WorkspacesListPageHeaderButton from './WorkspacesListPageHeaderButton';
@@ -97,6 +101,7 @@ type WorkspaceItem = {listItemType: 'workspace'} & ListItem &
         iconType?: ValueOf<typeof CONST.ICON_TYPE_AVATAR | typeof CONST.ICON_TYPE_ICON>;
         policyID?: string;
         isJoinRequestPending?: boolean;
+        ownerName: string;
     };
 
 type WorkspaceOrDomainListItem = WorkspaceItem | DomainItem | {listItemType: 'domains-header' | 'workspaces-empty-state' | 'domains-empty-state'};
@@ -148,6 +153,7 @@ function WorkspacesListPage() {
     const [reimbursementAccount] = useOnyx(ONYXKEYS.REIMBURSEMENT_ACCOUNT);
     const [session] = useOnyx(ONYXKEYS.SESSION);
     const [activePolicyID] = useOnyx(ONYXKEYS.NVP_ACTIVE_POLICY_ID);
+    const [workspacesListSort] = useOnyx(ONYXKEYS.WORKSPACES_LIST_SORT);
     const [isLoadingApp] = useOnyx(ONYXKEYS.IS_LOADING_APP);
     const [lastPaymentMethod] = useOnyx(ONYXKEYS.NVP_LAST_PAYMENT_METHOD);
     const shouldShowLoadingIndicator = isLoadingApp && !isOffline;
@@ -528,6 +534,11 @@ function WorkspacesListPage() {
      * Add free policies (workspaces) to the list of menu items and returns the list of menu items
      */
     const workspaces: WorkspaceItem[] = [];
+    const getWorkspaceOwnerName = (ownerAccountID?: number) => {
+        const ownerDetails = ownerAccountID ? personalDetails?.[ownerAccountID] : undefined;
+        return ownerDetails ? getDisplayNameOrDefault(ownerDetails) : '';
+    };
+
     if (!isEmptyObject(policies)) {
         const reimbursementAccountBrickRoadIndicator = !isEmptyObject(reimbursementAccount?.errors) ? CONST.BRICK_ROAD_INDICATOR_STATUS.ERROR : undefined;
 
@@ -576,6 +587,7 @@ function WorkspacesListPage() {
                     dismissError: () => null,
                     isJoinRequestPending: true,
                     keyForList: policyInfo.name,
+                    ownerName: getWorkspaceOwnerName(policyInfo.ownerAccountID),
                 });
             } else {
                 workspaces.push({
@@ -597,14 +609,46 @@ function WorkspacesListPage() {
                     type: policy.type,
                     employeeList: policy.employeeList,
                     keyForList: policy.name,
+                    ownerName: getWorkspaceOwnerName(policy.ownerAccountID),
                 });
             }
         }
     }
 
+    const sortBy = workspacesListSort?.sortBy ?? 'name';
+    const sortOrder: SortOrder = workspacesListSort?.sortOrder ?? CONST.SEARCH.SORT_ORDER.ASC;
+
     const filterWorkspace = (workspace: WorkspaceItem, inputValue: string) => workspace.title.toLowerCase().includes(inputValue);
-    const sortWorkspace = (workspaceItems: WorkspaceItem[]) => workspaceItems.sort((a, b) => localeCompare(a.title, b.title));
+    const compareWorkspaceTitle = (a: WorkspaceItem, b: WorkspaceItem) => localeCompare(a.title, b.title);
+    const sortWorkspace = (workspaceItems: WorkspaceItem[]) => {
+        const direction = sortOrder === CONST.SEARCH.SORT_ORDER.DESC ? -1 : 1;
+        return workspaceItems.sort((a, b) => {
+            if (sortBy === 'name') {
+                return compareWorkspaceTitle(a, b) * direction;
+            }
+
+            if (!a.ownerName && b.ownerName) {
+                return 1;
+            }
+
+            if (a.ownerName && !b.ownerName) {
+                return -1;
+            }
+
+            const ownerComparison = localeCompare(a.ownerName, b.ownerName);
+            if (ownerComparison !== 0) {
+                return ownerComparison * direction;
+            }
+
+            return compareWorkspaceTitle(a, b);
+        });
+    };
     const [inputValue, setInputValue, filteredWorkspaces] = useSearchResults(workspaces, filterWorkspace, sortWorkspace);
+
+    const handleSortPress = (column: WorkspacesListSortBy) => {
+        const nextOrder = sortBy === column && sortOrder === CONST.SEARCH.SORT_ORDER.ASC ? CONST.SEARCH.SORT_ORDER.DESC : CONST.SEARCH.SORT_ORDER.ASC;
+        setWorkspacesListSort({sortBy: column, sortOrder: nextOrder});
+    };
 
     const domains = allDomains
         ? Object.values(allDomains).reduce<DomainItem[]>((domainItems, domain) => {
@@ -656,22 +700,24 @@ function WorkspacesListPage() {
             )}
             {!isLessThanMediumScreen && filteredWorkspaces.length > 0 && (
                 <View style={[styles.flexRow, styles.gap5, styles.pt2, styles.pb3, styles.pr5, styles.pl10, styles.appBG]}>
-                    <View style={[styles.flexRow, styles.flex2]}>
-                        <Text
-                            numberOfLines={1}
-                            style={[styles.flexGrow1, styles.textLabelSupporting]}
-                        >
-                            {translate('workspace.common.workspaceName')}
-                        </Text>
-                    </View>
-                    <View style={[styles.flexRow, styles.flex1, styles.workspaceOwnerSectionTitle, styles.workspaceOwnerSectionMinWidth]}>
-                        <Text
-                            numberOfLines={1}
-                            style={[styles.flexGrow1, styles.textLabelSupporting]}
-                        >
-                            {translate('workspace.common.workspaceOwner')}
-                        </Text>
-                    </View>
+                    <SortableHeaderText
+                        text={translate('workspace.common.workspaceName')}
+                        sortOrder={sortOrder}
+                        isActive={sortBy === 'name'}
+                        onPress={() => handleSortPress('name')}
+                        sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.WORKSPACE_LIST_SORTABLE_HEADER}
+                        containerStyle={[styles.flexRow, styles.flex2]}
+                        textStyle={[styles.flexGrow1, styles.textLabelSupporting]}
+                    />
+                    <SortableHeaderText
+                        text={translate('workspace.common.workspaceOwner')}
+                        sortOrder={sortOrder}
+                        isActive={sortBy === 'owner'}
+                        onPress={() => handleSortPress('owner')}
+                        sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.WORKSPACE_LIST_SORTABLE_HEADER}
+                        containerStyle={[styles.flexRow, styles.flex1, styles.workspaceOwnerSectionTitle, styles.workspaceOwnerSectionMinWidth]}
+                        textStyle={[styles.flexGrow1, styles.textLabelSupporting]}
+                    />
                     <View style={[styles.flexRow, styles.flex1, styles.workspaceTypeSectionTitle]}>
                         <Text
                             numberOfLines={1}

@@ -9288,6 +9288,7 @@ const CONST = {
             TOGGLE_SETTINGS_ROW: 'Workspace-ToggleSettingsRow',
             DUPLICATE_SELECT_FEATURES_SELECT_ALL: 'WorkspaceDuplicate-SelectFeaturesSelectAll',
             WORKSPACE_MENU_ITEM: 'Workspace-WorkspaceMenuItem',
+            WORKSPACE_LIST_SORTABLE_HEADER: 'Workspace-WorkspacesList-SortableHeader',
             INVITE_MESSAGE_PRIVACY_LINK: 'WorkspaceInviteMessage-PrivacyLink',
             IMPORTED_MEMBERS_CONFIRMATION_PRIVACY_LINK: 'ImportedMembersConfirmation-PrivacyLink',
             COMPANY_CARDS: {

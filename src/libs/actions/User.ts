@@ -49,7 +49,7 @@ import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
 import type {ExpenseRuleForm, MerchantRuleForm, SpendRuleForm} from '@src/types/form';
-import type {AppReview, BlockedFromConcierge, CustomStatusDraft, ExpenseRule, ReportAttributesDerivedValue} from '@src/types/onyx';
+import type {AppReview, BlockedFromConcierge, CustomStatusDraft, ExpenseRule, ReportAttributesDerivedValue, WorkspacesListSort} from '@src/types/onyx';
 import type Login from '@src/types/onyx/Login';
 import type {Errors} from '@src/types/onyx/OnyxCommon';
 import type {AnyOnyxServerUpdate, OnyxServerUpdate, OnyxUpdateEvent} from '@src/types/onyx/OnyxUpdatesFromServer';
@@ -1296,6 +1296,10 @@ function dismissASAPSubmitExplanation(shouldDismiss: boolean) {
     Onyx.merge(ONYXKEYS.NVP_DISMISSED_ASAP_SUBMIT_EXPLANATION, shouldDismiss);
 }
 
+function setWorkspacesListSort(sort: WorkspacesListSort) {
+    Onyx.set(ONYXKEYS.WORKSPACES_LIST_SORT, sort);
+}
+
 function requestRefund() {
     API.write(WRITE_COMMANDS.REQUEST_REFUND, null);
 }
@@ -1867,6 +1871,7 @@ export {
     clearDraftCustomStatus,
     requestRefund,
     setNameValuePair,
+    setWorkspacesListSort,
     clearUnvalidatedNewContactMethodAction,
     clearPendingContactActionErrors,
     requestValidateCodeAction,

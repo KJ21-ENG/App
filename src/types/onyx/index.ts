@@ -188,6 +188,7 @@ import type WalletOnfido from './WalletOnfido';
 import type WalletStatement from './WalletStatement';
 import type WalletTerms from './WalletTerms';
 import type WalletTransfer from './WalletTransfer';
+import type WorkspacesListSort from './WorkspacesListSort';
 
 export type {
     FileObject,
@@ -329,6 +330,7 @@ export type {
     WalletStatement,
     WalletTerms,
     WalletTransfer,
+    WorkspacesListSort,
     SupportalPermissionDenied,
     PurchaseList,
     ReportUserIsTyping,
