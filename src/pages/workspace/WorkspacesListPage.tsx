@@ -707,7 +707,7 @@ function WorkspacesListPage() {
                         onPress={() => handleSortPress('name')}
                         sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.WORKSPACE_LIST_SORTABLE_HEADER}
                         containerStyle={[styles.flexRow, styles.flex2]}
-                        textStyle={[styles.flexGrow1, styles.textLabelSupporting]}
+                        textStyle={[styles.flexGrow1, styles.textLabelSupporting, sortBy === 'name' && styles.searchTableHeaderActive]}
                     />
                     <SortableHeaderText
                         text={translate('workspace.common.workspaceOwner')}
@@ -716,7 +716,7 @@ function WorkspacesListPage() {
                         onPress={() => handleSortPress('owner')}
                         sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.WORKSPACE_LIST_SORTABLE_HEADER}
                         containerStyle={[styles.flexRow, styles.flex1, styles.workspaceOwnerSectionTitle, styles.workspaceOwnerSectionMinWidth]}
-                        textStyle={[styles.flexGrow1, styles.textLabelSupporting]}
+                        textStyle={[styles.flexGrow1, styles.textLabelSupporting, sortBy === 'owner' && styles.searchTableHeaderActive]}
                     />
                     <View style={[styles.flexRow, styles.flex1, styles.workspaceTypeSectionTitle]}>
                         <Text
