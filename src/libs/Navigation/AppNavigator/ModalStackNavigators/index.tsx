@@ -3,7 +3,6 @@ import React, {useCallback} from 'react';
 import {View} from 'react-native';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
-import {isMobileChrome} from '@libs/Browser';
 import createPlatformStackNavigator from '@libs/Navigation/PlatformStackNavigation/createPlatformStackNavigator';
 import Animations from '@libs/Navigation/PlatformStackNavigation/navigationOptions/animation';
 import type {PlatformStackNavigationOptions} from '@libs/Navigation/PlatformStackNavigation/types';
@@ -63,16 +62,11 @@ const loadAttachmentModalScreen = () => require<ReactComponentModule>('../../../
 
 type Screens = Partial<Record<Screen, () => React.ComponentType>>;
 
-// Reimbursement Account flow animations glitch on low-end Android devices in Chrome mWeb https://github.com/Expensify/App/issues/87658 so we intentionally disable them
-const IS_MOBILE_CHROME = isMobileChrome();
-
-const REIMBURSEMENT_ACCOUNT_FLOW_SCREENS: Screen[] = [
-    SCREENS.REIMBURSEMENT_ACCOUNT,
-    SCREENS.REIMBURSEMENT_ACCOUNT_USD,
-    SCREENS.REIMBURSEMENT_ACCOUNT_NON_USD,
-    SCREENS.REIMBURSEMENT_ACCOUNT_VERIFY_ACCOUNT,
-    SCREENS.REIMBURSEMENT_ACCOUNT_ENTER_SIGNER_INFO,
-];
+// The stacked reimbursement account wizard route screens render their card on top of the
+// previous screen during the modal stack transition. We make their card background opaque
+// from the first frame to avoid the flicker described in https://github.com/Expensify/App/issues/87658
+// without disabling the route transition animation itself.
+const REIMBURSEMENT_ACCOUNT_OPAQUE_CARD_SCREENS = new Set<Screen>([SCREENS.REIMBURSEMENT_ACCOUNT_USD, SCREENS.REIMBURSEMENT_ACCOUNT_NON_USD]);
 
 const OPTIONS_PER_SCREEN: Partial<Record<Screen, PlatformStackNavigationOptions>> = {
     [SCREENS.SETTINGS.MERGE_ACCOUNTS.MERGE_RESULT]: {
@@ -126,7 +120,6 @@ const OPTIONS_PER_SCREEN: Partial<Record<Screen, PlatformStackNavigationOptions>
     [SCREENS.WORKSPACE.DYNAMIC_CATEGORIES_IMPORTED]: {
         animationTypeForReplace: 'push',
     },
-    ...(IS_MOBILE_CHROME ? Object.fromEntries(REIMBURSEMENT_ACCOUNT_FLOW_SCREENS.map((screen) => [screen, {animation: Animations.NONE}])) : {}),
 };
 
 /**
@@ -148,12 +141,22 @@ function createModalStackNavigator<ParamList extends ParamListBase>(screens: Scr
         const getScreenOptions = useCallback<typeof screenOptions>(
             ({route: optionRoute}) => {
                 // Extend common options if they are defined for the screen.
-                if (OPTIONS_PER_SCREEN[optionRoute.name as Screen]) {
-                    return {...screenOptions({route: optionRoute}), ...OPTIONS_PER_SCREEN[optionRoute.name as Screen]};
+                const baseOptions = OPTIONS_PER_SCREEN[optionRoute.name as Screen]
+                    ? {...screenOptions({route: optionRoute}), ...OPTIONS_PER_SCREEN[optionRoute.name as Screen]}
+                    : screenOptions({route: optionRoute});
+
+                if (REIMBURSEMENT_ACCOUNT_OPAQUE_CARD_SCREENS.has(optionRoute.name as Screen)) {
+                    return {
+                        ...baseOptions,
+                        web: {
+                            ...baseOptions.web,
+                            cardStyle: {...baseOptions.web?.cardStyle, ...styles.appBG},
+                        },
+                    };
                 }
-                return screenOptions({route: optionRoute});
+                return baseOptions;
             },
-            [screenOptions],
+            [screenOptions, styles.appBG],
         );
 
         return (
