@@ -1,0 +1,22 @@
+diff --git a/node_modules/react-native-draggable-flatlist/src/hooks/useAutoScroll.tsx b/node_modules/react-native-draggable-flatlist/src/hooks/useAutoScroll.tsx
+index d3add83..682e157 100644
+--- a/node_modules/react-native-draggable-flatlist/src/hooks/useAutoScroll.tsx
++++ b/node_modules/react-native-draggable-flatlist/src/hooks/useAutoScroll.tsx
+@@ -4,7 +4,7 @@ import {
+   useDerivedValue,
+   useSharedValue,
+ } from "react-native-reanimated";
+-import { DEFAULT_PROPS, SCROLL_POSITION_TOLERANCE } from "../constants";
++import { DEFAULT_PROPS, isIOS, SCROLL_POSITION_TOLERANCE } from "../constants";
+ import { useProps } from "../context/propsContext";
+ import { useAnimatedValues } from "../context/animatedValueContext";
+ import { useRefs } from "../context/refContext";
+@@ -90,7 +90,7 @@ export function useAutoScroll() {
+ 
+   function scrollToInternal(offset: number) {
+     if (flatlistRef && "current" in flatlistRef) {
+-      flatlistRef.current?.scrollToOffset({ offset, animated: true });
++      flatlistRef.current?.scrollToOffset({ offset, animated: !isIOS });
+     }
+   }
+ 
