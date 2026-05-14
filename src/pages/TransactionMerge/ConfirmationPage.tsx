@@ -18,9 +18,9 @@ import usePermissions from '@hooks/usePermissions';
 import useSelfDMReport from '@hooks/useSelfDMReport';
 import useThemeStyles from '@hooks/useThemeStyles';
 import {mergeTransactionRequest} from '@libs/actions/MergeTransaction';
+import getIsNarrowLayout from '@libs/getIsNarrowLayout';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
 import {buildMergedTransactionData, getTransactionThreadReportID} from '@libs/MergeTransactionUtils';
-import isSearchTopmostFullScreenRoute from '@libs/Navigation/helpers/isSearchTopmostFullScreenRoute';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackScreenProps} from '@libs/Navigation/PlatformStackNavigation/types';
 import type {MergeTransactionNavigatorParamList} from '@libs/Navigation/types';
@@ -68,7 +68,9 @@ function ConfirmationPage({route}: ConfirmationPageProps) {
         if (!targetTransaction || !mergeTransaction || !sourceTransaction) {
             return;
         }
-        const reportID = mergeTransaction.reportID === CONST.REPORT.UNREPORTED_REPORT_ID ? (findSelfDMReportID() ?? CONST.REPORT.UNREPORTED_REPORT_ID) : mergeTransaction.reportID;
+        const isMergingToUnreported = mergeTransaction.reportID === CONST.REPORT.UNREPORTED_REPORT_ID;
+        const destinationReportID = isMergingToUnreported ? undefined : mergeTransaction.reportID;
+        const fallbackSearchReportID = isMergingToUnreported ? (findSelfDMReportID() ?? CONST.REPORT.UNREPORTED_REPORT_ID) : destinationReportID;
 
         setIsMergingExpenses(true);
         mergeTransactionRequest({
@@ -89,12 +91,10 @@ function ConfirmationPage({route}: ConfirmationPageProps) {
             selfDMReport,
         });
 
-        const reportIDToDismiss = reportID !== CONST.REPORT.UNREPORTED_REPORT_ID ? reportID : undefined;
+        const searchReportIDToOpen = targetTransactionThreadReportID ?? fallbackSearchReportID;
 
-        const searchReportIDToOpen = targetTransactionThreadReportID ?? reportIDToDismiss;
-
-        // If we're in search (or the topmost route is search), dismiss the modal and open the expense in the RHP
-        if ((isOnSearch || isSearchTopmostFullScreenRoute()) && searchReportIDToOpen) {
+        // Search-origin merges should reopen the merged expense in the search RHP.
+        if (isOnSearch && searchReportIDToOpen) {
             Navigation.dismissModal();
             Navigation.setNavigationActionToMicrotaskQueue(() => {
                 Navigation.navigate(ROUTES.SEARCH_REPORT.getRoute({reportID: searchReportIDToOpen}));
@@ -102,8 +102,45 @@ function ConfirmationPage({route}: ConfirmationPageProps) {
             return;
         }
 
-        if (reportIDToDismiss && reportID !== targetTransaction.reportID) {
-            Navigation.dismissModalWithReport({reportID: reportIDToDismiss});
+        if (destinationReportID) {
+            const isNarrowLayout = getIsNarrowLayout();
+            const expenseReportRoute = ROUTES.EXPENSE_REPORT_RHP.getRoute({reportID: destinationReportID});
+            const dismissToDestinationReport = (afterOpenReport?: () => void) => {
+                const openExpenseReportRoute = () => {
+                    Navigation.navigate(expenseReportRoute, {forceReplace: !isNarrowLayout});
+                    afterOpenReport?.();
+                };
+
+                if (isNarrowLayout) {
+                    Navigation.dismissModal({afterTransition: openExpenseReportRoute});
+                    return;
+                }
+
+                Navigation.dismissToPreviousRHP({
+                    afterTransition: openExpenseReportRoute,
+                });
+            };
+
+            if (!targetTransactionThreadReportID) {
+                dismissToDestinationReport();
+                return;
+            }
+
+            if (destinationReportID === targetTransaction.reportID) {
+                Navigation.dismissToPreviousRHP();
+                return;
+            }
+
+            dismissToDestinationReport(() => {
+                Navigation.setNavigationActionToMicrotaskQueue(() => {
+                    Navigation.navigate(
+                        ROUTES.SEARCH_REPORT.getRoute({
+                            reportID: targetTransactionThreadReportID,
+                            backTo: expenseReportRoute,
+                        }),
+                    );
+                });
+            });
             return;
         }
 
