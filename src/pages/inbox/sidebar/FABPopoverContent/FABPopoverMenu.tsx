@@ -9,7 +9,6 @@ import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
 import useWindowDimensions from '@hooks/useWindowDimensions';
 import {close} from '@libs/actions/Modal';
-import {isSafari} from '@libs/Browser';
 import navigateAfterInteraction from '@libs/Navigation/navigateAfterInteraction';
 import CONST from '@src/CONST';
 import {FABMenuContext} from './FABMenuContext';
@@ -82,9 +81,24 @@ function FABPopoverMenu({isVisible, onClose, onItemSelected, anchorRef, animatio
 
     const onItemPress = (onSelected: () => void, options?: {shouldCallAfterModalHide?: boolean}) => {
         onItemSelected();
-        if (options?.shouldCallAfterModalHide && !isSafari()) {
+        if (options?.shouldCallAfterModalHide) {
             close(() => {
-                navigateAfterInteraction(onSelected);
+                const canReadHistory = typeof window !== 'undefined' && !!window.history;
+                const modalHistoryState = canReadHistory ? (window.history.state as {shouldGoBack?: boolean} | null) : undefined;
+                const shouldWaitForModalHistoryEntryRemoval = !!modalHistoryState?.shouldGoBack;
+                if (!shouldWaitForModalHistoryEntryRemoval) {
+                    navigateAfterInteraction(onSelected);
+                    return;
+                }
+
+                // The bottom-docked FAB menu adds a same-URL history guard so browser back can close it.
+                // Wait for that guard entry to be popped before pushing the selected item's destination.
+                const runAfterModalHistoryEntryIsRemoved = () => {
+                    window.removeEventListener('popstate', runAfterModalHistoryEntryIsRemoved);
+                    navigateAfterInteraction(onSelected);
+                };
+
+                window.addEventListener('popstate', runAfterModalHistoryEntryIsRemoved);
             });
         } else {
             navigateAfterInteraction(onSelected);

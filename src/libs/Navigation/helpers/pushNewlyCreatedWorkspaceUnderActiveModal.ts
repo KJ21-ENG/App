@@ -15,12 +15,12 @@ type WorkspaceTargetScreen = typeof SCREENS.WORKSPACE.PROFILE | typeof SCREENS.W
  * from Inbox/Reports): it tells the stack router not to seed the stack with WORKSPACES_LIST before
  * pushing WORKSPACE_SPLIT_NAVIGATOR.
  */
-function pushNewlyCreatedWorkspaceUnderActiveModal(targetScreen: WorkspaceTargetScreen, policyID: string) {
+function pushNewlyCreatedWorkspaceUnderActiveModal(targetScreen: WorkspaceTargetScreen, policyID: string): boolean {
     const rootState = navigationRef.getRootState();
     const tabRoute = rootState?.routes.findLast((r) => r.name === NAVIGATORS.TAB_NAVIGATOR);
     const tabStateKey = tabRoute?.state?.key;
     if (!tabStateKey) {
-        return;
+        return false;
     }
 
     navigationRef.dispatch({
@@ -37,6 +37,7 @@ function pushNewlyCreatedWorkspaceUnderActiveModal(targetScreen: WorkspaceTarget
         }),
         target: tabStateKey,
     });
+    return true;
 }
 
 export default pushNewlyCreatedWorkspaceUnderActiveModal;

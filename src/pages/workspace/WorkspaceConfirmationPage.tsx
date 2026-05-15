@@ -42,10 +42,11 @@ function WorkspaceConfirmationPage() {
         const shouldShowSuccessPage = isDifferentOwner && !params.makeMeAdmin;
         const workspaceRoute = isSmallScreenWidth ? ROUTES.WORKSPACE_INITIAL.getRoute(policyID) : ROUTES.WORKSPACE_OVERVIEW.getRoute(policyID);
         const routeToNavigate = shouldShowSuccessPage ? ROUTES.WORKSPACE_CONFIRMATION_SUCCESS : workspaceRoute;
+        let shouldDismissPreInsertedFullscreenRoute = false;
         if (!shouldShowSuccessPage) {
             // Mount the new workspace under this RHP so the dismiss animation reveals it instead of flashing WORKSPACES_LIST.
             const targetScreen = isSmallScreenWidth ? SCREENS.WORKSPACE.INITIAL : SCREENS.WORKSPACE.PROFILE;
-            pushNewlyCreatedWorkspaceUnderActiveModal(targetScreen, policyID);
+            shouldDismissPreInsertedFullscreenRoute = pushNewlyCreatedWorkspaceUnderActiveModal(targetScreen, policyID);
         }
         createWorkspaceWithPolicyDraftAndNavigateToIt({
             introSelected,
@@ -68,6 +69,7 @@ function WorkspaceConfirmationPage() {
             betas,
             hasActiveAdminPolicies,
             isAnnualSubscription,
+            shouldDismissPreInsertedFullscreenRoute,
         });
     };
     const currentUrl = getCurrentUrl();
