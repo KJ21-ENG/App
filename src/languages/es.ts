@@ -64,6 +64,8 @@ const translations: TranslationDeepObject<typeof en> = {
         saveChanges: 'Guardar cambios',
         submit: 'Enviar',
         submitted: 'Enviado',
+        firstApprover: 'Primer aprobador',
+        firstApproved: 'Primera aprobación',
         rotate: 'Rotar',
         zoom: 'Zoom',
         password: 'Contraseña',

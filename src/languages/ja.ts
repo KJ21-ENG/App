@@ -109,6 +109,8 @@ const translations: TranslationDeepObject<typeof en> = {
         saveChanges: '変更を保存',
         submit: '送信',
         submitted: '送信済み',
+        firstApprover: '最初の承認者',
+        firstApproved: '最初の承認',
         rotate: '回転',
         zoom: 'ズーム',
         password: 'パスワード',

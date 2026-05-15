@@ -1713,6 +1713,7 @@ function Search({
     }
 
     const {shouldShowYearCreated, shouldShowYearSubmitted, shouldShowYearApproved, shouldShowYearPosted, shouldShowYearExported, shouldShowYearWithdrawn} = yearIndicators;
+    const shouldShowYearFirstApproved = filteredData.some((item) => 'shouldShowYearFirstApproved' in item && item.shouldShowYearFirstApproved);
     const {shouldShowAmountInWideColumn, shouldShowTaxAmountInWideColumn} = amountIndicators;
     const shouldShowTableHeader = isLargeScreenWidth && !isChat;
     const tableHeaderVisible = canSelectMultiple || shouldShowTableHeader;
@@ -1790,6 +1791,7 @@ function Search({
                                     shouldShowYear={shouldShowYearCreated}
                                     shouldShowYearSubmitted={shouldShowYearSubmitted}
                                     shouldShowYearApproved={shouldShowYearApproved}
+                                    shouldShowYearFirstApproved={shouldShowYearFirstApproved}
                                     shouldShowYearPosted={shouldShowYearPosted}
                                     shouldShowYearExported={shouldShowYearExported}
                                     shouldShowYearWithdrawn={shouldShowYearWithdrawn}

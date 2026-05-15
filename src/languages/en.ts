@@ -111,6 +111,8 @@ const translations = {
         submit: 'Submit',
         // @context Status label meaning an item has already been sent or submitted (e.g., a form or report). Not the action “to submit.”
         submitted: 'Submitted',
+        firstApprover: 'First Approver',
+        firstApproved: 'First Approved',
         rotate: 'Rotate',
         zoom: 'Zoom',
         password: 'Password',

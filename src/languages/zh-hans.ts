@@ -109,6 +109,8 @@ const translations: TranslationDeepObject<typeof en> = {
         saveChanges: '保存更改',
         submit: '提交',
         submitted: '已提交',
+        firstApprover: '第一审批人',
+        firstApproved: '首次审批',
         rotate: '旋转',
         zoom: '缩放',
         password: '密码',
