@@ -104,6 +104,7 @@ function WorkspaceTravelInvoicingMonthlyLimitPage({route}: WorkspaceTravelInvoic
                         inputID={INPUT_IDS.LIMIT}
                         currency={CONST.CURRENCY.USD}
                         defaultValue={defaultValue}
+                        initialSelection={{start: 0, end: 0}}
                         isCurrencyPressable={false}
                         ref={inputCallbackRef}
                         displayAsTextInput

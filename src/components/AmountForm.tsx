@@ -40,6 +40,12 @@ type AmountFormProps = {
     /** Whether the form should use a standard TextInput as a base */
     displayAsTextInput?: boolean;
 
+    /** Initial cursor selection for the input */
+    initialSelection?: {
+        start: number;
+        end: number;
+    };
+
     /** Number of decimals to display */
     decimals?: number;
 
@@ -82,6 +88,7 @@ function AmountForm({
     onInputChange,
     onCurrencyButtonPress,
     displayAsTextInput = false,
+    initialSelection,
     isCurrencyPressable = true,
     label,
     decimals: decimalsProp,
@@ -110,6 +117,7 @@ function AmountForm({
             decimals={decimals}
             currency={currency}
             displayAsTextInput={displayAsTextInput}
+            initialSelection={initialSelection}
             onInputChange={onInputChange}
             onSymbolButtonPress={onCurrencyButtonPress}
             ref={(newRef: BaseTextInputRef | null) => {
