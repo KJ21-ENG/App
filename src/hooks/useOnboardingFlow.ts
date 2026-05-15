@@ -1,7 +1,8 @@
 import {isSingleNewDotEntrySelector} from '@selectors/HybridApp';
-import {hasCompletedGuidedSetupFlowSelector, tryNewDotOnyxSelector, wasInvitedToNewDotSelector} from '@selectors/Onboarding';
+import {hasCompletedGuidedSetupFlowSelector, isInvitedWorkspaceMemberSelector, tryNewDotOnyxSelector} from '@selectors/Onboarding';
 import {emailSelector} from '@selectors/Session';
-import {useEffect} from 'react';
+import type {OnyxCollection} from 'react-native-onyx';
+import {useCallback, useEffect} from 'react';
 import getCurrentUrl from '@libs/Navigation/currentUrl';
 import Navigation from '@libs/Navigation/Navigation';
 // eslint-disable-next-line no-restricted-imports
@@ -11,6 +12,7 @@ import {startOnboardingFlow} from '@userActions/Welcome/OnboardingFlow';
 import CONFIG from '@src/CONFIG';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
+import type {Policy} from '@src/types/onyx';
 import isLoadingOnyxValue from '@src/types/utils/isLoadingOnyxValue';
 import useOnyx from './useOnyx';
 
@@ -26,6 +28,15 @@ function useOnboardingFlowRouter() {
     const [account] = useOnyx(ONYXKEYS.ACCOUNT);
     const [sessionEmail] = useOnyx(ONYXKEYS.SESSION, {selector: emailSelector});
     const isLoggingInAsNewSessionUser = isLoggingInAsNewUser(currentUrl, sessionEmail);
+    const getIsInvitedWorkspaceMember = useCallback(
+        (policies: OnyxCollection<Policy> | null | undefined) => isInvitedWorkspaceMemberSelector(policies, sessionEmail),
+        [sessionEmail],
+    );
+    const [isInvitedWorkspaceMember = false, isInvitedWorkspaceMemberMetadata] = useOnyx(
+        ONYXKEYS.COLLECTION.POLICY,
+        {selector: getIsInvitedWorkspaceMember},
+        [sessionEmail],
+    );
     const [tryNewDot, tryNewDotMetadata] = useOnyx(ONYXKEYS.NVP_TRY_NEW_DOT, {
         selector: tryNewDotOnyxSelector,
     });
@@ -37,13 +48,11 @@ function useOnboardingFlowRouter() {
     const [onboardingPurposeSelected] = useOnyx(ONYXKEYS.ONBOARDING_PURPOSE_SELECTED);
     const [onboardingCompanySize] = useOnyx(ONYXKEYS.ONBOARDING_COMPANY_SIZE);
     const [onboardingInitialPath] = useOnyx(ONYXKEYS.ONBOARDING_LAST_VISITED_PATH);
-    const [hasNonPersonalPolicy] = useOnyx(ONYXKEYS.HAS_NON_PERSONAL_POLICY);
-    const [introSelected] = useOnyx(ONYXKEYS.NVP_INTRO_SELECTED);
-    const wasInvitedToNewDot = wasInvitedToNewDotSelector(introSelected);
 
     const [isSingleNewDotEntry, isSingleNewDotEntryMetadata] = useOnyx(ONYXKEYS.HYBRID_APP, {selector: isSingleNewDotEntrySelector});
 
     const isOnboardingCompleted = hasCompletedGuidedSetupFlowSelector(onboardingValues);
+    const isOnboardingRoute = currentUrl?.includes(`/${ROUTES.ONBOARDING_ROOT.route}`) ?? false;
 
     useEffect(() => {
         // This should delay opening the onboarding modal so it does not interfere with the ongoing ReportScreen params changes
@@ -59,7 +68,7 @@ function useOnboardingFlowRouter() {
                     return;
                 }
 
-                if (isLoadingOnyxValue(isOnboardingCompletedMetadata, tryNewDotMetadata, dismissedProductTrainingMetadata)) {
+                if (isLoadingOnyxValue(isOnboardingCompletedMetadata, tryNewDotMetadata, dismissedProductTrainingMetadata, isInvitedWorkspaceMemberMetadata)) {
                     return;
                 }
 
@@ -80,10 +89,13 @@ function useOnboardingFlowRouter() {
                 }
 
                 const isMigratedUser = hasBeenAddedToNudgeMigration ?? false;
-                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-                const isInvitedOrGroupMember = (!CONFIG.IS_HYBRID_APP && (hasNonPersonalPolicy || wasInvitedToNewDot)) ?? false;
-                // OD signup sets inviteType + creates a workspace, so invited/group members can still need NewDot onboarding.
-                if (isMigratedUser || (isInvitedOrGroupMember && isOnboardingCompleted)) {
+                const shouldSkipForInvitedWorkspaceMember = !CONFIG.IS_HYBRID_APP && isInvitedWorkspaceMember;
+                if (shouldSkipForInvitedWorkspaceMember && isOnboardingRoute) {
+                    Navigation.dismissModal();
+                    return;
+                }
+
+                if (isMigratedUser || shouldSkipForInvitedWorkspaceMember) {
                     return;
                 }
 
@@ -129,9 +141,10 @@ function useOnboardingFlowRouter() {
         onboardingPurposeSelected,
         onboardingInitialPath,
         hasBeenAddedToNudgeMigration,
-        hasNonPersonalPolicy,
-        wasInvitedToNewDot,
+        isInvitedWorkspaceMember,
+        isInvitedWorkspaceMemberMetadata,
         isOnboardingCompleted,
+        isOnboardingRoute,
     ]);
 
     return {

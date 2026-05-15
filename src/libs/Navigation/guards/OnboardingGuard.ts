@@ -1,9 +1,9 @@
 import type {NavigationAction, NavigationState} from '@react-navigation/native';
 import {findFocusedRoute} from '@react-navigation/native';
 import {isSingleNewDotEntrySelector} from '@selectors/HybridApp';
-import {hasCompletedGuidedSetupFlowSelector, tryNewDotOnyxSelector, wasInvitedToNewDotSelector} from '@selectors/Onboarding';
+import {hasCompletedGuidedSetupFlowSelector, isInvitedWorkspaceMemberSelector, tryNewDotOnyxSelector} from '@selectors/Onboarding';
 import Onyx from 'react-native-onyx';
-import type {OnyxEntry} from 'react-native-onyx';
+import type {OnyxCollection, OnyxEntry} from 'react-native-onyx';
 import type {ValueOf} from 'type-fest';
 import {setOnboardingErrorMessage} from '@libs/actions/Welcome';
 import Log from '@libs/Log';
@@ -15,7 +15,7 @@ import NAVIGATORS from '@src/NAVIGATORS';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {Route} from '@src/ROUTES';
 import ROUTES from '@src/ROUTES';
-import type {Account, Onboarding} from '@src/types/onyx';
+import type {Account, Onboarding, Policy, Session} from '@src/types/onyx';
 import type {GuardResult, NavigationGuard} from './types';
 
 type OnboardingCompanySize = ValueOf<typeof CONST.ONBOARDING_COMPANY_SIZE>;
@@ -32,8 +32,8 @@ let hybridApp: {isSingleNewDotEntry?: boolean} | undefined;
 let onboardingPurposeSelected: OnyxEntry<OnboardingPurpose>;
 let onboardingCompanySize: OnyxEntry<OnboardingCompanySize>;
 let onboardingInitialPath: OnyxEntry<string>;
-let hasNonPersonalPolicy: OnyxEntry<boolean>;
-let wasInvitedToNewDot: boolean | undefined;
+let policies: OnyxCollection<Policy> | null | undefined;
+let session: OnyxEntry<Session>;
 
 Onyx.connectWithoutView({
     key: ONYXKEYS.NVP_ONBOARDING,
@@ -85,16 +85,16 @@ Onyx.connectWithoutView({
 });
 
 Onyx.connectWithoutView({
-    key: ONYXKEYS.HAS_NON_PERSONAL_POLICY,
+    key: ONYXKEYS.COLLECTION.POLICY,
     callback: (value) => {
-        hasNonPersonalPolicy = value;
+        policies = value;
     },
 });
 
 Onyx.connectWithoutView({
-    key: ONYXKEYS.NVP_INTRO_SELECTED,
+    key: ONYXKEYS.SESSION,
     callback: (value) => {
-        wasInvitedToNewDot = value ? wasInvitedToNewDotSelector(value) : undefined;
+        session = value;
     },
 });
 
@@ -153,6 +153,18 @@ function isNavigatingToOnboardingFlowWithReplaceAction(action: NavigationAction)
     return action.type === CONST.NAVIGATION.ACTION_TYPE.REPLACE && (action.payload as {name?: string} | undefined)?.name === NAVIGATORS.ONBOARDING_MODAL_NAVIGATOR;
 }
 
+function isResettingToOnboardingFlow(action: NavigationAction): boolean {
+    if (action.type !== CONST.NAVIGATION_ACTIONS.RESET || !action?.payload) {
+        return false;
+    }
+
+    const targetFocusedRoute = findFocusedRoute(action.payload as NavigationState);
+    return (
+        isOnboardingFlowName(targetFocusedRoute?.name) ||
+        ((action.payload as NavigationState).routes ?? []).some((route) => route.name === NAVIGATORS.ONBOARDING_MODAL_NAVIGATOR)
+    );
+}
+
 /**
  * OnboardingGuard handles ONLY the core NewDot onboarding flow
  */
@@ -169,8 +181,7 @@ const OnboardingGuard: NavigationGuard = {
         const isMigratedUser = tryNewDot?.hasBeenAddedToNudgeMigration ?? false;
         const isSingleEntry = hybridApp?.isSingleNewDotEntry ?? false;
         const needsExplanationModal = (CONFIG.IS_HYBRID_APP && tryNewDot?.isHybridAppOnboardingCompleted !== true) ?? false;
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        const isInvitedOrGroupMember = (!CONFIG.IS_HYBRID_APP && (hasNonPersonalPolicy || wasInvitedToNewDot)) ?? false;
+        const isInvitedWorkspaceMember = !CONFIG.IS_HYBRID_APP && isInvitedWorkspaceMemberSelector(policies, session?.email);
 
         // Redirect completed users who try to navigate to onboarding routes (e.g. via deep link)
         // The OnboardingModalNavigator is not mounted when onboarding is complete, so the route would silently fail
@@ -179,12 +190,28 @@ const OnboardingGuard: NavigationGuard = {
             return {type: 'REDIRECT', route: ROUTES.HOME};
         }
 
+        if (
+            isInvitedWorkspaceMember &&
+            (isNavigatingToOnboardingFlow(action) || isNavigatingToOnboardingFlowWithReplaceAction(action) || isResettingToOnboardingFlow(action))
+        ) {
+            Log.info('[OnboardingGuard] Redirecting invited workspace member away from onboarding route to home');
+            return {type: 'REDIRECT', route: ROUTES.HOME};
+        }
+
         const skipOnboardingConfig = CONFIG.SKIP_ONBOARDING;
         const isLoading = context.isLoading;
         const isNavigatingWithReplace = isNavigatingToOnboardingFlowWithReplaceAction(action);
 
         const shouldSkipOnboarding =
-            skipOnboardingConfig || isLoading || isTransitioning || isOnboardingCompleted || isMigratedUser || isSingleEntry || needsExplanationModal || isNavigatingWithReplace;
+            skipOnboardingConfig ||
+            isLoading ||
+            isTransitioning ||
+            isOnboardingCompleted ||
+            isMigratedUser ||
+            isSingleEntry ||
+            needsExplanationModal ||
+            isInvitedWorkspaceMember ||
+            isNavigatingWithReplace;
 
         if (shouldSkipOnboarding) {
             return {type: 'ALLOW'};
@@ -210,7 +237,7 @@ const OnboardingGuard: NavigationGuard = {
             isMigratedUser,
             isSingleEntry,
             needsExplanationModal,
-            isInvitedOrGroupMember,
+            isInvitedWorkspaceMember,
             isNavigatingWithReplace,
         });
 

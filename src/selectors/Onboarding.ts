@@ -1,5 +1,7 @@
-import type {OnyxValue} from 'react-native-onyx';
+import type {OnyxCollection, OnyxValue} from 'react-native-onyx';
+import {getActiveEmployeeWorkspaces} from '@libs/PolicyUtils';
 import type ONYXKEYS from '@src/ONYXKEYS';
+import type {Policy} from '@src/types/onyx';
 import {isEmptyObject} from '@src/types/utils/EmptyObject';
 
 /**
@@ -67,4 +69,14 @@ function wasInvitedToNewDotSelector(introSelected: OnyxValue<typeof ONYXKEYS.NVP
     return introSelected?.inviteType !== undefined;
 }
 
-export {hasCompletedGuidedSetupFlowSelector, tryNewDotOnyxSelector, hasSeenTourSelector, wasInvitedToNewDotSelector};
+function isInvitedWorkspaceMemberSelector(policies: OnyxCollection<Policy> | null | undefined, currentUserLogin: string | undefined): boolean {
+    return getActiveEmployeeWorkspaces(policies ?? null, currentUserLogin).length > 0;
+}
+
+export {
+    hasCompletedGuidedSetupFlowSelector,
+    tryNewDotOnyxSelector,
+    hasSeenTourSelector,
+    wasInvitedToNewDotSelector,
+    isInvitedWorkspaceMemberSelector,
+};

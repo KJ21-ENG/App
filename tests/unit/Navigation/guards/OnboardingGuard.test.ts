@@ -163,29 +163,44 @@ describe('OnboardingGuard', () => {
             expect(result.type).toBe('ALLOW');
         });
 
-        it('should allow users with non-personal policies', async () => {
-            // Given a user who belongs to a non-personal (e.g. corporate) policy, indicating they were added to a workspace
-            await Onyx.merge(ONYXKEYS.HAS_NON_PERSONAL_POLICY, true);
-            await waitForBatchedUpdates();
-
-            // When the guard evaluates a navigation action
-            const result = OnboardingGuard.evaluate(mockState, mockAction, authenticatedContext);
-
-            // Then navigation should be allowed because users with workspace policies should skip the individual onboarding flow
-            expect(result.type).toBe('ALLOW');
-        });
-
-        it('should allow invited users', async () => {
-            // Given a user who was invited and has already selected their intro choice (SUBMIT), indicating they came through an invitation link
-            await Onyx.merge(ONYXKEYS.NVP_INTRO_SELECTED, {
-                choice: CONST.INTRO_CHOICES.SUBMIT,
+        it('should allow invited workspace employee members when onboarding is incomplete', async () => {
+            // Given a user who abandoned onboarding and was later added as an employee member of an existing workspace
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {
+                hasCompletedGuidedSetupFlow: false,
+            });
+            await Onyx.merge(ONYXKEYS.SESSION, {
+                email: 'employee@example.com',
+            });
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.POLICY}employeePolicy`, {
+                id: 'employeePolicy',
+                name: 'Employee Workspace',
+                type: CONST.POLICY.TYPE.TEAM,
+                role: CONST.POLICY.ROLE.USER,
             });
             await waitForBatchedUpdates();
 
             // When the guard evaluates a navigation action
             const result = OnboardingGuard.evaluate(mockState, mockAction, authenticatedContext);
 
-            // Then navigation should be allowed because invited users have a predefined purpose and should skip the onboarding purpose selection
+            // Then navigation should be allowed because employee workspace membership skips standalone onboarding
+            expect(result.type).toBe('ALLOW');
+        });
+
+        it('should keep completed invited users allowed', async () => {
+            // Given an invited user who has already completed onboarding
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {
+                hasCompletedGuidedSetupFlow: true,
+            });
+            await Onyx.merge(ONYXKEYS.NVP_INTRO_SELECTED, {
+                choice: CONST.INTRO_CHOICES.SUBMIT,
+                inviteType: CONST.ONBOARDING_INVITE_TYPES.WORKSPACE,
+            });
+            await waitForBatchedUpdates();
+
+            // When the guard evaluates a navigation action
+            const result = OnboardingGuard.evaluate(mockState, mockAction, authenticatedContext);
+
+            // Then navigation should be allowed because completed onboarding remains a skip condition
             expect(result.type).toBe('ALLOW');
         });
     });
@@ -227,6 +242,45 @@ describe('OnboardingGuard', () => {
             const result = OnboardingGuard.evaluate(mockState, pushToOnboardingAction, authenticatedContext) as {type: 'REDIRECT'; route: string};
 
             // Then the user should be redirected to HOME because the OnboardingModalNavigator is not mounted for completed users
+            expect(result.type).toBe('REDIRECT');
+            expect(result.route).toBe('home');
+        });
+
+        it('should redirect invited workspace members away from an existing onboarding route', async () => {
+            // Given an invited member who abandoned onboarding, then received employee access to an existing workspace
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {
+                hasCompletedGuidedSetupFlow: false,
+            });
+            await Onyx.merge(ONYXKEYS.SESSION, {
+                email: 'employee@example.com',
+            });
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.POLICY}employeePolicy`, {
+                id: 'employeePolicy',
+                name: 'Employee Workspace',
+                type: CONST.POLICY.TYPE.TEAM,
+                role: CONST.POLICY.ROLE.USER,
+            });
+            await waitForBatchedUpdates();
+
+            // When the current browser URL/state is already targeting onboarding from a previous attempt
+            const resetWithOnboardingAction: NavigationAction = {
+                type: CONST.NAVIGATION_ACTIONS.RESET,
+                payload: {
+                    key: 'root',
+                    index: 1,
+                    routeNames: [SCREENS.HOME, NAVIGATORS.ONBOARDING_MODAL_NAVIGATOR],
+                    routes: [
+                        {key: 'home', name: SCREENS.HOME},
+                        {key: 'onboarding', name: NAVIGATORS.ONBOARDING_MODAL_NAVIGATOR},
+                    ],
+                    stale: false,
+                    type: 'root',
+                },
+            };
+
+            const result = OnboardingGuard.evaluate(mockState, resetWithOnboardingAction, authenticatedContext) as {type: 'REDIRECT'; route: string};
+
+            // Then the guard should push them back to Home instead of allowing the stale onboarding modal to remain
             expect(result.type).toBe('REDIRECT');
             expect(result.route).toBe('home');
         });
@@ -363,15 +417,25 @@ describe('OnboardingGuard', () => {
             expect(result.route).toContain('onboarding');
         });
 
-        it('should redirect invited or group members when they have not completed onboarding', async () => {
-            // Given an invited user from OD signup who has not completed the NewDot guided setup
+        it('should redirect admin-only workspace users when they have not completed onboarding', async () => {
+            // Given an OD manage-team signup user who only has an admin workspace and has not completed NewDot onboarding
             await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {
                 hasCompletedGuidedSetupFlow: false,
             });
+            await Onyx.merge(ONYXKEYS.SESSION, {
+                email: 'admin@example.com',
+            });
             await Onyx.merge(ONYXKEYS.NVP_INTRO_SELECTED, {
                 choice: CONST.INTRO_CHOICES.SUBMIT,
+                inviteType: CONST.ONBOARDING_INVITE_TYPES.WORKSPACE,
             });
             await Onyx.merge(ONYXKEYS.HAS_NON_PERSONAL_POLICY, true);
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.POLICY}adminPolicy`, {
+                id: 'adminPolicy',
+                name: 'Admin Workspace',
+                type: CONST.POLICY.TYPE.TEAM,
+                role: CONST.POLICY.ROLE.ADMIN,
+            });
             await Onyx.merge(ONYXKEYS.ACCOUNT, {
                 isFromPublicDomain: true,
             });
@@ -380,7 +444,7 @@ describe('OnboardingGuard', () => {
             // When the guard evaluates on a non-onboarding screen
             const result = OnboardingGuard.evaluate(mockState, mockAction, authenticatedContext) as {type: 'REDIRECT'; route: string};
 
-            // Then redirect to onboarding
+            // Then redirect to onboarding because admin-only workspaces do not qualify as invited employee membership
             expect(result.type).toBe('REDIRECT');
             expect(result.route).toContain('onboarding');
         });
