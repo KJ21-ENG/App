@@ -276,6 +276,31 @@ function getDistanceMerchant(
     return `${distanceInUnits} ${CONST.DISTANCE_MERCHANT_SEPARATOR} ${ratePerUnit}`;
 }
 
+function hasOdometerReading(reading: number | null | undefined): reading is number {
+    return reading !== undefined && reading !== null;
+}
+
+function getDistanceMerchantWithOdometerReadings(merchant: string, odometerStart?: number | null, odometerEnd?: number | null): string {
+    if (
+        (!hasOdometerReading(odometerStart) && !hasOdometerReading(odometerEnd)) ||
+        !merchant.includes(CONST.DISTANCE_MERCHANT_SEPARATOR) ||
+        merchant.includes('odometer start:') ||
+        merchant.includes('odometer end:')
+    ) {
+        return merchant;
+    }
+
+    const odometerReadings = [];
+    if (hasOdometerReading(odometerStart)) {
+        odometerReadings.push(`odometer start: ${odometerStart}`);
+    }
+    if (hasOdometerReading(odometerEnd)) {
+        odometerReadings.push(`odometer end: ${odometerEnd}`);
+    }
+
+    return `${merchant} (${odometerReadings.join(', ')})`;
+}
+
 function ensureRateDefined(rate: number | undefined): asserts rate is number {
     if (rate !== undefined) {
         return;
@@ -529,6 +554,7 @@ export default {
     getFormattedRateValue,
     getMileageRates,
     getDistanceForDisplay,
+    getDistanceMerchantWithOdometerReadings,
     getRoundedDistanceInUnits,
     getRateForP2P,
     getCustomUnitRateID,

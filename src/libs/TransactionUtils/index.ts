@@ -1172,7 +1172,9 @@ function isFetchingWaypointsFromServer(transaction: OnyxInputOrEntry<Transaction
  * Return the merchant field from the transaction, return the modifiedMerchant if present.
  */
 function getMerchant(transaction: OnyxInputOrEntry<Transaction>): string {
-    return transaction?.modifiedMerchant ? transaction.modifiedMerchant : (transaction?.merchant ?? '');
+    const merchant = transaction?.modifiedMerchant ? transaction.modifiedMerchant : (transaction?.merchant ?? '');
+
+    return DistanceRequestUtils.getDistanceMerchantWithOdometerReadings(merchant, transaction?.comment?.odometerStart, transaction?.comment?.odometerEnd);
 }
 
 function getMerchantOrDescription(transaction: OnyxEntry<Transaction>) {
