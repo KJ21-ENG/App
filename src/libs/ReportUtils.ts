@@ -1640,7 +1640,7 @@ function isCurrentUserSubmitter(report: OnyxEntry<Report>): boolean {
  * Whether the provided report is an Admin room
  */
 function isAdminRoom(report: OnyxEntry<Report>): boolean {
-    return getChatType(report) === CONST.REPORT.CHAT_TYPE.POLICY_ADMINS;
+    return !isTaskReport(report) && getChatType(report) === CONST.REPORT.CHAT_TYPE.POLICY_ADMINS;
 }
 
 /**
@@ -1654,28 +1654,28 @@ function isAdminsOnlyPostingRoom(report: OnyxEntry<Report>): boolean {
  * Whether the provided report is a Announce room
  */
 function isAnnounceRoom(report: OnyxEntry<Report>): boolean {
-    return getChatType(report) === CONST.REPORT.CHAT_TYPE.POLICY_ANNOUNCE;
+    return !isTaskReport(report) && getChatType(report) === CONST.REPORT.CHAT_TYPE.POLICY_ANNOUNCE;
 }
 
 /**
  * Whether the provided report is a default room
  */
 function isDefaultRoom(report: OnyxEntry<Report>): boolean {
-    return CONST.DEFAULT_POLICY_ROOM_CHAT_TYPES.some((type) => type === getChatType(report));
+    return !isTaskReport(report) && CONST.DEFAULT_POLICY_ROOM_CHAT_TYPES.some((type) => type === getChatType(report));
 }
 
 /**
  * Whether the provided report is a Domain room
  */
 function isDomainRoom(report: OnyxEntry<Report>): boolean {
-    return getChatType(report) === CONST.REPORT.CHAT_TYPE.DOMAIN_ALL;
+    return !isTaskReport(report) && getChatType(report) === CONST.REPORT.CHAT_TYPE.DOMAIN_ALL;
 }
 
 /**
  * Whether the provided report is a user created policy room
  */
 function isUserCreatedPolicyRoom(report: OnyxEntry<Report>): boolean {
-    return getChatType(report) === CONST.REPORT.CHAT_TYPE.POLICY_ROOM;
+    return !isTaskReport(report) && getChatType(report) === CONST.REPORT.CHAT_TYPE.POLICY_ROOM;
 }
 
 /**
@@ -9047,7 +9047,7 @@ function canAccessReport(report: OnyxEntry<Report>, betas: OnyxEntry<Beta[]>, is
         return false;
     }
 
-    if (report?.errorFields?.notFound) {
+    if (report?.errorFields?.notFound && !isTaskReport(report)) {
         return false;
     }
 
