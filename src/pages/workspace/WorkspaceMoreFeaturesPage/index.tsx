@@ -137,6 +137,7 @@ function WorkspaceMoreFeaturesPage({policy, route}: WorkspaceMoreFeaturesPagePro
             prompt: translate('workspace.moreFeatures.connectionsWarningModal.featureEnabledText'),
             confirmText: translate('workspace.moreFeatures.connectionsWarningModal.manageSettings'),
             cancelText: translate('common.cancel'),
+            shouldHandleNavigationBack: false,
         });
         if (action !== ModalActions.CONFIRM) {
             return;
@@ -153,6 +154,7 @@ function WorkspaceMoreFeaturesPage({policy, route}: WorkspaceMoreFeaturesPagePro
             prompt: translate('workspace.moreFeatures.connectionsWarningModal.disconnectText'),
             confirmText: translate('workspace.moreFeatures.connectionsWarningModal.manageSettings'),
             cancelText: translate('common.cancel'),
+            shouldHandleNavigationBack: false,
         });
         if (action !== ModalActions.CONFIRM) {
             return;
@@ -196,6 +198,7 @@ function WorkspaceMoreFeaturesPage({policy, route}: WorkspaceMoreFeaturesPagePro
             prompt: translate('workspace.moreFeatures.expensifyCard.disableCardPrompt'),
             confirmText: translate('workspace.moreFeatures.expensifyCard.disableCardButton'),
             cancelText: translate('common.cancel'),
+            shouldHandleNavigationBack: false,
         });
         if (action !== ModalActions.CONFIRM) {
             return;
@@ -209,6 +212,7 @@ function WorkspaceMoreFeaturesPage({policy, route}: WorkspaceMoreFeaturesPagePro
             prompt: translate('workspace.moreFeatures.companyCards.disableCardPrompt'),
             confirmText: translate('workspace.moreFeatures.companyCards.disableCardButton'),
             cancelText: translate('common.cancel'),
+            shouldHandleNavigationBack: false,
         });
         if (action !== ModalActions.CONFIRM) {
             return;
@@ -225,6 +229,7 @@ function WorkspaceMoreFeaturesPage({policy, route}: WorkspaceMoreFeaturesPagePro
             prompt: translate('workspace.moreFeatures.workflowWarningModal.featureEnabledText'),
             confirmText: translate('workspace.moreFeatures.workflowWarningModal.confirmText'),
             cancelText: translate('common.cancel'),
+            shouldHandleNavigationBack: false,
         });
         if (action !== ModalActions.CONFIRM) {
             return;
