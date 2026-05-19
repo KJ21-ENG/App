@@ -126,16 +126,16 @@ function NavigationRoot({authenticated, lastVisitedPath, initialUrl, onReady}: N
             return getAdaptedStateFromPath(lastVisitedPath);
         }
 
-        if (!account || account.isFromPublicDomain) {
-            return;
-        }
-
         const isTransitioning = path?.includes(ROUTES.TRANSITION_BETWEEN_APPS);
 
-        // If we have a transition URL, don't restore last visited path - let React Navigation handle it
+        // If we have a transition URL, don't restore last visited path - start on the transition route
         // This prevents reusing deep links after logout regardless of authentication status
         if (isTransitioning) {
-            return undefined;
+            return getAdaptedStateFromPath(path as Route);
+        }
+
+        if (!account || account.isFromPublicDomain) {
+            return;
         }
 
         if (shouldOpenLastVisitedPath(lastVisitedPath) && authenticated) {

@@ -288,9 +288,9 @@ function Expensify() {
             <DeepLinkHandler onInitialUrl={setInitialUrl} />
             <AppleAuthWrapper />
             {/* Wait for the initial URL to resolve before mounting NavigationRoot, because its initialState
-                is computed once on mount. In HybridApp, getInitialURL() may never resolve (OldDot native
-                bridge), so we skip this guard to avoid blocking the app. */}
-            {hasAttemptedToOpenPublicRoom && (CONFIG.IS_HYBRID_APP || initialUrl !== undefined) && (
+                is computed once on mount. DeepLinkHandler resolves to null after a timeout when no URL is
+                available. */}
+            {hasAttemptedToOpenPublicRoom && initialUrl !== undefined && (
                 <NavigationRoot
                     onReady={setNavigationReady}
                     authenticated={isAuthenticated}
