@@ -26,7 +26,7 @@ import * as ReportUtils from '@libs/ReportUtils';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
-import type {Card, CardFeeds, CurrencyList, Policy} from '@src/types/onyx';
+import type {Card, CardFeeds, CurrencyList, Policy, Report, ReportAction} from '@src/types/onyx';
 import type {AssignCard, AssignCardData} from '@src/types/onyx/AssignCard';
 import type {ExpensifyCardDetails} from '@src/types/onyx/Card';
 import type {
@@ -42,6 +42,7 @@ import type {
 } from '@src/types/onyx/CardFeeds';
 import type {OnyxData} from '@src/types/onyx/Request';
 import type Transaction from '@src/types/onyx/Transaction';
+import {getFinishOnboardingTaskOnyxData} from './Task';
 
 type AddNewCompanyCardFlowData = {
     /** Step to be set in Onyx */
@@ -64,6 +65,16 @@ type ImportCSVCompanyCardsData = {
     lastSelectedFeed?: CompanyCardFeedWithDomainID;
     workspaceCardFeeds?: OnyxEntry<CardFeeds>;
     existingInstanceID?: string;
+    onboardingTaskCompletionData?: OnboardingTaskCompletionData;
+};
+
+type OnboardingTaskCompletionData = {
+    taskReport: OnyxEntry<Report>;
+    taskParentReport: OnyxEntry<Report>;
+    isTaskParentReportArchived: boolean;
+    currentUserAccountID: number;
+    hasOutstandingChildTask: boolean;
+    parentReportAction: OnyxEntry<ReportAction> | undefined;
 };
 
 type OptimisticCompanyCardCSVTransaction = Pick<Transaction, 'transactionID' | 'amount' | 'created' | 'currency' | 'merchant' | 'category' | 'tag' | 'comment' | 'cardName' | 'bank'> & {
@@ -180,6 +191,7 @@ function addNewCompanyCardsFeed(
     feedDetails: CardFeedDetails,
     cardFeeds: OnyxEntry<CombinedCardFeeds>,
     lastSelectedFeed?: CompanyCardFeedWithDomainID,
+    onboardingTaskCompletionData?: OnboardingTaskCompletionData,
 ) {
     if (!policyID) {
         return;
@@ -188,7 +200,14 @@ function addNewCompanyCardsFeed(
     const feedType = CardUtils.getFeedType(cardFeed, cardFeeds);
     const newSelectedFeed = getCardFeedWithDomainID(feedType, workspaceAccountID) as CompanyCardFeedWithDomainID;
 
-    const optimisticData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED | typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER>> = [
+    const optimisticData: Array<
+        OnyxUpdate<
+            | typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED
+            | typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER
+            | typeof ONYXKEYS.COLLECTION.REPORT
+            | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS
+        >
+    > = [
         {
             onyxMethod: Onyx.METHOD.MERGE,
             key: `${ONYXKEYS.COLLECTION.LAST_SELECTED_FEED}${policyID}`,
@@ -210,7 +229,16 @@ function addNewCompanyCardsFeed(
         },
     ];
 
-    const failureData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED | typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER>> = [
+    const successData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.REPORT | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS>> = [];
+
+    const failureData: Array<
+        OnyxUpdate<
+            | typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED
+            | typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER
+            | typeof ONYXKEYS.COLLECTION.REPORT
+            | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS
+        >
+    > = [
         {
             onyxMethod: Onyx.METHOD.MERGE,
             key: `${ONYXKEYS.COLLECTION.LAST_SELECTED_FEED}${policyID}`,
@@ -250,7 +278,23 @@ function addNewCompanyCardsFeed(
             : '',
     };
 
-    API.write(WRITE_COMMANDS.REQUEST_FEED_SETUP, parameters, {optimisticData, failureData, finallyData});
+    if (onboardingTaskCompletionData) {
+        const finishOnboardingTaskData = getFinishOnboardingTaskOnyxData(
+            onboardingTaskCompletionData.taskReport,
+            onboardingTaskCompletionData.taskParentReport,
+            onboardingTaskCompletionData.isTaskParentReportArchived,
+            onboardingTaskCompletionData.currentUserAccountID,
+            onboardingTaskCompletionData.hasOutstandingChildTask,
+            onboardingTaskCompletionData.parentReportAction,
+            // delegateEmail: will be threaded in PR 16; buildOptimisticTaskReportAction falls back to module-level Onyx.connect value (https://github.com/Expensify/App/issues/66425)
+            undefined,
+        );
+        optimisticData.push(...(finishOnboardingTaskData.optimisticData ?? []));
+        successData.push(...(finishOnboardingTaskData.successData ?? []));
+        failureData.push(...(finishOnboardingTaskData.failureData ?? []));
+    }
+
+    API.write(WRITE_COMMANDS.REQUEST_FEED_SETUP, parameters, {optimisticData, successData, failureData, finallyData});
 }
 
 function setWorkspaceCompanyCardFeedName(policyID: string, domainOrWorkspaceAccountID: number, bankName: CompanyCardFeedWithNumber, userDefinedName: string) {
@@ -1119,6 +1163,7 @@ function importCSVCompanyCards({
     lastSelectedFeed,
     workspaceCardFeeds,
     existingInstanceID,
+    onboardingTaskCompletionData,
 }: ImportCSVCompanyCardsData) {
     const feedName = layoutType as CompanyCardFeed;
     const {csvDataWithGeneratedIDs, normalizedColumnMappings, transactions} = buildOptimisticCompanyCardCSVTransactions(csvData, columnMappings, feedName);
@@ -1143,7 +1188,14 @@ function importCSVCompanyCards({
 
     const transactionsCount = transactions.length;
 
-    const optimisticData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER | typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED>> = [
+    const optimisticData: Array<
+        OnyxUpdate<
+            | typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER
+            | typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED
+            | typeof ONYXKEYS.COLLECTION.REPORT
+            | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS
+        >
+    > = [
         {
             onyxMethod: Onyx.METHOD.MERGE,
             key: `${ONYXKEYS.COLLECTION.LAST_SELECTED_FEED}${policyID}`,
@@ -1151,7 +1203,7 @@ function importCSVCompanyCards({
         },
     ];
 
-    const successData: Array<OnyxUpdate<typeof ONYXKEYS.IMPORTED_SPREADSHEET>> = [
+    const successData: Array<OnyxUpdate<typeof ONYXKEYS.IMPORTED_SPREADSHEET | typeof ONYXKEYS.COLLECTION.REPORT | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS>> = [
         {
             onyxMethod: Onyx.METHOD.MERGE,
             key: ONYXKEYS.IMPORTED_SPREADSHEET,
@@ -1169,25 +1221,32 @@ function importCSVCompanyCards({
         },
     ];
 
-    const failureData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER | typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED | typeof ONYXKEYS.IMPORTED_SPREADSHEET>> =
-        [
-            {
-                onyxMethod: Onyx.METHOD.MERGE,
-                key: `${ONYXKEYS.COLLECTION.LAST_SELECTED_FEED}${policyID}`,
-                value: lastSelectedFeed ?? null,
-            },
-            {
-                onyxMethod: Onyx.METHOD.MERGE,
-                key: ONYXKEYS.IMPORTED_SPREADSHEET,
-                value: {
-                    shouldFinalModalBeOpened: true,
-                    importFinalModal: {
-                        titleKey: 'spreadsheet.importFailedTitle',
-                        promptKey: 'spreadsheet.importFailedDescription',
-                    },
+    const failureData: Array<
+        OnyxUpdate<
+            | typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER
+            | typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED
+            | typeof ONYXKEYS.IMPORTED_SPREADSHEET
+            | typeof ONYXKEYS.COLLECTION.REPORT
+            | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS
+        >
+    > = [
+        {
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: `${ONYXKEYS.COLLECTION.LAST_SELECTED_FEED}${policyID}`,
+            value: lastSelectedFeed ?? null,
+        },
+        {
+            onyxMethod: Onyx.METHOD.MERGE,
+            key: ONYXKEYS.IMPORTED_SPREADSHEET,
+            value: {
+                shouldFinalModalBeOpened: true,
+                importFinalModal: {
+                    titleKey: 'spreadsheet.importFailedTitle',
+                    promptKey: 'spreadsheet.importFailedDescription',
                 },
             },
-        ];
+        },
+    ];
 
     if (shouldCreateFeed || shouldSetNickname) {
         optimisticData.push({
@@ -1226,6 +1285,22 @@ function importCSVCompanyCards({
                 },
             },
         });
+    }
+
+    if (onboardingTaskCompletionData) {
+        const finishOnboardingTaskData = getFinishOnboardingTaskOnyxData(
+            onboardingTaskCompletionData.taskReport,
+            onboardingTaskCompletionData.taskParentReport,
+            onboardingTaskCompletionData.isTaskParentReportArchived,
+            onboardingTaskCompletionData.currentUserAccountID,
+            onboardingTaskCompletionData.hasOutstandingChildTask,
+            onboardingTaskCompletionData.parentReportAction,
+            // delegateEmail: will be threaded in PR 16; buildOptimisticTaskReportAction falls back to module-level Onyx.connect value (https://github.com/Expensify/App/issues/66425)
+            undefined,
+        );
+        optimisticData.push(...(finishOnboardingTaskData.optimisticData ?? []));
+        successData.push(...(finishOnboardingTaskData.successData ?? []));
+        failureData.push(...(finishOnboardingTaskData.failureData ?? []));
     }
 
     API.write(WRITE_COMMANDS.IMPORT_CSV_COMPANY_CARDS, parameters, {optimisticData, successData, failureData});

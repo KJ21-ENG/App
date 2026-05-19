@@ -26,6 +26,7 @@ import {getDefaultApprover, isPolicyAdmin} from '@libs/PolicyUtils';
 import * as ReportActionsUtils from '@libs/ReportActionsUtils';
 import * as ReportUtils from '@libs/ReportUtils';
 import * as FormActions from '@userActions/FormActions';
+import {getFinishOnboardingTaskOnyxData} from '@userActions/Task';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {ImportedSpreadsheetMemberData, InvitedEmailsToAccountIDs, Policy, PolicyEmployee, PolicyOwnershipChangeChecks, Report, ReportAction, ReportActions} from '@src/types/onyx';
@@ -40,6 +41,15 @@ import {createPolicyExpenseChats} from './Policy';
 type WorkspaceMembersRoleData = {
     email: string;
     role: ValueOf<typeof CONST.POLICY.ROLE>;
+};
+
+type OnboardingTaskCompletionData = {
+    taskReport: OnyxEntry<Report>;
+    taskParentReport: OnyxEntry<Report>;
+    isTaskParentReportArchived: boolean;
+    currentUserAccountID: number;
+    hasOutstandingChildTask: boolean;
+    parentReportAction: OnyxEntry<ReportAction> | undefined;
 };
 
 let allReportActions: OnyxCollection<ReportActions>;
@@ -958,6 +968,7 @@ function addMembersToWorkspace(
     approverEmail?: string,
     // TODO: Remove optional (?) once all callers are updated in follow-up PRs of https://github.com/Expensify/App/issues/66578
     reportActionsList?: OnyxCollection<ReportActions>,
+    onboardingTaskCompletionData?: OnboardingTaskCompletionData,
 ) {
     if (!policy?.id) {
         Log.warn('addMembersToWorkspace: Policy ID is undefined');
@@ -974,6 +985,22 @@ function addMembersToWorkspace(
         undefined,
         reportActionsList,
     );
+
+    if (onboardingTaskCompletionData) {
+        const finishOnboardingTaskData = getFinishOnboardingTaskOnyxData(
+            onboardingTaskCompletionData.taskReport,
+            onboardingTaskCompletionData.taskParentReport,
+            onboardingTaskCompletionData.isTaskParentReportArchived,
+            onboardingTaskCompletionData.currentUserAccountID,
+            onboardingTaskCompletionData.hasOutstandingChildTask,
+            onboardingTaskCompletionData.parentReportAction,
+            // delegateEmail: will be threaded in PR 16; buildOptimisticTaskReportAction falls back to module-level Onyx.connect value (https://github.com/Expensify/App/issues/66425)
+            undefined,
+        );
+        optimisticData.push(...(finishOnboardingTaskData.optimisticData ?? []));
+        successData.push(...(finishOnboardingTaskData.successData ?? []));
+        failureData.push(...(finishOnboardingTaskData.failureData ?? []));
+    }
 
     const params: AddMembersToWorkspaceParams = {
         employees: JSON.stringify(logins.map((login) => ({email: login, role, ...(approverEmail ? {submitsTo: approverEmail} : {})}))),

@@ -11764,8 +11764,12 @@ function prepareOnboardingOnyxData({
 
     let createWorkspaceTaskReportID;
     let addExpenseApprovalsTaskReportID;
+    let viewTourTaskReportID;
+    let setupCategoriesTaskReportID;
     let setupTagsTaskReportID;
     let setupCategoriesAndTagsTaskReportID;
+    let inviteTeamTaskReportID;
+    let connectCorporateCardTaskReportID;
     // If shouldUseFollowupsInsteadOfTasks we do not want to generate tasks in favour of followups.
     const tasks = shouldUseFollowupsInsteadOfTasks ? [] : onboardingMessage.tasks;
     const tasksData = tasks
@@ -11858,11 +11862,23 @@ function prepareOnboardingOnyxData({
             if (task.type === CONST.ONBOARDING_TASK_TYPE.ADD_EXPENSE_APPROVALS) {
                 addExpenseApprovalsTaskReportID = currentTask.reportID;
             }
+            if (task.type === CONST.ONBOARDING_TASK_TYPE.VIEW_TOUR) {
+                viewTourTaskReportID = currentTask.reportID;
+            }
+            if (task.type === CONST.ONBOARDING_TASK_TYPE.SETUP_CATEGORIES) {
+                setupCategoriesTaskReportID = currentTask.reportID;
+            }
             if (task.type === CONST.ONBOARDING_TASK_TYPE.SETUP_TAGS) {
                 setupTagsTaskReportID = currentTask.reportID;
             }
             if (task.type === CONST.ONBOARDING_TASK_TYPE.SETUP_CATEGORIES_AND_TAGS) {
                 setupCategoriesAndTagsTaskReportID = currentTask.reportID;
+            }
+            if (task.type === CONST.ONBOARDING_TASK_TYPE.INVITE_TEAM) {
+                inviteTeamTaskReportID = currentTask.reportID;
+            }
+            if (task.type === CONST.ONBOARDING_TASK_TYPE.CONNECT_CORPORATE_CARD) {
+                connectCorporateCardTaskReportID = currentTask.reportID;
             }
 
             return {
@@ -11969,36 +11985,53 @@ function prepareOnboardingOnyxData({
                     managerID: deprecatedCurrentUserAccountID,
                 },
             });
+            acc.push({
+                onyxMethod: Onyx.METHOD.MERGE,
+                key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${targetChatReportID}`,
+                value: {
+                    [taskReportAction.reportAction.reportActionID]: {
+                        childStateNum: CONST.REPORT.STATE_NUM.APPROVED,
+                        childStatusNum: CONST.REPORT.STATUS_NUM.APPROVED,
+                    },
+                },
+            });
         }
 
         return acc;
     }, []);
 
-    const tasksForFailureData = tasksData.reduce<Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS | typeof ONYXKEYS.COLLECTION.REPORT>>>((acc, {currentTask, taskReportAction}) => {
-        acc.push(
-            {
-                onyxMethod: Onyx.METHOD.MERGE,
-                key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${targetChatReportID}`,
-                value: {
-                    [taskReportAction.reportAction.reportActionID]: {
-                        errors: getMicroSecondOnyxErrorWithTranslationKey('report.genericAddCommentFailureMessage'),
-                    } as ReportAction,
+    const tasksForFailureData = tasksData.reduce<Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS | typeof ONYXKEYS.COLLECTION.REPORT>>>(
+        (acc, {currentTask, taskReportAction, completedTaskReportAction}) => {
+            acc.push(
+                {
+                    onyxMethod: Onyx.METHOD.MERGE,
+                    key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${targetChatReportID}`,
+                    value: {
+                        [taskReportAction.reportAction.reportActionID]: {
+                            errors: getMicroSecondOnyxErrorWithTranslationKey('report.genericAddCommentFailureMessage'),
+                            ...(completedTaskReportAction && {
+                                childStateNum: CONST.REPORT.STATE_NUM.OPEN,
+                                childStatusNum: CONST.REPORT.STATUS_NUM.OPEN,
+                            }),
+                        } as ReportAction,
+                    },
                 },
-            },
-            {
-                onyxMethod: Onyx.METHOD.MERGE,
-                key: `${ONYXKEYS.COLLECTION.REPORT}${currentTask.reportID}`,
-                value: null,
-            },
-            {
-                onyxMethod: Onyx.METHOD.MERGE,
-                key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${currentTask.reportID}`,
-                value: null,
-            },
-        );
+                {
+                    onyxMethod: Onyx.METHOD.MERGE,
+                    key: `${ONYXKEYS.COLLECTION.REPORT}${currentTask.reportID}`,
+                    value: null,
+                },
+                {
+                    onyxMethod: Onyx.METHOD.MERGE,
+                    key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${currentTask.reportID}`,
+                    value: null,
+                },
+            );
 
-        return acc;
-    }, []);
+            return acc;
+        },
+        [],
+    );
 
     const tasksForSuccessData = tasksData.reduce<
         Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS | typeof ONYXKEYS.COLLECTION.REPORT | typeof ONYXKEYS.COLLECTION.REPORT_METADATA>>
@@ -12072,8 +12105,12 @@ function prepareOnboardingOnyxData({
                 choice: engagementChoice,
                 createWorkspace: createWorkspaceTaskReportID,
                 addExpenseApprovals: addExpenseApprovalsTaskReportID,
+                viewTour: viewTourTaskReportID,
+                setupCategories: setupCategoriesTaskReportID,
                 setupTags: setupTagsTaskReportID,
                 setupCategoriesAndTags: setupCategoriesAndTagsTaskReportID,
+                inviteTeam: inviteTeamTaskReportID,
+                connectCorporateCard: connectCorporateCardTaskReportID,
             },
         },
     );
@@ -12116,8 +12153,20 @@ function prepareOnboardingOnyxData({
     }
 
     const successData: Array<
-        TupleToUnion<typeof tasksForSuccessData> | OnyxUpdate<typeof ONYXKEYS.COLLECTION.POLICY | typeof ONYXKEYS.PERSONAL_DETAILS_LIST | typeof ONYXKEYS.NVP_ONBOARDING>
+        | TupleToUnion<typeof tasksForSuccessData>
+        | OnyxUpdate<typeof ONYXKEYS.COLLECTION.POLICY | typeof ONYXKEYS.PERSONAL_DETAILS_LIST | typeof ONYXKEYS.NVP_ONBOARDING | typeof ONYXKEYS.NVP_INTRO_SELECTED>
     > = [...tasksForSuccessData];
+
+    successData.push({
+        onyxMethod: Onyx.METHOD.MERGE,
+        key: ONYXKEYS.NVP_INTRO_SELECTED,
+        value: {
+            viewTour: viewTourTaskReportID,
+            setupCategories: setupCategoriesTaskReportID,
+            inviteTeam: inviteTeamTaskReportID,
+            connectCorporateCard: connectCorporateCardTaskReportID,
+        },
+    });
 
     if (message) {
         successData.push({
@@ -12175,8 +12224,12 @@ function prepareOnboardingOnyxData({
             value: {
                 createWorkspace: null,
                 addExpenseApprovals: null,
+                viewTour: null,
+                setupCategories: null,
                 setupCategoriesAndTags: null,
                 setupTags: null,
+                inviteTeam: null,
+                connectCorporateCard: null,
             },
         },
     );

@@ -17,6 +17,7 @@ import TextInput from '@components/TextInput';
 import useAllPolicyExpenseChatReportActions from '@hooks/useAllPolicyExpenseChatReportActions';
 import useAutoFocusInput from '@hooks/useAutoFocusInput';
 import useLocalize from '@hooks/useLocalize';
+import useOnboardingTaskInformation from '@hooks/useOnboardingTaskInformation';
 import useOnyx from '@hooks/useOnyx';
 import useThemeStyles from '@hooks/useThemeStyles';
 import {clearDraftValues} from '@libs/actions/FormActions';
@@ -77,6 +78,13 @@ function WorkspaceInviteMessageComponent({
     const [invitedEmailsToAccountIDsDraft, invitedEmailsToAccountIDsDraftResult] = useOnyx(`${ONYXKEYS.COLLECTION.WORKSPACE_INVITE_MEMBERS_DRAFT}${policyID}`);
     const [workspaceInviteMessageDraft, workspaceInviteMessageDraftResult] = useOnyx(`${ONYXKEYS.COLLECTION.WORKSPACE_INVITE_MESSAGE_DRAFT}${policyID}`);
     const [workspaceInviteRoleDraft = CONST.POLICY.ROLE.USER] = useOnyx(`${ONYXKEYS.COLLECTION.WORKSPACE_INVITE_ROLE_DRAFT}${policyID}`);
+    const {
+        taskReport: inviteTeamTaskReport,
+        taskParentReport: inviteTeamTaskParentReport,
+        isOnboardingTaskParentReportArchived: isInviteTeamTaskParentReportArchived,
+        hasOutstandingChildTask: inviteTeamHasOutstandingChildTask,
+        parentReportAction: inviteTeamParentReportAction,
+    } = useOnboardingTaskInformation(CONST.ONBOARDING_TASK_TYPE.INVITE_TEAM);
 
     const defaultApprover = getDefaultApprover(policy);
     const [approverDraft] = useOnyx(`${ONYXKEYS.COLLECTION.WORKSPACE_INVITE_APPROVER_DRAFT}${policyID}`);
@@ -160,6 +168,14 @@ function WorkspaceInviteMessageComponent({
             currentUserPersonalDetails?.accountID ?? CONST.DEFAULT_NUMBER_ID,
             shouldShowApproverRow ? validatedApprover : undefined,
             filteredReportActions,
+            {
+                taskReport: inviteTeamTaskReport,
+                taskParentReport: inviteTeamTaskParentReport,
+                isTaskParentReportArchived: isInviteTeamTaskParentReportArchived,
+                currentUserAccountID: currentUserPersonalDetails?.accountID ?? CONST.DEFAULT_NUMBER_ID,
+                hasOutstandingChildTask: inviteTeamHasOutstandingChildTask,
+                parentReportAction: inviteTeamParentReportAction,
+            },
         );
         setWorkspaceInviteMessageDraft(policyID, welcomeNote ?? null);
         clearDraftValues(ONYXKEYS.FORMS.WORKSPACE_INVITE_MESSAGE_FORM);

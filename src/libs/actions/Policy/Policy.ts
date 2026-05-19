@@ -2784,6 +2784,7 @@ function buildPolicyData(options: BuildPolicyDataOptions): OnyxData<BuildPolicyD
             | typeof ONYXKEYS.COLLECTION.REPORT_METADATA
             | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS
             | typeof ONYXKEYS.NVP_LAST_PAYMENT_METHOD
+            | typeof ONYXKEYS.NVP_INTRO_SELECTED
             | typeof ONYXKEYS.NVP_ONBOARDING
             | typeof ONYXKEYS.COLLECTION.POLICY_CATEGORIES
             | typeof ONYXKEYS.COLLECTION.POLICY_CATEGORIES_DRAFT

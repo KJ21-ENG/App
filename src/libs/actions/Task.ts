@@ -1461,12 +1461,10 @@ function getFinishOnboardingTaskOnyxData(
     parentReportAction: OnyxEntry<ReportAction> | undefined,
     delegateEmail: string | undefined,
 ): OnyxData<typeof ONYXKEYS.COLLECTION.REPORT | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS> {
-    if (taskReport && canActionTask(taskReport, parentReportAction, currentUserAccountID, taskParentReport, isParentReportArchived)) {
-        if (taskReport) {
-            if (taskReport.stateNum !== CONST.REPORT.STATE_NUM.APPROVED || taskReport.statusNum !== CONST.REPORT.STATUS_NUM.APPROVED) {
-                return completeTask(taskReport, taskParentReport?.hasOutstandingChildTask ?? false, hasOutstandingChildTask, parentReportAction, delegateEmail, undefined, false);
-            }
-        }
+    const canCompleteTask = !!taskReport && canActionTask(taskReport, parentReportAction, currentUserAccountID, taskParentReport, isParentReportArchived);
+
+    if (taskReport && canCompleteTask && (taskReport.stateNum !== CONST.REPORT.STATE_NUM.APPROVED || taskReport.statusNum !== CONST.REPORT.STATUS_NUM.APPROVED)) {
+        return completeTask(taskReport, taskParentReport?.hasOutstandingChildTask ?? false, hasOutstandingChildTask, parentReportAction, delegateEmail, undefined, false);
     }
 
     return {};
@@ -1481,8 +1479,7 @@ function completeTestDriveTask(
     delegateEmail: string | undefined,
     shouldUpdateSelfTourViewedOnlyLocally = false,
 ) {
-    setSelfTourViewed(shouldUpdateSelfTourViewedOnlyLocally);
-    getFinishOnboardingTaskOnyxData(
+    const finishOnboardingTaskData = getFinishOnboardingTaskOnyxData(
         viewTourTaskReport,
         viewTourTaskParentReport,
         isViewTourTaskParentReportArchived,
@@ -1491,6 +1488,12 @@ function completeTestDriveTask(
         parentReportAction,
         delegateEmail,
     );
+
+    if (isEmptyObject(finishOnboardingTaskData)) {
+        return;
+    }
+
+    setSelfTourViewed(shouldUpdateSelfTourViewedOnlyLocally);
 }
 
 export {

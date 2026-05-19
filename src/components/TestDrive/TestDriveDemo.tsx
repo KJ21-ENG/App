@@ -39,10 +39,12 @@ function TestDriveDemo() {
     const [betas] = useOnyx(ONYXKEYS.BETAS);
     const [delegateEmail] = useOnyx(ONYXKEYS.ACCOUNT, {selector: delegateEmailSelector});
     const {
+        taskReportID: viewTourTaskReportID,
         taskReport: viewTourTaskReport,
         taskParentReport: viewTourTaskParentReport,
         isOnboardingTaskParentReportArchived: isViewTourTaskParentReportArchived,
         hasOutstandingChildTask,
+        isLoadingTaskReport: isLoadingViewTourTaskReport,
     } = useOnboardingTaskInformation(CONST.ONBOARDING_TASK_TYPE.VIEW_TOUR);
     const {testDrive} = useOnboardingMessages();
     const currentUserPersonalDetails = useCurrentUserPersonalDetails();
@@ -55,11 +57,18 @@ function TestDriveDemo() {
     const hasCalledOpenReportRef = useRef(false);
 
     useEffect(() => {
-        if (hasSeenTour) {
+        const isViewTourTaskOpen =
+            !!viewTourTaskReport && (viewTourTaskReport.stateNum !== CONST.REPORT.STATE_NUM.APPROVED || viewTourTaskReport.statusNum !== CONST.REPORT.STATUS_NUM.APPROVED);
+
+        if (hasSeenTour && !isViewTourTaskOpen) {
             return;
         }
         if (!viewTourTaskReport) {
-            // Fallback for accounts with no viewTour task — otherwise selfTourViewed never gets set.
+            if (isLoadingViewTourTaskReport || viewTourTaskReportID) {
+                return;
+            }
+
+            // Fallback for accounts with no viewTour task. Otherwise selfTourViewed never gets set.
             setSelfTourViewed();
             if (conciergeReportID && !hasCalledOpenReportRef.current) {
                 hasCalledOpenReportRef.current = true;
@@ -67,7 +76,7 @@ function TestDriveDemo() {
             }
             return;
         }
-        if (viewTourTaskReport.stateNum === CONST.REPORT.STATE_NUM.APPROVED) {
+        if (!isViewTourTaskOpen) {
             return;
         }
 
@@ -84,11 +93,13 @@ function TestDriveDemo() {
     }, [
         hasSeenTour,
         viewTourTaskReport,
+        viewTourTaskReportID,
         viewTourTaskParentReport,
         isViewTourTaskParentReportArchived,
         currentUserPersonalDetails.accountID,
         hasOutstandingChildTask,
         parentReportAction,
+        isLoadingViewTourTaskReport,
         delegateEmail,
         conciergeReportID,
         introSelected,

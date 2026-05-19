@@ -5,7 +5,9 @@ import ImportSpreadsheetColumns from '@components/ImportSpreadsheetColumns';
 import ImportSpreadsheetConfirmModal from '@components/ImportSpreadsheetConfirmModal';
 import ScreenWrapper from '@components/ScreenWrapper';
 import useCloseImportPage from '@hooks/useCloseImportPage';
+import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import useLocalize from '@hooks/useLocalize';
+import useOnboardingTaskInformation from '@hooks/useOnboardingTaskInformation';
 import useOnyx from '@hooks/useOnyx';
 import usePolicy from '@hooks/usePolicy';
 import {getCSVFeedType} from '@libs/CardUtils';
@@ -34,8 +36,16 @@ function CompanyCardsImportedPage({route}: CompanyCardsImportedPageProps) {
     const policyID = route.params.policyID;
     const policy = usePolicy(policyID);
     const workspaceAccountID = policy?.workspaceAccountID ?? CONST.DEFAULT_NUMBER_ID;
+    const currentUserPersonalDetails = useCurrentUserPersonalDetails();
     const [lastSelectedFeed] = useOnyx(`${ONYXKEYS.COLLECTION.LAST_SELECTED_FEED}${policyID}`);
     const [workspaceCardFeeds] = useOnyx(`${ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER}${workspaceAccountID}`);
+    const {
+        taskReport: connectCorporateCardTaskReport,
+        taskParentReport: connectCorporateCardTaskParentReport,
+        isOnboardingTaskParentReportArchived: isConnectCorporateCardTaskParentReportArchived,
+        hasOutstandingChildTask: connectCorporateCardHasOutstandingChildTask,
+        parentReportAction: connectCorporateCardParentReportAction,
+    } = useOnboardingTaskInformation(CONST.ONBOARDING_TASK_TYPE.CONNECT_CORPORATE_CARD);
     const [isImportingTransactions, setIsImportingTransactions] = useState(false);
     const {setIsClosing} = useCloseImportPage();
     const shouldUseAdvancedFields = addNewCard?.data?.useAdvancedFields ?? false;
@@ -137,6 +147,14 @@ function CompanyCardsImportedPage({route}: CompanyCardsImportedPageProps) {
             lastSelectedFeed: lastSelectedFeed ?? undefined,
             workspaceCardFeeds,
             existingInstanceID: addNewCard?.data?.existingInstanceID,
+            onboardingTaskCompletionData: {
+                taskReport: connectCorporateCardTaskReport,
+                taskParentReport: connectCorporateCardTaskParentReport,
+                isTaskParentReportArchived: isConnectCorporateCardTaskParentReportArchived,
+                currentUserAccountID: currentUserPersonalDetails.accountID,
+                hasOutstandingChildTask: connectCorporateCardHasOutstandingChildTask,
+                parentReportAction: connectCorporateCardParentReportAction,
+            },
         });
     };
 
