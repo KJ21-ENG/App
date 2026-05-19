@@ -98,6 +98,14 @@ function init() {
                 }
             };
 
+            Onyx.connectWithoutView({
+                key,
+                initWithStoredValues: false,
+                callback: (value) => {
+                    derivedValue = value;
+                },
+            });
+
             for (let i = 0; i < dependencies.length; i++) {
                 const dependencyIndex = i;
                 const dependencyOnyxKey = dependencies[dependencyIndex];
@@ -110,6 +118,33 @@ function init() {
                             Log.info(`[OnyxDerived] dependency ${collectionKey} for derived key ${key} changed, recomputing`);
                             setDependencyValue(dependencyIndex, value as Parameters<typeof compute>[0][typeof dependencyIndex]);
                             recomputeDerivedValue(dependencyOnyxKey, sourceValue, dependencyIndex);
+                        },
+                    });
+
+                    Onyx.connectWithoutView({
+                        key: dependencyOnyxKey,
+                        initWithStoredValues: false,
+                        callback: (value, changedKey) => {
+                            if (!changedKey || changedKey === dependencyOnyxKey || OnyxKeys.getCollectionKey(changedKey) !== dependencyOnyxKey) {
+                                return;
+                            }
+
+                            const currentCollection = (dependencyValues[dependencyIndex] ?? {}) as Record<string, unknown>;
+                            const hasCurrentValue = Object.hasOwn(currentCollection, changedKey);
+                            if ((value === undefined && !hasCurrentValue) || Object.is(currentCollection[changedKey], value)) {
+                                return;
+                            }
+
+                            const nextCollection = {...currentCollection};
+                            if (value === undefined) {
+                                delete nextCollection[changedKey];
+                            } else {
+                                nextCollection[changedKey] = value;
+                            }
+
+                            Log.info(`[OnyxDerived] dependency member ${changedKey} for derived key ${key} changed, recomputing`);
+                            setDependencyValue(dependencyIndex, nextCollection as Parameters<typeof compute>[0][typeof dependencyIndex]);
+                            recomputeDerivedValue(dependencyOnyxKey, {[changedKey]: value});
                         },
                     });
                 } else if (dependencyOnyxKey === ONYXKEYS.NVP_PREFERRED_LOCALE) {
