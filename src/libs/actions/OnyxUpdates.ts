@@ -4,6 +4,7 @@ import type {Merge} from 'type-fest';
 import {SIDE_EFFECT_REQUEST_COMMANDS, WRITE_COMMANDS} from '@libs/API/types';
 import Log from '@libs/Log';
 import PusherUtils from '@libs/PusherUtils';
+import {normalizeReportActionReactionOnyxUpdates} from '@libs/ReportActionReactionsUtils';
 import {trackExpenseApiError} from '@libs/telemetry/trackExpenseCreationError';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
@@ -33,17 +34,18 @@ function applyHTTPSOnyxUpdates<TKey extends OnyxKey>(request: Request<TKey>, res
     // For most requests we can immediately update Onyx. For write requests we queue the updates and apply them after the sequential queue has flushed to prevent a replay effect in
     // the UI. See https://github.com/Expensify/App/issues/12775 for more info.
     const updateHandler: (updates: Array<OnyxUpdate<TKey>>) => Promise<unknown> = request?.data?.apiRequestType === CONST.API_REQUEST_TYPE.WRITE ? queueOnyxUpdates : Onyx.update;
+    const onyxData = normalizeReportActionReactionOnyxUpdates(response.onyxData);
 
     // First apply any onyx data updates that are being sent back from the API. We wait for this to complete and then
     // apply successData or failureData. This ensures that we do not update any pending, loading, or other UI states contained
     // in successData/failureData until after the component has received and API data.
-    const onyxDataUpdatePromise = response.onyxData ? updateHandler(response.onyxData) : Promise.resolve();
+    const onyxDataUpdatePromise = onyxData ? updateHandler(onyxData) : Promise.resolve();
 
     return onyxDataUpdatePromise
         .then(() => {
             // Handle the request's success/failure data (client-side data)
             if (response.jsonCode === 200 && request.successData) {
-                return updateHandler(request.successData);
+                return updateHandler(normalizeReportActionReactionOnyxUpdates(request.successData) ?? request.successData);
             }
             if (response.jsonCode !== 200 && request.failureData) {
                 // 460 jsonCode in Expensify world means "admin required".
@@ -62,13 +64,13 @@ function applyHTTPSOnyxUpdates<TKey extends OnyxKey>(request: Request<TKey>, res
                     requestData: request.data,
                 });
 
-                return updateHandler(request.failureData);
+                return updateHandler(normalizeReportActionReactionOnyxUpdates(request.failureData) ?? request.failureData);
             }
             return Promise.resolve();
         })
         .then(() => {
             if (request.finallyData) {
-                return updateHandler(request.finallyData);
+                return updateHandler(normalizeReportActionReactionOnyxUpdates(request.finallyData) ?? request.finallyData);
             }
             return Promise.resolve();
         })
@@ -79,11 +81,16 @@ function applyHTTPSOnyxUpdates<TKey extends OnyxKey>(request: Request<TKey>, res
 }
 
 function applyPusherOnyxUpdates<TKey extends OnyxKey>(updates: Array<OnyxUpdateEvent<TKey>>, lastUpdateID: number) {
+    const normalizedUpdates = updates.map((update) => ({
+        ...update,
+        data: normalizeReportActionReactionOnyxUpdates(update.data) ?? update.data,
+    }));
+
     pusherEventsPromise = pusherEventsPromise.then(() => {
         Log.info('[OnyxUpdateManager] Applying pusher update', false, {lastUpdateID});
     });
 
-    pusherEventsPromise = updates
+    pusherEventsPromise = normalizedUpdates
         .reduce((promise, update) => promise.then(() => PusherUtils.triggerMultiEventHandler(update.eventType, update.data)), pusherEventsPromise)
         .then(() => {
             Log.info('[OnyxUpdateManager] Done applying Pusher update', false, {lastUpdateID});
@@ -93,11 +100,16 @@ function applyPusherOnyxUpdates<TKey extends OnyxKey>(updates: Array<OnyxUpdateE
 }
 
 function applyAirshipOnyxUpdates<TKey extends OnyxKey>(updates: Array<OnyxUpdateEvent<TKey>>, lastUpdateID: number) {
+    const normalizedUpdates = updates.map((update) => ({
+        ...update,
+        data: normalizeReportActionReactionOnyxUpdates(update.data) ?? update.data,
+    }));
+
     airshipEventsPromise = airshipEventsPromise.then(() => {
         Log.info('[OnyxUpdateManager] Applying Airship updates', false, {lastUpdateID});
     });
 
-    airshipEventsPromise = updates
+    airshipEventsPromise = normalizedUpdates
         .reduce((promise, update) => promise.then(() => Onyx.update(update.data as Array<OnyxUpdate<TKey>>)), airshipEventsPromise)
         .then(() => {
             Log.info('[OnyxUpdateManager] Done applying Airship updates', false, {lastUpdateID});

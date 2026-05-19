@@ -1,5 +1,6 @@
 import type {OnyxKey, OnyxUpdate} from 'react-native-onyx';
 import Onyx from 'react-native-onyx';
+import {normalizeReportActionReactionOnyxUpdates} from '@libs/ReportActionReactionsUtils';
 import CONFIG from '@src/CONFIG';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {AnyOnyxUpdate} from '@src/types/onyx/Request';
@@ -21,7 +22,7 @@ Onyx.connectWithoutView({
  * @param updates Onyx updates to queue for later
  */
 function queueOnyxUpdates<TKey extends OnyxKey>(updates: Array<OnyxUpdate<TKey>>): Promise<void> {
-    queuedOnyxUpdates = queuedOnyxUpdates.concat(updates);
+    queuedOnyxUpdates = queuedOnyxUpdates.concat(normalizeReportActionReactionOnyxUpdates(updates) ?? updates);
 
     return Promise.resolve();
 }
@@ -53,7 +54,7 @@ function flushQueue(): Promise<void> {
 
         copyUpdates = copyUpdates.filter((update) => preservedKeys.has(update.key as OnyxKey));
     }
-    return Onyx.update(copyUpdates);
+    return Onyx.update(normalizeReportActionReactionOnyxUpdates(copyUpdates) ?? copyUpdates);
 }
 
 function isEmpty() {
