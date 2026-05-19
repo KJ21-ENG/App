@@ -64,6 +64,7 @@ import type {WorkspaceSplitNavigatorParamList} from '@libs/Navigation/types';
 import {
     canEditWorkspaceSettings,
     getConnectionExporters,
+    getPolicyCustomRulesText,
     getRulesDocumentSourceURL,
     getUserFriendlyWorkspaceType,
     goBackFromInvalidPolicy,
@@ -214,7 +215,8 @@ function WorkspaceOverviewPage({policyDraft, policy: policyProp, route}: Workspa
     );
 
     const hasRulesDocument = !!policy?.rulesDocumentURL;
-    const hasCustomRulesText = !StringUtils.isEmptyString(policy?.customRules ?? '');
+    const customRulesText = getPolicyCustomRulesText(policy?.customRules);
+    const hasCustomRulesText = !StringUtils.isEmptyString(customRulesText);
 
     const handleRulesDocumentPicked = useCallback(
         (files: FileObject[]) => {
@@ -949,7 +951,7 @@ function WorkspaceOverviewPage({policyDraft, policy: policyProp, route}: Workspa
                         {(isPolicyAdmin || hasCustomRulesText) && (
                             <OfflineWithFeedback pendingAction={policy?.pendingFields?.customRules}>
                                 <MenuItemWithTopDescription
-                                    title={policy?.customRules ?? ''}
+                                    title={customRulesText}
                                     description={translate('workspace.rules.customRules.policyText')}
                                     sentryLabel={CONST.SENTRY_LABEL.WORKSPACE.OVERVIEW.CUSTOM_RULES}
                                     shouldShowRightIcon={!readOnly}

@@ -757,6 +757,17 @@ function hasCustomCategories(policyCategories: OnyxEntry<PolicyCategories>): boo
 }
 
 /**
+ * Gets the normalized custom rules text for a policy.
+ */
+function getPolicyCustomRulesText(customRules: unknown): string {
+    if (customRules == null) {
+        return '';
+    }
+
+    return String(customRules);
+}
+
+/**
  * Checks if a policy has any rules configured (structured rules, individual expense limits, or prohibited expenses).
  */
 function hasConfiguredRules(policy: OnyxEntry<Policy>): boolean {
@@ -764,7 +775,7 @@ function hasConfiguredRules(policy: OnyxEntry<Policy>): boolean {
         return false;
     }
 
-    if (!!policy.customRules && policy.customRules.trim().length > 0) {
+    if (getPolicyCustomRulesText(policy.customRules).trim().length > 0) {
         return true;
     }
 
@@ -2302,6 +2313,7 @@ export {
     getTagListByOrderWeight,
     getTagListName,
     getTagLists,
+    getPolicyCustomRulesText,
     hasTags,
     hasCustomCategories,
     hasConfiguredRules,

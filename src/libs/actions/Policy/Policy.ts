@@ -6035,9 +6035,10 @@ function setPolicyMaxExpenseAge(policyID: string, maxExpenseAge: string, current
  * @param policyID - id of the policy to set the max expense age
  * @param customRules - the custom rules description in natural language
  */
-function updateCustomRules(policyID: string, customRules: string, currentCustomRules: string | undefined) {
-    const parsedCustomRules = ReportUtils.getParsedComment(customRules);
-    if (parsedCustomRules === currentCustomRules) {
+function updateCustomRules(policyID: string, customRules: string, currentCustomRules: unknown) {
+    const parsedCustomRules = ReportUtils.getParsedComment(PolicyUtils.getPolicyCustomRulesText(customRules));
+    const currentCustomRulesText = PolicyUtils.getPolicyCustomRulesText(currentCustomRules);
+    if (parsedCustomRules === currentCustomRulesText) {
         return;
     }
 
@@ -6072,7 +6073,7 @@ function updateCustomRules(policyID: string, customRules: string, currentCustomR
                 onyxMethod: Onyx.METHOD.MERGE,
                 key: `${ONYXKEYS.COLLECTION.POLICY}${policyID}`,
                 value: {
-                    customRules: currentCustomRules,
+                    customRules: currentCustomRulesText,
                     pendingFields: {customRules: null},
                     errorFields: {customRules: ErrorUtils.getMicroSecondOnyxErrorWithTranslationKey('common.genericErrorMessage')},
                     // TODO
