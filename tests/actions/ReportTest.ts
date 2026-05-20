@@ -7351,6 +7351,53 @@ describe('actions/Report', () => {
             expect(result?.failureData).toBeDefined();
         });
 
+        it('should return guided setup data for incomplete invite onboarding when guided setup is completed', async () => {
+            await setupUserWithConciergeChat();
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {hasCompletedGuidedSetupFlow: true});
+            await waitForBatchedUpdates();
+
+            const introSelected: OnyxTypes.IntroSelected = {
+                choice: CONST.ONBOARDING_CHOICES.ADMIN,
+                inviteType: CONST.ONBOARDING_INVITE_TYPES.WORKSPACE,
+                isInviteOnboardingComplete: false,
+            };
+            const result = Report.getGuidedSetupDataForOpenReport(introSelected, undefined);
+            const guidedSetupData = JSON.parse(result?.guidedSetupData ?? '[]') as Array<{type: string; task?: string}>;
+            const setsCompletedGuidedSetupFlow = result?.optimisticData.some(
+                (item) => item.key === ONYXKEYS.NVP_ONBOARDING && (item.value as {hasCompletedGuidedSetupFlow?: boolean} | null)?.hasCompletedGuidedSetupFlow === true,
+            );
+
+            expect(result).toBeDefined();
+            expect(guidedSetupData.some((item) => item.type === 'task' && item.task === CONST.ONBOARDING_TASK_TYPE.REVIEW_WORKSPACE_SETTINGS)).toBe(true);
+            expect(setsCompletedGuidedSetupFlow).toBe(false);
+        });
+
+        it('should return undefined for a completed non-invite onboarding choice', async () => {
+            await setupUserWithConciergeChat();
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {hasCompletedGuidedSetupFlow: true});
+            await waitForBatchedUpdates();
+
+            const introSelected: OnyxTypes.IntroSelected = {choice: CONST.ONBOARDING_CHOICES.ADMIN, isInviteOnboardingComplete: false};
+
+            const result = Report.getGuidedSetupDataForOpenReport(introSelected, undefined);
+            expect(result).toBeUndefined();
+        });
+
+        it('should return undefined for IOU invite onboarding', async () => {
+            await setupUserWithConciergeChat();
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {hasCompletedGuidedSetupFlow: true});
+            await waitForBatchedUpdates();
+
+            const introSelected: OnyxTypes.IntroSelected = {
+                choice: CONST.ONBOARDING_CHOICES.ADMIN,
+                inviteType: CONST.ONBOARDING_INVITE_TYPES.IOU,
+                isInviteOnboardingComplete: false,
+            };
+
+            const result = Report.getGuidedSetupDataForOpenReport(introSelected, undefined);
+            expect(result).toBeUndefined();
+        });
+
         it('should return guided setup data when betas are explicitly passed', async () => {
             await setupUserWithConciergeChat();
             await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {hasCompletedGuidedSetupFlow: false});
