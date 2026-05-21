@@ -7,9 +7,11 @@ import useOnyx from '@hooks/useOnyx';
 import useStyleUtils from '@hooks/useStyleUtils';
 import useTheme from '@hooks/useTheme';
 import {openApp} from '@libs/actions/App';
+import {joinRoom} from '@libs/actions/Report';
 import {isMobileSafari} from '@libs/Browser';
 import Navigation from '@libs/Navigation/Navigation';
 import {waitForIdle} from '@libs/Network/SequentialQueue';
+import {isChatThread, isHiddenForCurrentUser, isPublicRoom, isValidReport} from '@libs/ReportUtils';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
@@ -23,7 +25,9 @@ function SignInModal() {
     const signinPageRef = useRef<SignInPageRef | null>(null);
     const session = useSession();
     const [isLoadingApp] = useOnyx(ONYXKEYS.IS_LOADING_APP);
+    const [allReports] = useOnyx(ONYXKEYS.COLLECTION.REPORT);
     const hasSignedInRef = useRef(false);
+    const signInOriginReportIDRef = useRef<string | undefined>(undefined);
     // Use of SignInPageWrapped (with shouldEnableMaxHeight prop in SignInPageWrapper) is a workaround for Safari not supporting interactive-widget=resizes-content.
     // This allows better scrolling experience after keyboard shows for modals with input, that are larger than remaining screen height.
     // More info https://github.com/Expensify/App/pull/62799#issuecomment-2943136220.
@@ -40,6 +44,7 @@ function SignInModal() {
         const isAnonymousUser = session?.authTokenType === CONST.AUTH_TOKEN_TYPES.ANONYMOUS;
         if (!isAnonymousUser) {
             hasSignedInRef.current = true;
+            signInOriginReportIDRef.current = Navigation.getTopmostReportId();
 
             // To prevent deadlock when OpenReport and OpenApp overlap, wait for the queue to be idle before calling openApp.
             // This ensures that any communication gaps between the client and server during OpenReport processing do not cause the queue to pause,
@@ -57,9 +62,28 @@ function SignInModal() {
             return;
         }
 
+        hasSignedInRef.current = false;
+
+        const originReportID = signInOriginReportIDRef.current;
+        signInOriginReportIDRef.current = undefined;
+
+        const originReport = originReportID ? allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${originReportID}`] : undefined;
+        const publicRoomReportID = isChatThread(originReport) ? originReport.parentReportID : originReportID;
+        const publicRoomReport = publicRoomReportID ? allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${publicRoomReportID}`] : undefined;
+        const currentUserAccountID = session?.accountID;
+
+        if (
+            currentUserAccountID &&
+            isPublicRoom(publicRoomReport) &&
+            isValidReport(publicRoomReport) &&
+            isHiddenForCurrentUser(publicRoomReport?.participants?.[currentUserAccountID]?.notificationPreference)
+        ) {
+            joinRoom(publicRoomReport, currentUserAccountID);
+        }
+
         Navigation.dismissModal();
         Navigation.navigate(ROUTES.HOME);
-    }, [isLoadingApp]);
+    }, [allReports, isLoadingApp, session?.accountID]);
 
     return (
         <ScreenWrapper
