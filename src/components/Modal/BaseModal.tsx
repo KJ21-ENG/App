@@ -98,7 +98,7 @@ function BaseModal({
     const insets = useSafeAreaInsets();
 
     const shouldCallHideModalOnUnmount = useRef(false);
-    const hideModalCallbackRef = useRef<(callHideCallback: boolean) => void>(undefined);
+    const hideModalCallbackRef = useRef<(callHideCallback: boolean) => void | Promise<void>>(undefined);
     const bottomDockedDismissButtonRef = useRef<View>(null);
 
     const wasVisible = usePrevious(isVisible);
@@ -115,7 +115,7 @@ function BaseModal({
      * @param callHideCallback - Should we call the onModalHide callback
      */
     const hideModal = useCallback(
-        (callHideCallback = true) => {
+        async (callHideCallback = true) => {
             shouldCallHideModalOnUnmount.current = false;
             willAlertModalBecomeVisible(false);
             if (areAllModalsHidden()) {
@@ -124,7 +124,7 @@ function BaseModal({
                 }
             }
             if (callHideCallback) {
-                onModalHide();
+                await onModalHide();
             }
             onModalDidClose();
             ComposerFocusManager.refocusAfterModalFullyClosed(uniqueModalId, restoreFocusType);

@@ -7,6 +7,8 @@ import BaseModal from './BaseModal';
 import type BaseModalProps from './types';
 import type {WindowState} from './types';
 
+const HISTORY_GUARD_CLEANUP_TIMEOUT = 100;
+
 function Modal({fullscreen = true, onModalHide = () => {}, type, onModalShow = () => {}, children, shouldHandleNavigationBack, ...rest}: BaseModalProps) {
     const theme = useTheme();
     const StyleUtils = useStyleUtils();
@@ -43,23 +45,34 @@ function Modal({fullscreen = true, onModalHide = () => {}, type, onModalShow = (
         handlePopStateRef.current();
     }, []);
 
-    const hideModal = () => {
-        window.removeEventListener('popstate', handlePopState);
-        if ((window.history.state as WindowState)?.shouldGoBack && shouldHandleNavigationBack) {
-            onModalHide();
-            // Defer history.back() so it runs after any pending navigation
-            // callbacks (from onModalDidClose) have pushed their history entries.
-            // This prevents the popstate from undoing navigations triggered by
-            // menu item selection callbacks.
-            setTimeout(() => {
-                if (!(window.history.state as WindowState)?.shouldGoBack) {
+    const clearHistoryGuard = () =>
+        new Promise<void>((resolve) => {
+            let isResolved = false;
+            let timeoutID: ReturnType<typeof setTimeout> | undefined;
+
+            const finish = () => {
+                if (isResolved) {
                     return;
                 }
-                window.history.back();
-            }, 0);
-        } else {
-            onModalHide();
+                isResolved = true;
+                window.removeEventListener('popstate', finish);
+                if (timeoutID) {
+                    clearTimeout(timeoutID);
+                }
+                resolve();
+            };
+
+            window.addEventListener('popstate', finish, {once: true});
+            timeoutID = setTimeout(finish, HISTORY_GUARD_CLEANUP_TIMEOUT);
+            window.history.back();
+        });
+
+    const hideModal = async () => {
+        window.removeEventListener('popstate', handlePopState);
+        if ((window.history.state as WindowState)?.shouldGoBack && shouldHandleNavigationBack) {
+            await clearHistoryGuard();
         }
+        await onModalHide();
     };
 
     const showModal = () => {

@@ -109,7 +109,7 @@ type ReanimatedModalProps = ViewProps &
         onModalWillShow?: () => void;
 
         /** Callback when modal has fully disappeared */
-        onModalHide?: () => void;
+        onModalHide?: () => void | Promise<void>;
 
         /** Callback when modal is about to disappear */
         onModalWillHide?: () => void;

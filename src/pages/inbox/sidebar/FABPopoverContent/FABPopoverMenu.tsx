@@ -3,6 +3,7 @@ import type {ActivityProps, RefObject} from 'react';
 import {View} from 'react-native';
 import CompactMenuContext from '@components/CompactMenuContext';
 import FocusTrapForModal from '@components/FocusTrap/FocusTrapForModal';
+import type {WindowState} from '@components/Modal/types';
 import PopoverWithMeasuredContent from '@components/PopoverWithMeasuredContent';
 import useArrowKeyFocusManager from '@hooks/useArrowKeyFocusManager';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
@@ -34,6 +35,14 @@ type FABPopoverMenuProps = {
     animationOutTiming?: number;
     children: React.ReactNode;
 };
+
+function hasActiveModalHistoryGuard() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    return !!(window.history?.state as WindowState | null | undefined)?.shouldGoBack;
+}
 
 function FABPopoverMenu({isVisible, onClose, onItemSelected, anchorRef, animationInTiming, animationOutTiming, children}: FABPopoverMenuProps) {
     const styles = useThemeStyles();
@@ -81,13 +90,19 @@ function FABPopoverMenu({isVisible, onClose, onItemSelected, anchorRef, animatio
     };
 
     const onItemPress = (onSelected: () => void, options?: {shouldCallAfterModalHide?: boolean}) => {
-        onItemSelected();
-        if (options?.shouldCallAfterModalHide && !isSafari()) {
+        const shouldCallAfterModalHide = !!options?.shouldCallAfterModalHide;
+        const runSelectedItem = () => {
+            navigateAfterInteraction(onSelected);
+        };
+
+        if ((shouldCallAfterModalHide && !isSafari()) || hasActiveModalHistoryGuard()) {
+            onItemSelected();
             close(() => {
-                navigateAfterInteraction(onSelected);
+                runSelectedItem();
             });
         } else {
-            navigateAfterInteraction(onSelected);
+            onItemSelected();
+            runSelectedItem();
         }
         setFocusedIndex(-1);
     };

@@ -38,7 +38,7 @@ type BaseModalProps = Partial<ReanimatedModalProps> &
         isVisible: boolean;
 
         /** Callback method fired when the modal is hidden */
-        onModalHide?: () => void;
+        onModalHide?: () => void | Promise<void>;
 
         /** Callback method fired when the modal is shown */
         onModalShow?: () => void;
