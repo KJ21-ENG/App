@@ -7,6 +7,7 @@ import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails'
 import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
 import {clearVacationDelegateError, deleteVacationDelegate, setVacationDelegate} from '@libs/actions/VacationDelegate';
+import {formatPhoneNumber} from '@libs/LocalePhoneNumber';
 import Navigation from '@libs/Navigation/Navigation';
 import {getPersonalDetailByEmail} from '@libs/PersonalDetailsUtils';
 import CONST from '@src/CONST';
@@ -40,7 +41,7 @@ function VacationDelegatePage() {
         async (delegateLogin: string) => {
             const result = await showConfirmModal({
                 title: translate('common.headsUp'),
-                prompt: translate('statusPage.vacationDelegateWarning', getPersonalDetailByEmail(delegateLogin)?.displayName ?? delegateLogin),
+                prompt: translate('statusPage.vacationDelegateWarning', formatPhoneNumber(getPersonalDetailByEmail(delegateLogin)?.displayName ?? delegateLogin)),
                 confirmText: translate('common.confirm'),
                 cancelText: translate('common.cancel'),
                 shouldShowCancelButton: true,

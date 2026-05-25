@@ -41,8 +41,8 @@ function VacationDelegateMenuItem({vacationDelegate, errors, pendingAction, onCl
 
     const hasVacationDelegate = !!vacationDelegate?.delegate;
     const vacationDelegatePersonalDetails = personalDetailsByLogin[vacationDelegate?.delegate?.toLowerCase() ?? ''];
-    const formattedDelegateLogin = formatPhoneNumber(vacationDelegatePersonalDetails?.login ?? '');
-    const fallbackVacationDelegateLogin = formattedDelegateLogin === '' ? vacationDelegate?.delegate : formattedDelegateLogin;
+    const formattedDelegateLogin = formatPhoneNumber(vacationDelegatePersonalDetails?.login ?? vacationDelegate?.delegate ?? '');
+    const delegateDisplayName = formatPhoneNumber(vacationDelegatePersonalDetails?.displayName ?? '') || formattedDelegateLogin;
 
     return hasVacationDelegate ? (
         <>
@@ -54,8 +54,8 @@ function VacationDelegateMenuItem({vacationDelegate, errors, pendingAction, onCl
                 onClose={onCloseError}
             >
                 <MenuItem
-                    title={vacationDelegatePersonalDetails?.displayName ?? fallbackVacationDelegateLogin}
-                    description={fallbackVacationDelegateLogin}
+                    title={delegateDisplayName}
+                    description={formattedDelegateLogin}
                     avatarID={vacationDelegatePersonalDetails?.accountID ?? CONST.DEFAULT_NUMBER_ID}
                     icon={vacationDelegatePersonalDetails?.avatar ?? icons.FallbackAvatar}
                     iconType={CONST.ICON_TYPE_AVATAR}

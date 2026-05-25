@@ -59,6 +59,9 @@ function BaseVacationDelegateSelectionComponent({
 
     const currentVacationDelegate = vacationDelegate?.delegate ?? '';
     const delegatePersonalDetails = getPersonalDetailByEmail(currentVacationDelegate);
+    const formattedCurrentVacationDelegate = formatPhoneNumber(delegatePersonalDetails?.login ?? currentVacationDelegate);
+    const currentVacationDelegateDisplayName = formatPhoneNumber(delegatePersonalDetails?.displayName ?? '') || formattedCurrentVacationDelegate;
+    const currentVacationDelegateAccountID = delegatePersonalDetails?.accountID ?? CONST.DEFAULT_MISSING_ID;
     const hasActiveDelegations = !!vacationDelegate?.delegatorFor?.length;
 
     const excludeLogins = {
@@ -85,26 +88,27 @@ function BaseVacationDelegateSelectionComponent({
 
     const sectionsList = [];
 
-    if (currentVacationDelegate && delegatePersonalDetails) {
+    if (currentVacationDelegate) {
         sectionsList.push({
             title: undefined,
             sectionIndex: 0,
             data: [
                 {
                     ...delegatePersonalDetails,
-                    text: delegatePersonalDetails?.displayName ?? currentVacationDelegate,
-                    alternateText: delegatePersonalDetails?.login ?? currentVacationDelegate,
-                    login: delegatePersonalDetails.login ?? currentVacationDelegate,
-                    keyForList: `vacationDelegate-${delegatePersonalDetails.login}`,
+                    accountID: currentVacationDelegateAccountID,
+                    text: currentVacationDelegateDisplayName,
+                    alternateText: formattedCurrentVacationDelegate,
+                    login: delegatePersonalDetails?.login ?? currentVacationDelegate,
+                    keyForList: `vacationDelegate-${delegatePersonalDetails?.login ?? currentVacationDelegate}`,
                     isDisabled: false,
                     isSelected: true,
                     shouldShowSubscript: undefined,
                     icons: [
                         {
                             source: delegatePersonalDetails?.avatar ?? icons.FallbackAvatar,
-                            name: formatPhoneNumber(delegatePersonalDetails?.login ?? ''),
+                            name: formattedCurrentVacationDelegate,
                             type: CONST.ICON_TYPE_AVATAR,
-                            id: delegatePersonalDetails?.accountID,
+                            id: currentVacationDelegateAccountID,
                         },
                     ],
                 },
