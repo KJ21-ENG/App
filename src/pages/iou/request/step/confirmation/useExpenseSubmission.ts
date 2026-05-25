@@ -124,6 +124,7 @@ type UseExpenseSubmissionParams = {
 
     // Navigation
     backToReport?: string;
+    isFromGlobalCreate: boolean;
 };
 
 type SendMoneyReportIDs = {
@@ -172,6 +173,7 @@ function useExpenseSubmission(params: UseExpenseSubmissionParams) {
         draftTransactionIDs,
         privateIsArchivedMap,
         backToReport,
+        isFromGlobalCreate,
     } = params;
 
     // Localization
@@ -372,7 +374,7 @@ function useExpenseSubmission(params: UseExpenseSubmissionParams) {
                     originalTransactionID: item.comment?.originalTransactionID,
                     source: item.comment?.source,
                     isLinkedTrackedExpenseReportArchived,
-                    isFromGlobalCreate: item?.isFromFloatingActionButton ?? item?.isFromGlobalCreate,
+                    isFromGlobalCreate,
                     ...(isTimeRequest ? {type: CONST.TRANSACTION.TYPE.TIME, count: item.comment?.units?.count, rate: item.comment?.units?.rate, unit: CONST.TIME_TRACKING.UNIT.HOUR} : {}),
                 },
                 shouldHandleNavigation: shouldHandleNav && index === transactions.length - 1,
@@ -418,7 +420,7 @@ function useExpenseSubmission(params: UseExpenseSubmissionParams) {
                     billable: transaction.billable,
                     reimbursable: transaction.reimbursable,
                     attendees: transaction.comment?.attendees,
-                    isFromGlobalCreate: transaction.isFromFloatingActionButton ?? transaction.isFromGlobalCreate,
+                    isFromGlobalCreate,
                 },
                 currentUserAccountIDParam: currentUserPersonalDetails.accountID,
                 currentUserEmailParam: currentUserPersonalDetails.login ?? '',
@@ -466,7 +468,7 @@ function useExpenseSubmission(params: UseExpenseSubmissionParams) {
                     billable: transaction.billable,
                     reimbursable: transaction.reimbursable,
                     attendees: transaction.comment?.attendees,
-                    isFromGlobalCreate: transaction.isFromFloatingActionButton ?? transaction.isFromGlobalCreate,
+                    isFromGlobalCreate,
                 },
                 isASAPSubmitBetaEnabled,
                 currentUserAccountIDParam: currentUserPersonalDetails.accountID,
@@ -484,7 +486,7 @@ function useExpenseSubmission(params: UseExpenseSubmissionParams) {
                 navigateAfterExpenseCreate({
                     activeReportID,
                     transactionID: result.transactionID,
-                    isFromGlobalCreate: transaction.isFromFloatingActionButton ?? transaction.isFromGlobalCreate,
+                    isFromGlobalCreate,
                     hasMultipleTransactions: reportTransactions.length > 0,
                     shouldAddPendingNewTransactionIDs: activeReportID === chatReportID,
                 });
@@ -546,7 +548,7 @@ function useExpenseSubmission(params: UseExpenseSubmissionParams) {
                     isLinkedTrackedExpenseReportArchived,
                     odometerStart: isOdometerDistanceRequest ? item.comment?.odometerStart : undefined,
                     odometerEnd: isOdometerDistanceRequest ? item.comment?.odometerEnd : undefined,
-                    isFromGlobalCreate: item?.isFromFloatingActionButton ?? item?.isFromGlobalCreate,
+                    isFromGlobalCreate,
                     gpsCoordinates: isGPSDistanceRequest ? getStringifiedGPSCoordinates(gpsDraftDetails) : undefined,
                 },
                 accountantParams: {
@@ -610,7 +612,7 @@ function useExpenseSubmission(params: UseExpenseSubmissionParams) {
                 receipt: isManualDistanceRequest || isOdometerDistanceRequest ? receiptFiles[transaction.transactionID] : undefined,
                 odometerStart: isOdometerDistanceRequest ? transaction.comment?.odometerStart : undefined,
                 odometerEnd: isOdometerDistanceRequest ? transaction.comment?.odometerEnd : undefined,
-                isFromGlobalCreate: transaction.isFromFloatingActionButton ?? transaction.isFromGlobalCreate,
+                isFromGlobalCreate,
                 gpsCoordinates: isGPSDistanceRequest ? getStringifiedGPSCoordinates(gpsDraftDetails) : undefined,
             },
             backToReport,
@@ -803,7 +805,7 @@ function useExpenseSubmission(params: UseExpenseSubmissionParams) {
                 policyTagList: policyTags,
                 policyCategories,
                 policyRecentlyUsedCategories,
-                isFromGlobalCreate: transaction?.isFromFloatingActionButton ?? transaction?.isFromGlobalCreate,
+                isFromGlobalCreate,
                 policyRecentlyUsedTags,
                 senderPolicyTags: senderWorkspacePolicyTags ?? {},
                 shouldHandleNavigation,

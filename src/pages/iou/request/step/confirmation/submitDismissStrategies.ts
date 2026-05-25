@@ -1,6 +1,7 @@
 import {flushDeferredWrite} from '@libs/deferredLayoutWrite';
 import getIsNarrowLayout from '@libs/getIsNarrowLayout';
 import getTopmostReportParams from '@libs/Navigation/helpers/getTopmostReportParams';
+import isReportTopmostSplitNavigator from '@libs/Navigation/helpers/isReportTopmostSplitNavigator';
 import Navigation, {navigationRef} from '@libs/Navigation/Navigation';
 import TransitionTracker from '@libs/Navigation/TransitionTracker';
 import {getReportOrDraftReport, isMoneyRequestReport} from '@libs/ReportUtils';
@@ -131,7 +132,7 @@ function executeDismissModalStrategy(destinationReportID: string | undefined, ru
         return;
     }
 
-    const currentReportID = getTopmostReportParams(navigationRef.getRootState())?.reportID;
+    const currentReportID = isReportTopmostSplitNavigator() ? getTopmostReportParams(navigationRef.getRootState())?.reportID : undefined;
     if (currentReportID === destinationReportID) {
         dismissWideToSameReport(destinationReportID, runAfterDismiss);
         return;

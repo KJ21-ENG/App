@@ -389,7 +389,7 @@ function IOURequestStepConfirmation({
         return hasPolicyExpenseChat(defaultParticipants);
     }, [report, transaction?.participants, defaultParticipants]);
 
-    const isFromGlobalCreate = transaction?.isFromGlobalCreate === true || transaction?.isFromFloatingActionButton === true;
+    const isFromGlobalCreateFromTransaction = transaction?.isFromGlobalCreate === true || transaction?.isFromFloatingActionButton === true;
 
     useFetchRoute(transaction, transaction?.comment?.waypoints, action, shouldUseTransactionDraft(action, iouType) ? CONST.TRANSACTION.STATE.DRAFT : CONST.TRANSACTION.STATE.CURRENT);
 
@@ -409,6 +409,10 @@ function IOURequestStepConfirmation({
     // a stale entry in the navigation stack. Non-per-diem TRACK flows can still
     // benefit from the Search pre-insert optimization.
     const canPreInsertSearch = iouType !== CONST.IOU.TYPE.PAY && iouType !== CONST.IOU.TYPE.SPLIT && !(isPerDiemRequest && iouType === CONST.IOU.TYPE.TRACK);
+    const selfDMReportID = iouType === CONST.IOU.TYPE.TRACK ? findSelfDMReportID() : undefined;
+    const destinationReportID = backToReport ?? report?.reportID ?? selfDMReportID;
+    const hasConcreteDestination = !!destinationReportID && !!getReportOrDraftReport(destinationReportID)?.reportID;
+    const isFromGlobalCreate = isFromGlobalCreateFromTransaction && !hasConcreteDestination;
 
     const {createTransaction, sendMoney, isConfirmed, setIsConfirmed, formHasBeenSubmitted} = useExpenseSubmission({
         transaction,
@@ -438,6 +442,7 @@ function IOURequestStepConfirmation({
         draftTransactionIDs,
         privateIsArchivedMap,
         backToReport,
+        isFromGlobalCreate,
     });
 
     // handleSearchDismiss doesn't pre-insert - it just dismisses the modal when search is
@@ -449,8 +454,6 @@ function IOURequestStepConfirmation({
 
     const hasPreInsertFired = useRef(false);
     const isTransactionReady = !!transaction;
-    const selfDMReportID = iouType === CONST.IOU.TYPE.TRACK ? findSelfDMReportID() : undefined;
-    const destinationReportID = backToReport ?? report?.reportID ?? selfDMReportID;
 
     useEffect(() => {
         if (hasPreInsertFired.current || !isTransactionReady || !getIsNarrowLayout()) {
