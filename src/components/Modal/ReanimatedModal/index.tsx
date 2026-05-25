@@ -174,7 +174,8 @@ function ReanimatedModal({
         // https://stackoverflow.com/questions/58937956/react-native-modal-ondismiss-not-invoked
         // Therefore, we manually call onModalHide() here for Android.
         if (getPlatform() === CONST.PLATFORM.ANDROID) {
-            onModalHide();
+            const modalHideResult = onModalHide();
+            modalHideResult?.catch(() => {});
         }
     }, [onModalHide]);
 
@@ -239,7 +240,8 @@ function ReanimatedModal({
                 onDismiss={() => {
                     onDismiss?.();
                     if (getPlatform() !== CONST.PLATFORM.ANDROID) {
-                        onModalHide();
+                        const modalHideResult = onModalHide();
+                        modalHideResult?.catch(() => {});
                     }
                 }}
                 style={modalStyle}

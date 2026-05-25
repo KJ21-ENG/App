@@ -1,9 +1,14 @@
 import {createContext, useContext} from 'react';
 
+type FABMenuItemPressOptions = {
+    shouldCallAfterModalHide?: boolean;
+    shouldAvoidSafariException?: boolean;
+};
+
 type FABMenuContextType = {
     focusedIndex: number;
     setFocusedIndex: (index: number) => void;
-    onItemPress: (onSelected: () => void, options?: {shouldCallAfterModalHide?: boolean}) => void;
+    onItemPress: (onSelected: () => void, options?: FABMenuItemPressOptions) => void;
     isVisible: boolean;
     registeredItems: readonly string[];
     registerItem: (id: string) => void;
@@ -25,4 +30,4 @@ function useFABMenuContext() {
 }
 
 export {FABMenuContext, useFABMenuContext};
-export type {FABMenuContextType};
+export type {FABMenuContextType, FABMenuItemPressOptions};

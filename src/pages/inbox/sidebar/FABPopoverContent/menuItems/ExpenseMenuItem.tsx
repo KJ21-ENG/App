@@ -2,7 +2,6 @@ import React from 'react';
 import {useMemoizedLazyExpensifyIcons} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
-import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import {startMoneyRequest} from '@libs/actions/IOU/MoneyRequest';
 import getIconForAction from '@libs/getIconForAction';
 import interceptAnonymousUser from '@libs/interceptAnonymousUser';
@@ -19,7 +18,6 @@ type ExpenseMenuItemProps = {
 
 function ExpenseMenuItem({reportID}: ExpenseMenuItemProps) {
     const {translate} = useLocalize();
-    const {shouldUseNarrowLayout} = useResponsiveLayout();
     const icons = useMemoizedLazyExpensifyIcons(['Coins', 'Receipt', 'Cash', 'Transfer', 'MoneyCircle']);
     const [draftTransactionIDs] = useOnyx(ONYXKEYS.COLLECTION.TRANSACTION_DRAFT, {selector: validTransactionDraftIDsSelector});
 
@@ -34,7 +32,8 @@ function ExpenseMenuItem({reportID}: ExpenseMenuItemProps) {
                     startMoneyRequest(CONST.IOU.TYPE.CREATE, reportID, draftTransactionIDs, undefined, undefined, undefined, true);
                 })
             }
-            shouldCallAfterModalHide={shouldUseNarrowLayout}
+            shouldCallAfterModalHide
+            shouldAvoidSafariException
         />
     );
 }

@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useId, useRef, useState} from 'react';
 import useStyleUtils from '@hooks/useStyleUtils';
 import useTheme from '@hooks/useTheme';
 import StatusBar from '@libs/StatusBar';
@@ -7,22 +7,23 @@ import BaseModal from './BaseModal';
 import type BaseModalProps from './types';
 import type {WindowState} from './types';
 
-const HISTORY_GUARD_CLEANUP_TIMEOUT = 100;
-
 function Modal({fullscreen = true, onModalHide = () => {}, type, onModalShow = () => {}, children, shouldHandleNavigationBack, ...rest}: BaseModalProps) {
     const theme = useTheme();
     const StyleUtils = useStyleUtils();
     const [previousStatusBarColor, setPreviousStatusBarColor] = useState<string>();
+    const modalHistoryGuardID = useId();
+    const hasActiveHistoryGuardRef = useRef(false);
 
-    const setStatusBarColor = (color = theme.appBG) => {
+    const setStatusBarColor = (color?: string) => {
         if (!fullscreen) {
             return;
         }
 
-        StatusBar.setBackgroundColor(color);
+        StatusBar.setBackgroundColor(color ?? theme.appBG);
     };
 
     const handlePopStateRef = useRef(() => {
+        hasActiveHistoryGuardRef.current = false;
         rest.onClose?.();
     });
 
@@ -30,6 +31,7 @@ function Modal({fullscreen = true, onModalHide = () => {}, type, onModalShow = (
     // More information can be found here: https://github.com/Expensify/App/issues/69781
     useEffect(() => {
         handlePopStateRef.current = () => {
+            hasActiveHistoryGuardRef.current = false;
             rest.onClose?.();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -45,33 +47,28 @@ function Modal({fullscreen = true, onModalHide = () => {}, type, onModalShow = (
         handlePopStateRef.current();
     }, []);
 
-    const clearHistoryGuard = () =>
-        new Promise<void>((resolve) => {
-            let isResolved = false;
-            let timeoutID: ReturnType<typeof setTimeout> | undefined;
+    const clearHistoryGuard = () => {
+        const currentState = (window.history.state ?? {}) as WindowState;
+        if (!shouldHandleNavigationBack || !hasActiveHistoryGuardRef.current || !currentState.shouldGoBack || currentState.modalHistoryGuardID !== modalHistoryGuardID) {
+            return Promise.resolve();
+        }
 
+        return new Promise<void>((resolve) => {
             const finish = () => {
-                if (isResolved) {
-                    return;
-                }
-                isResolved = true;
                 window.removeEventListener('popstate', finish);
-                if (timeoutID) {
-                    clearTimeout(timeoutID);
-                }
+                hasActiveHistoryGuardRef.current = false;
                 resolve();
             };
 
+            window.removeEventListener('popstate', handlePopState);
             window.addEventListener('popstate', finish, {once: true});
-            timeoutID = setTimeout(finish, HISTORY_GUARD_CLEANUP_TIMEOUT);
             window.history.back();
         });
+    };
 
     const hideModal = async () => {
+        await clearHistoryGuard();
         window.removeEventListener('popstate', handlePopState);
-        if ((window.history.state as WindowState)?.shouldGoBack && shouldHandleNavigationBack) {
-            await clearHistoryGuard();
-        }
         await onModalHide();
     };
 
@@ -81,7 +78,8 @@ function Modal({fullscreen = true, onModalHide = () => {}, type, onModalShow = (
             // popstate fires for this entry, RN recognizes the current route
             // and does not perform an unexpected back navigation.
             const currentState = (window.history.state ?? {}) as WindowState;
-            window.history.pushState({...currentState, shouldGoBack: true}, '', null);
+            window.history.pushState({...currentState, shouldGoBack: true, modalHistoryGuardID}, '', null);
+            hasActiveHistoryGuardRef.current = true;
             window.addEventListener('popstate', handlePopState);
         }
         onModalShow?.();
@@ -89,6 +87,7 @@ function Modal({fullscreen = true, onModalHide = () => {}, type, onModalShow = (
 
     useEffect(
         () => () => {
+            hasActiveHistoryGuardRef.current = false;
             window.removeEventListener('popstate', handlePopState);
         },
         [handlePopState],

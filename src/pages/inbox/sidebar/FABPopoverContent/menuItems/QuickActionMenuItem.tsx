@@ -7,7 +7,6 @@ import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
 import usePreferredPolicy from '@hooks/usePreferredPolicy';
 import useReportIsArchived from '@hooks/useReportIsArchived';
-import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
 import {startMoneyRequest} from '@libs/actions/IOU/MoneyRequest';
 import {navigateToQuickAction} from '@libs/actions/QuickActionNavigation';
@@ -37,7 +36,6 @@ type QuickActionMenuItemProps = {
 
 function QuickActionMenuItem({reportID}: QuickActionMenuItemProps) {
     const styles = useThemeStyles();
-    const {shouldUseNarrowLayout} = useResponsiveLayout();
     const {translate, formatPhoneNumber} = useLocalize();
     const icons = useMemoizedLazyExpensifyIcons(['CalendarSolid', 'ReceiptScan', 'Car', 'Task', 'Clock', 'MoneyCircle', 'Coins', 'Receipt', 'Cash', 'Transfer']);
     const [session] = useOnyx(ONYXKEYS.SESSION, {selector: sessionEmailAndAccountIDSelector});
@@ -169,7 +167,8 @@ function QuickActionMenuItem({reportID}: QuickActionMenuItemProps) {
                         });
                     })
                 }
-                shouldCallAfterModalHide={shouldUseNarrowLayout}
+                shouldCallAfterModalHide
+                shouldAvoidSafariException
             />
         );
     }
@@ -207,7 +206,8 @@ function QuickActionMenuItem({reportID}: QuickActionMenuItemProps) {
                     startMoneyRequest(CONST.IOU.TYPE.SUBMIT, quickActionReportID, draftTransactionIDs, CONST.IOU.REQUEST_TYPE.SCAN, true, undefined, true);
                 })
             }
-            shouldCallAfterModalHide={shouldUseNarrowLayout}
+            shouldCallAfterModalHide
+            shouldAvoidSafariException
         />
     );
 }

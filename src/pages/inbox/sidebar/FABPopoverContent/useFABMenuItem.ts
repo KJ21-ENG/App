@@ -3,13 +3,14 @@ import type {ViewStyle} from 'react-native';
 import useStyleUtils from '@hooks/useStyleUtils';
 import useTheme from '@hooks/useTheme';
 import {useFABMenuContext} from './FABMenuContext';
+import type {FABMenuItemPressOptions} from './FABMenuContext';
 
 type FABMenuItemResult = {
     itemIndex: number;
     isFocused: boolean;
     wrapperStyle: ViewStyle;
     setFocusedIndex: (index: number) => void;
-    onItemPress: (onSelected: () => void, options?: {shouldCallAfterModalHide?: boolean}) => void;
+    onItemPress: (onSelected: () => void, options?: FABMenuItemPressOptions) => void;
 };
 
 /**

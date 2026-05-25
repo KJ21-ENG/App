@@ -37,6 +37,7 @@ function TravelMenuItem() {
         !Str.isSMSLogin(primaryContactMethod) &&
         isPaidGroupPolicy(activePolicy) &&
         (activePolicy?.travelSettings?.hasAcceptedTerms ?? (travelSettings?.hasAcceptedTerms && isPolicyProvisioned));
+    const shouldOpenExternalTravelLink = isTravelEnabled && shouldOpenTravelDotLinkWeb();
 
     const openTravel = () => {
         if (isTravelEnabled) {
@@ -53,9 +54,11 @@ function TravelMenuItem() {
             pressableTestID={CONST.SENTRY_LABEL.FAB_MENU.BOOK_TRAVEL}
             icon={icons.Suitcase}
             title={translate('travel.bookTravel')}
-            iconRight={isTravelEnabled && shouldOpenTravelDotLinkWeb() ? icons.NewWindow : undefined}
-            shouldShowRightIcon={!!(isTravelEnabled && shouldOpenTravelDotLinkWeb())}
+            iconRight={shouldOpenExternalTravelLink ? icons.NewWindow : undefined}
+            shouldShowRightIcon={!!shouldOpenExternalTravelLink}
             onPress={() => interceptAnonymousUser(() => openTravel())}
+            shouldCallAfterModalHide
+            shouldAvoidSafariException={!shouldOpenExternalTravelLink}
         />
     );
 }

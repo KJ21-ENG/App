@@ -7,7 +7,6 @@ import useMappedPolicies from '@hooks/useMappedPolicies';
 import useNetwork from '@hooks/useNetwork';
 import useOnyx from '@hooks/useOnyx';
 import usePreferredPolicy from '@hooks/usePreferredPolicy';
-import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import interceptAnonymousUser from '@libs/interceptAnonymousUser';
 import Navigation from '@libs/Navigation/Navigation';
 import {shouldShowPolicy} from '@libs/PolicyUtils';
@@ -24,7 +23,6 @@ const ITEM_ID = CONST.FAB_MENU_ITEM_IDS.NEW_WORKSPACE;
 
 function NewWorkspaceMenuItem() {
     const {translate} = useLocalize();
-    const {shouldUseNarrowLayout} = useResponsiveLayout();
     const icons = useMemoizedLazyExpensifyIcons(['NewWorkspace']);
     const {isOffline} = useNetwork();
     const [isLoading = false] = useOnyx(ONYXKEYS.IS_LOADING_APP);
@@ -49,7 +47,8 @@ function NewWorkspaceMenuItem() {
             title={translate('workspace.new.newWorkspace')}
             description={translate('workspace.new.getTheExpensifyCardAndMore')}
             onPress={() => interceptAnonymousUser(() => Navigation.navigate(ROUTES.WORKSPACE_CONFIRMATION.getRoute(Navigation.getActiveRoute())))}
-            shouldCallAfterModalHide={shouldUseNarrowLayout}
+            shouldCallAfterModalHide
+            shouldAvoidSafariException
             shouldIgnoreCompactStyle
         />
     );

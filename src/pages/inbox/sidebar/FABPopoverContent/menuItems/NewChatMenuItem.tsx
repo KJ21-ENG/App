@@ -1,7 +1,6 @@
 import React from 'react';
 import {useMemoizedLazyExpensifyIcons} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
-import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import {startNewChat} from '@libs/actions/Report';
 import interceptAnonymousUser from '@libs/interceptAnonymousUser';
 import FABFocusableMenuItem from '@pages/inbox/sidebar/FABPopoverContent/FABFocusableMenuItem';
@@ -11,7 +10,6 @@ const ITEM_ID = CONST.FAB_MENU_ITEM_IDS.NEW_CHAT;
 
 function NewChatMenuItem() {
     const {translate} = useLocalize();
-    const {shouldUseNarrowLayout} = useResponsiveLayout();
     const icons = useMemoizedLazyExpensifyIcons(['ChatBubble']);
 
     return (
@@ -21,7 +19,8 @@ function NewChatMenuItem() {
             icon={icons.ChatBubble}
             title={translate('sidebarScreen.fabNewChat')}
             onPress={() => interceptAnonymousUser(startNewChat)}
-            shouldCallAfterModalHide={shouldUseNarrowLayout}
+            shouldCallAfterModalHide
+            shouldAvoidSafariException
         />
     );
 }
