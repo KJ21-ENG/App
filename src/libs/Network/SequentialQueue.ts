@@ -56,6 +56,7 @@ let isSequentialQueueRunning = false;
 let currentRequestPromise: Promise<void> | null = null;
 let isQueuePaused = false;
 const sequentialQueueRequestThrottle = new RequestThrottle('SequentialQueue');
+const LOW_PRIORITY_NON_MUTATING_WRITES = new Set([WRITE_COMMANDS.READ_NEWEST_ACTION, WRITE_COMMANDS.PUSHER_PING]);
 
 /**
  * Puts the queue into a paused state so that no requests will be processed
@@ -81,6 +82,26 @@ function flushOnyxUpdatesQueue() {
         return;
     }
     return flushQueue();
+}
+
+function shouldFlushOnyxUpdatesBeforeProcessingRequest(requestToProcess: AnyRequest) {
+    if (requestToProcess.command !== WRITE_COMMANDS.READ_NEWEST_ACTION || isEmpty()) {
+        return false;
+    }
+
+    return getAllPersistedRequests().every((request) => LOW_PRIORITY_NON_MUTATING_WRITES.has(request.command));
+}
+
+function flushOnyxUpdatesBeforeProcessingRequestIfNeeded(requestToProcess: AnyRequest) {
+    if (!shouldFlushOnyxUpdatesBeforeProcessingRequest(requestToProcess)) {
+        return Promise.resolve();
+    }
+
+    Log.info('[SequentialQueue] Flushing queued Onyx updates before processing low-priority request', false, {
+        command: requestToProcess.command,
+        remainingCommands: getCommands(getAllPersistedRequests()),
+    });
+    return flushOnyxUpdatesQueue() ?? Promise.resolve();
 }
 
 let queueFlushedDataToStore: AnyOnyxUpdate[] = [];
@@ -162,7 +183,8 @@ function process(): Promise<void> {
     });
 
     // Set the current request to a promise awaiting its processing so that getCurrentRequest can be used to take some action after the current request has processed.
-    currentRequestPromise = processWithMiddleware(requestToProcess, true)
+    currentRequestPromise = flushOnyxUpdatesBeforeProcessingRequestIfNeeded(requestToProcess)
+        .then(() => processWithMiddleware(requestToProcess, true))
         .then((response) => {
             Log.info('[SequentialQueue] Request processed successfully', false, {
                 command: requestToProcess.command,
