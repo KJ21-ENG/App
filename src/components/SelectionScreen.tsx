@@ -99,6 +99,12 @@ type SelectionScreenProps<T = string> = {
     /** Whether to show the text input */
     shouldShowTextInput?: boolean;
 
+    /** Whether to allow each row's title to wrap onto multiple lines */
+    isRowMultilineSupported?: boolean;
+
+    /** Number of title lines to render when multiline is supported */
+    titleNumberOfLines?: number;
+
     textInputOptions?: {
         /** Label for the text input */
         label?: string;
@@ -137,6 +143,8 @@ function SelectionScreen<T = string>({
     shouldShowTextInput,
     textInputOptions,
     shouldUpdateFocusedIndex = false,
+    isRowMultilineSupported,
+    titleNumberOfLines,
 }: SelectionScreenProps<T>) {
     const {translate} = useLocalize();
     const styles = useThemeStyles();
@@ -181,6 +189,8 @@ function SelectionScreen<T = string>({
                         shouldSingleExecuteRowSelect={shouldSingleExecuteRowSelect}
                         shouldUpdateFocusedIndex={shouldUpdateFocusedIndex}
                         alternateNumberOfSupportedLines={2}
+                        isRowMultilineSupported={isRowMultilineSupported}
+                        titleNumberOfLines={titleNumberOfLines}
                         addBottomSafeAreaPadding
                     >
                         <ErrorMessageRow

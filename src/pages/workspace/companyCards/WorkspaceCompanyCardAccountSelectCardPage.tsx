@@ -116,6 +116,8 @@ function WorkspaceCompanyCardAccountSelectCardPage({route}: WorkspaceCompanyCard
             listEmptyContent={listEmptyContent}
             connectionName={connectedIntegration}
             shouldShowTextInput={shouldShowTextInput}
+            isRowMultilineSupported
+            titleNumberOfLines={3}
         />
     );
 }

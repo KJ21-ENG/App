@@ -71,6 +71,7 @@ function BaseSelectionList<TItem extends ListItem>({
     isSmallScreenWidth,
     isLoadingNewOptions,
     isRowMultilineSupported = false,
+    titleNumberOfLines,
     addBottomSafeAreaPadding,
     shouldShowListEmptyContent = true,
     shouldShowLoadingPlaceholder,
@@ -409,6 +410,7 @@ function BaseSelectionList<TItem extends ListItem>({
                 shouldSingleExecuteRowSelect={shouldSingleExecuteRowSelect}
                 rightHandSideComponent={rightHandSideComponent}
                 isMultilineSupported={isRowMultilineSupported}
+                titleNumberOfLines={titleNumberOfLines}
                 isAlternateTextMultilineSupported={(alternateNumberOfSupportedLines ?? 0) > 1}
                 alternateTextNumberOfLines={alternateNumberOfSupportedLines}
                 shouldIgnoreFocus={shouldIgnoreFocus}

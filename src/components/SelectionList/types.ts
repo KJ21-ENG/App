@@ -177,6 +177,9 @@ type SelectionListProps<TItem extends ListItem> = Partial<ChildrenProps> &
         /** Whether to wrap long text */
         isRowMultilineSupported?: boolean;
 
+        /** Number of title lines to render when multiline is supported */
+        titleNumberOfLines?: number;
+
         /** Whether to show the vertical scroll indicator */
         showScrollIndicator?: boolean;
 
