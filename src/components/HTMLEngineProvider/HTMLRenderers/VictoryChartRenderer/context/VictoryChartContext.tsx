@@ -4,6 +4,7 @@ import {useChartDefaultTypeface} from '@components/Charts/hooks';
 import {CHART_TYPE} from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/constants';
 import processVictoryChartTree from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/parsers/processVictoryChartTree';
 import type {ChartType, ProcessNodeResult} from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/types';
+import normalizeVictoryChartPadding from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/utils/normalizeVictoryChartPadding';
 import parseStyles from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/utils/parseStyles';
 
 type VictoryChartContextValue = {
@@ -34,6 +35,7 @@ const VictoryChartContext = createContext<VictoryChartContextValue | null>(null)
 function VictoryChartProvider({tnode, children}: {tnode: TNode; children: React.ReactNode}) {
     const {regular: regularTypeface} = useChartDefaultTypeface();
     const {data, xKey, yKeys, xAxis, yAxis, domain, domainPadding, padding, isHorizontal, categories, labelItems, legendItems} = processVictoryChartTree(tnode, regularTypeface, null);
+    const normalizedPadding = normalizeVictoryChartPadding({padding, xAxis, yAxis, isHorizontal});
     const {nodeStyles: chartContentStyles, parentNodeStyles: chartContainerStyles} = parseStyles(tnode);
 
     const hasCartesianData = Object.keys(data).length > 0;
@@ -62,7 +64,7 @@ function VictoryChartProvider({tnode, children}: {tnode: TNode; children: React.
         yAxis,
         domain,
         domainPadding,
-        padding,
+        padding: normalizedPadding,
         isHorizontal,
         categories,
         labelItems,
