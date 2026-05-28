@@ -4,6 +4,7 @@ import {useChartDefaultTypeface} from '@components/Charts/hooks';
 import {CHART_TYPE} from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/constants';
 import processVictoryChartTree from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/parsers/processVictoryChartTree';
 import type {ChartType, ProcessNodeResult} from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/types';
+import normalizeVictoryChartPadding from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/utils/normalizeVictoryChartPadding';
 import parseStyles from '@components/HTMLEngineProvider/HTMLRenderers/VictoryChartRenderer/utils/parseStyles';
 
 type VictoryChartContextValue = {
@@ -53,6 +54,13 @@ function VictoryChartProvider({tnode, children}: {tnode: TNode; children: React.
         return null;
     }
 
+    const normalizedPadding = normalizeVictoryChartPadding({
+        padding,
+        xAxis,
+        yAxis,
+        isHorizontal: !!isHorizontal,
+    });
+
     const contextValue: VictoryChartContextValue = {
         tnode,
         data,
@@ -62,7 +70,7 @@ function VictoryChartProvider({tnode, children}: {tnode: TNode; children: React.
         yAxis,
         domain,
         domainPadding,
-        padding,
+        padding: normalizedPadding,
         isHorizontal,
         categories,
         labelItems,
