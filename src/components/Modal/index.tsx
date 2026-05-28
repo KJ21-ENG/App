@@ -61,12 +61,13 @@ function Modal({fullscreen = true, onModalHide = () => {}, type, onModalShow = (
             // callbacks (from onModalDidClose) have pushed their history entries.
             // This prevents the popstate from undoing navigations triggered by
             // menu item selection callbacks.
+            // Temporary repro-only delay for #88977. Do not merge.
             setTimeout(() => {
                 if (!(window.history.state as WindowState)?.shouldGoBack) {
                     return;
                 }
                 withInternalPopstate(() => window.history.back());
-            }, 0);
+            }, 50);
         } else {
             onModalHide();
         }
