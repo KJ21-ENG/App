@@ -17,6 +17,7 @@ import Navigation, {getDeepestFocusedScreen, isTwoFactorSetupScreen} from '@libs
 import variables from '@styles/variables';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
+import ROUTES from '@src/ROUTES';
 import {emailSelector} from '@src/selectors/Session';
 import type {Policy} from '@src/types/onyx';
 
@@ -53,7 +54,7 @@ function RequireTwoFactorAuthenticationOverlay() {
     const [is2FARequiredBecauseOfXero = false] = useOnyx(ONYXKEYS.COLLECTION.POLICY, {selector: requires2FAForXeroSelector});
 
     const handleOnPress = () => {
-        Navigation.navigate(getTwoFactorAuthRoute());
+        Navigation.navigate(getTwoFactorAuthRoute(ROUTES.SETTINGS_SECURITY));
     };
 
     if (!shouldShowRequire2FAPage || isIn2FASetupFlow) {

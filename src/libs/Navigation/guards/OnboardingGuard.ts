@@ -15,6 +15,7 @@ import NAVIGATORS from '@src/NAVIGATORS';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {Route} from '@src/ROUTES';
 import ROUTES from '@src/ROUTES';
+import SCREENS from '@src/SCREENS';
 import type {Account, Onboarding} from '@src/types/onyx';
 import type {GuardResult, NavigationGuard} from './types';
 
@@ -114,6 +115,53 @@ function getOnboardingRoute(): Route {
     }) as Route;
 }
 
+function doesAccountNeedTwoFactorAuthSetup(): boolean {
+    return (!!account?.needsTwoFactorAuthSetup || !!account?.twoFactorAuthSetupInProgress) && !account?.requiresTwoFactorAuth;
+}
+
+function isTwoFactorAuthSetupRouteName(routeName: string | undefined): boolean {
+    return (
+        routeName === SCREENS.RIGHT_MODAL.TWO_FACTOR_AUTH ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.DYNAMIC_ROOT ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.DYNAMIC_VERIFY ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.DYNAMIC_VERIFY_ACCOUNT ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.DYNAMIC_SUCCESS ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.SUCCESS ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.DISABLED ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.DISABLE ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.REPLACE_VERIFY_OLD ||
+        routeName === SCREENS.TWO_FACTOR_AUTH.REPLACE_VERIFY_NEW
+    );
+}
+
+type NavigationActionPayload = {
+    name?: string;
+    params?: {
+        screen?: string;
+    };
+    state?: NavigationState;
+};
+
+function isNavigatingToTwoFactorAuthSetup(action: NavigationAction): boolean {
+    const payload = (action as {payload?: NavigationActionPayload}).payload;
+
+    if (!payload) {
+        return false;
+    }
+
+    if (isTwoFactorAuthSetupRouteName(payload.name) || isTwoFactorAuthSetupRouteName(payload.params?.screen)) {
+        return true;
+    }
+
+    const focusedRoute = payload.state ? findFocusedRoute(payload.state) : undefined;
+    return isTwoFactorAuthSetupRouteName(focusedRoute?.name);
+}
+
+function isCurrentlyOnTwoFactorAuthSetup(state: NavigationState): boolean {
+    const focusedRoute = findFocusedRoute(state);
+    return isTwoFactorAuthSetupRouteName(focusedRoute?.name);
+}
+
 function shouldPreventReset(state: NavigationState, action: NavigationAction) {
     if (action.type !== CONST.NAVIGATION_ACTIONS.RESET || !action?.payload) {
         return false;
@@ -124,6 +172,10 @@ function shouldPreventReset(state: NavigationState, action: NavigationAction) {
 
     // We want to prevent the user from navigating back to a non-onboarding screen if they are currently on an onboarding screen
     if (isOnboardingFlowName(currentFocusedRoute?.name) && !isOnboardingFlowName(targetFocusedRoute?.name)) {
+        if (doesAccountNeedTwoFactorAuthSetup() && isTwoFactorAuthSetupRouteName(targetFocusedRoute?.name)) {
+            return false;
+        }
+
         setOnboardingErrorMessage('onboarding.purpose.errorBackButton');
         return true;
     }
@@ -188,6 +240,10 @@ const OnboardingGuard: NavigationGuard = {
             skipOnboardingConfig || isLoading || isTransitioning || isOnboardingCompleted || isMigratedUser || isSingleEntry || needsExplanationModal || isNavigatingWithReplace;
 
         if (shouldSkipOnboarding) {
+            return {type: 'ALLOW'};
+        }
+
+        if (doesAccountNeedTwoFactorAuthSetup() && (isNavigatingToTwoFactorAuthSetup(action) || isCurrentlyOnTwoFactorAuthSetup(state))) {
             return {type: 'ALLOW'};
         }
 
