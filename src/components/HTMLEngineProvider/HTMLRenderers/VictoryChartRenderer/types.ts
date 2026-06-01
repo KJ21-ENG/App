@@ -3,13 +3,60 @@ import type {ComponentProps} from 'react';
 import type {CustomRendererProps, TBlock, TNode} from 'react-native-render-html';
 import type {ValueOf} from 'type-fest';
 import type {CartesianChart} from 'victory-native';
-import type {CHART_TYPE, COLOR_KEY, LABEL_KEY, VALUE_KEY, X_KEY, Y_KEY_PREFIX} from './constants';
+import type {CHART_TYPE, COLOR_KEY, INTERACTION_METADATA_KEY, LABEL_KEY, VALUE_KEY, X_KEY, Y_KEY_PREFIX} from './constants';
 
 type VictoryChartRendererProps = CustomRendererProps<TBlock>;
 
 type RawChartData = {
     x: string | number;
     y: number;
+    label?: string | number;
+    tooltip?: string | number;
+    tooltipLabel?: string | number;
+    tooltiplabel?: string | number;
+    tooltipValue?: string | number;
+    tooltipvalue?: string | number;
+    tooltipPercentage?: string | number;
+    tooltippercentage?: string | number;
+    searchQuery?: string;
+    searchquery?: string;
+    search?: string;
+    filterQuery?: string;
+    filterquery?: string;
+    q?: string;
+    query?: string;
+    route?: string;
+    path?: string;
+    href?: string;
+    url?: string;
+    link?: string;
+    drilldown?: string;
+    drillDown?: string;
+    drilldownQuery?: string;
+    drillDownQuery?: string;
+    drilldownRoute?: string;
+    drillDownRoute?: string;
+    drilldownUrl?: string;
+    drillDownUrl?: string;
+    drilldownURL?: string;
+    drillDownURL?: string;
+    drilldownHref?: string;
+    drillDownHref?: string;
+    [key: string]: unknown;
+};
+
+type VictoryChartPointInteractionMetadata = {
+    label?: string;
+    tooltipLabel?: string;
+    tooltipValue?: string | number;
+    tooltipPercentage?: string;
+    searchQuery?: string;
+    filterQuery?: string;
+    q?: string;
+    query?: string;
+    route?: string;
+    href?: string;
+    url?: string;
 };
 
 type RawLegendData = {
@@ -52,7 +99,9 @@ type YKey = `${typeof Y_KEY_PREFIX}${string}`;
 type CartesianChartData = {
     [X_KEY]: string | number;
     [key: `${YKey}`]: number;
-};
+} & {
+        [INTERACTION_METADATA_KEY]?: Partial<Record<YKey, VictoryChartPointInteractionMetadata>>;
+    };
 
 type PolarChartData = {
     [LABEL_KEY]: string | number;
@@ -129,7 +178,7 @@ type LegendItem = {
 };
 
 /** Shared CartesianChart prop type used by the orchestrator, parsers, and Cartesian sub-component. */
-type CartesianChartProps = ComponentProps<typeof CartesianChart<CartesianChartData, keyof CartesianChartData, YKey>>;
+type CartesianChartProps = ComponentProps<typeof CartesianChart<CartesianChartData, XKey, YKey>>;
 
 /** Fully merged result of walking the HTML tnode tree. */
 type ProcessNodeResult = {
@@ -143,6 +192,7 @@ type ProcessNodeResult = {
     padding: CartesianChartProps['padding'];
     isHorizontal: boolean | undefined;
     categories: string[] | undefined;
+    barYKeys: YKey[];
     labelItems: LabelItem[];
     legendItems: LegendItem[];
 };
@@ -157,6 +207,7 @@ type ChartType = ValueOf<typeof CHART_TYPE>;
 export type {
     VictoryChartRendererProps,
     RawChartData,
+    VictoryChartPointInteractionMetadata,
     RawLegendData,
     RawAxisStyle,
     RawLabelStyle,
