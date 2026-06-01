@@ -3188,14 +3188,14 @@ function canShowReportRecipientLocalTime(personalDetails: OnyxEntry<PersonalDeta
     const hasMultipleParticipants = reportRecipientAccountIDs.length > 1;
     const reportRecipient = personalDetails?.[reportRecipientAccountIDs[0]];
     const reportRecipientTimezone = reportRecipient?.timezone ?? CONST.DEFAULT_TIME_ZONE;
-    const isReportParticipantValidated = reportRecipient?.validated ?? false;
+    const isCurrentUserValidated = personalDetails?.[accountID]?.validated ?? false;
     return !!(
         !hasMultipleParticipants &&
         !isChatRoom(report) &&
         !isPolicyExpenseChat(getRootParentReport({report})) &&
         reportRecipient &&
         reportRecipientTimezone?.selected &&
-        isReportParticipantValidated
+        isCurrentUserValidated
     );
 }
 

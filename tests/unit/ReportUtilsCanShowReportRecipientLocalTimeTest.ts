@@ -19,23 +19,34 @@ function buildReport(overrides: Partial<Report> = {}): Report {
     } as Report;
 }
 
-function buildRecipientPersonalDetails(overrides: Partial<PersonalDetailsList[number]> = {}): PersonalDetailsList {
+function buildPersonalDetails(
+    recipientOverrides: Partial<PersonalDetailsList[number]> = {},
+    currentUserOverrides: Partial<PersonalDetailsList[number]> = {},
+): PersonalDetailsList {
     return {
+        [CURRENT_USER_ACCOUNT_ID]: {
+            accountID: CURRENT_USER_ACCOUNT_ID,
+            login: 'current-user@example.com',
+            displayName: 'Current User',
+            validated: true,
+            timezone: {automatic: true, selected: 'America/Los_Angeles'},
+            ...currentUserOverrides,
+        },
         [RECIPIENT_ACCOUNT_ID]: {
             accountID: RECIPIENT_ACCOUNT_ID,
             login: 'user@example.com',
             displayName: 'User',
-            validated: true,
+            validated: false,
             timezone: {automatic: true, selected: 'America/New_York'},
-            ...overrides,
+            ...recipientOverrides,
         },
     };
 }
 
 describe('canShowReportRecipientLocalTime', () => {
-    it('returns true for a validated 1:1 chat recipient with a selected timezone', () => {
+    it('returns true for a validated current user in a 1:1 chat with a recipient selected timezone', () => {
         const report = buildReport();
-        const personalDetails = buildRecipientPersonalDetails();
+        const personalDetails = buildPersonalDetails();
 
         expect(canShowReportRecipientLocalTime(personalDetails, report, CURRENT_USER_ACCOUNT_ID)).toBe(true);
     });
@@ -46,16 +57,16 @@ describe('canShowReportRecipientLocalTime', () => {
         expect(canShowReportRecipientLocalTime(undefined, report, CURRENT_USER_ACCOUNT_ID)).toBe(false);
     });
 
-    it('returns false when recipient is not validated', () => {
+    it('returns false when current user is not validated', () => {
         const report = buildReport();
-        const personalDetails = buildRecipientPersonalDetails({validated: false});
+        const personalDetails = buildPersonalDetails({}, {validated: false});
 
         expect(canShowReportRecipientLocalTime(personalDetails, report, CURRENT_USER_ACCOUNT_ID)).toBe(false);
     });
 
     it('returns false when recipient has no selected timezone', () => {
         const report = buildReport();
-        const personalDetails = buildRecipientPersonalDetails({timezone: {automatic: true}});
+        const personalDetails = buildPersonalDetails({timezone: {automatic: true}});
 
         expect(canShowReportRecipientLocalTime(personalDetails, report, CURRENT_USER_ACCOUNT_ID)).toBe(false);
     });
@@ -68,21 +79,21 @@ describe('canShowReportRecipientLocalTime', () => {
                 [PARTICIPANT_ACCOUNT_ID]: {notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.ALWAYS},
             },
         });
-        const personalDetails = buildRecipientPersonalDetails();
+        const personalDetails = buildPersonalDetails();
 
         expect(canShowReportRecipientLocalTime(personalDetails, report, CURRENT_USER_ACCOUNT_ID)).toBe(false);
     });
 
     it('returns false for policy rooms', () => {
         const report = buildReport({chatType: CONST.REPORT.CHAT_TYPE.POLICY_ROOM});
-        const personalDetails = buildRecipientPersonalDetails();
+        const personalDetails = buildPersonalDetails();
 
         expect(canShowReportRecipientLocalTime(personalDetails, report, CURRENT_USER_ACCOUNT_ID)).toBe(false);
     });
 
     it('returns false for policy expense chats', () => {
         const report = buildReport({chatType: CONST.REPORT.CHAT_TYPE.POLICY_EXPENSE_CHAT});
-        const personalDetails = buildRecipientPersonalDetails();
+        const personalDetails = buildPersonalDetails();
 
         expect(canShowReportRecipientLocalTime(personalDetails, report, CURRENT_USER_ACCOUNT_ID)).toBe(false);
     });
