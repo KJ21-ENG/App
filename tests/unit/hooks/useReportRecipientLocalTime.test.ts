@@ -23,11 +23,18 @@ const REPORT = {
 } as Report;
 
 const RECIPIENT_PERSONAL_DETAILS: PersonalDetailsList = {
+    [CURRENT_USER_ACCOUNT_ID]: {
+        accountID: CURRENT_USER_ACCOUNT_ID,
+        login: 'current-user@example.com',
+        displayName: 'Current User',
+        validated: true,
+        timezone: {automatic: true, selected: 'America/Los_Angeles'},
+    },
     [RECIPIENT_ACCOUNT_ID]: {
         accountID: RECIPIENT_ACCOUNT_ID,
         login: 'user@example.com',
         displayName: 'User',
-        validated: true,
+        validated: false,
         timezone: {automatic: true, selected: 'America/New_York'},
     },
 };
