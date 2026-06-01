@@ -122,6 +122,20 @@ function MoneyRequestReportView({report, reportLoadingState, shouldDisplayReport
     const reportActions = useMemo(() => {
         return getFilteredReportActionsForReportView(unfilteredReportActions);
     }, [unfilteredReportActions]);
+    const reportErrorKeys = useMemo(() => Object.keys(reportErrors ?? {}), [reportErrors]);
+    const hasMatchingMoneyRequestActionError = useMemo(
+        () =>
+            reportErrorKeys.length > 0 &&
+            reportActions.some((reportAction) => {
+                if (reportAction?.actionName !== CONST.REPORT.ACTIONS.TYPE.IOU) {
+                    return false;
+                }
+
+                return reportErrorKeys.some((errorKey) => !!reportAction.errors?.[errorKey]);
+            }),
+        [reportActions, reportErrorKeys],
+    );
+    const visibleReportErrors = hasMatchingMoneyRequestActionError ? undefined : reportErrors;
 
     const reportTransactions = useReportTransactionsCollection(reportID);
     const transactions = useMemo(() => getAllNonDeletedTransactions(reportTransactions, reportActions, isOffline, true), [reportTransactions, reportActions, isOffline]);
@@ -243,7 +257,7 @@ function MoneyRequestReportView({report, reportLoadingState, shouldDisplayReport
         <View style={styles.flex1}>
             <OfflineWithFeedback
                 pendingAction={reportPendingAction ?? report?.pendingFields?.reimbursed}
-                errors={reportErrors}
+                errors={visibleReportErrors}
                 needsOffscreenAlphaCompositing
                 shouldShowErrorMessages={false}
             >
@@ -251,7 +265,7 @@ function MoneyRequestReportView({report, reportLoadingState, shouldDisplayReport
             </OfflineWithFeedback>
             <OfflineWithFeedback
                 pendingAction={reportPendingAction}
-                errors={reportErrors}
+                errors={visibleReportErrors}
                 onClose={dismissReportCreationError}
                 needsOffscreenAlphaCompositing
                 style={styles.flex1}

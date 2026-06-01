@@ -407,12 +407,10 @@ function getTransactionWithPreservedLocalReceiptSource(transaction: OnyxTypes.Tr
 }
 
 function buildOnyxDataForMoneyRequest(moneyRequestParams: BuildOnyxDataForMoneyRequestParams): OnyxData<BuildOnyxDataForMoneyRequestKeys> {
-    const allReports = getAllReports();
     const {
         isNewChatReport,
         shouldCreateNewMoneyRequestReport,
         isOneOnOneSplit = false,
-        existingTransactionThreadReportID,
         policyParams = {},
         optimisticParams,
         retryParams,
@@ -465,8 +463,6 @@ function buildOnyxDataForMoneyRequest(moneyRequestParams: BuildOnyxDataForMoneyR
     if (isDistanceRequestTransactionUtils(transaction)) {
         newQuickAction = CONST.QUICK_ACTIONS.REQUEST_DISTANCE;
     }
-    const existingTransactionThreadReport = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${existingTransactionThreadReportID}`] ?? null;
-
     // For selfDM split, we don't create chat/IOU reports - only add IOU action to selfDM report
     if (isSelfDMSplit && selfDMReportID) {
         onyxData.optimisticData?.push({
@@ -1025,11 +1021,7 @@ function buildOnyxDataForMoneyRequest(moneyRequestParams: BuildOnyxDataForMoneyR
             key: `${ONYXKEYS.COLLECTION.REPORT}${transactionThreadReport?.reportID}`,
             value: {
                 pendingFields: null,
-                errorFields: existingTransactionThreadReport
-                    ? null
-                    : {
-                          createChat: getMicroSecondOnyxErrorWithTranslationKey('report.genericCreateReportFailureMessage'),
-                      },
+                errorFields: null,
             },
         });
     }

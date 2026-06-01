@@ -91,9 +91,31 @@ function ReportScreen({route, navigation}: ReportScreenProps) {
         selector: (r) => ({
             reportPendingAction: r?.pendingFields?.addWorkspaceRoom ?? r?.pendingFields?.createChat ?? r?.pendingFields?.createReport ?? r?.pendingFields?.reportName,
             reportErrors: r?.errorFields?.addWorkspaceRoom ?? r?.errorFields?.createChat ?? r?.errorFields?.createReport,
+            isMoneyRequestReport: !!r && isMoneyRequestReport(r),
         }),
     });
-    const {reportPendingAction, reportErrors} = reportPendingActionAndErrors ?? {};
+    const {reportPendingAction, reportErrors, isMoneyRequestReport: isMoneyRequestReportForRoute} = reportPendingActionAndErrors ?? {};
+    const [hasMatchingMoneyRequestActionError] = useOnyx(
+        `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportIDFromRoute}`,
+        {
+            selector: (reportActions) => {
+                const reportErrorKeys = Object.keys(reportErrors ?? {});
+                if (!isMoneyRequestReportForRoute || reportErrorKeys.length === 0) {
+                    return false;
+                }
+
+                return Object.values(reportActions ?? {}).some((reportAction) => {
+                    if (reportAction?.actionName !== CONST.REPORT.ACTIONS.TYPE.IOU) {
+                        return false;
+                    }
+
+                    return reportErrorKeys.some((errorKey) => !!reportAction.errors?.[errorKey]);
+                });
+            },
+        },
+        [isMoneyRequestReportForRoute, reportErrors],
+    );
+    const visibleReportErrors = hasMatchingMoneyRequestActionError ? undefined : reportErrors;
 
     const dismissReportCreationError = () => {
         Navigation.goBack(undefined, {
@@ -132,7 +154,7 @@ function ReportScreen({route, navigation}: ReportScreenProps) {
                                         </CollapsibleHeaderOnKeyboard>
                                         <OfflineWithFeedback
                                             pendingAction={reportPendingAction}
-                                            errors={reportErrors}
+                                            errors={visibleReportErrors}
                                             onClose={dismissReportCreationError}
                                             needsOffscreenAlphaCompositing
                                             style={styles.flex1}
