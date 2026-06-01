@@ -1,6 +1,7 @@
 import {circularDeepEqual} from 'fast-equals';
 import React, {useEffect, useState, useTransition} from 'react';
 import Modal from '@components/Modal';
+import {isInternalPopstateInProgress} from '@components/Modal/internalPopstateGuard';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import CONST from '@src/CONST';
 import PopoverWithMeasuredContentBase from './PopoverWithMeasuredContentBase';
@@ -14,9 +15,33 @@ import type PopoverWithMeasuredContentProps from './types';
 function PopoverWithMeasuredContent({shouldWrapModalChildrenInScrollViewIfBottomDockedInLandscapeMode, ...props}: PopoverWithMeasuredContentProps) {
     // eslint-disable-next-line rulesdir/prefer-shouldUseNarrowLayout-instead-of-isSmallScreenWidth
     const {isSmallScreenWidth} = useResponsiveLayout();
+    const {isVisible, onClose, shouldCloseWhenBrowserNavigationChanged = true} = props;
 
     const [, startTransition] = useTransition();
     const [isReadyToCalculatePosition, setIsReadyToCalculatePosition] = useState(false);
+
+    useEffect(() => {
+        if (!isSmallScreenWidth || !shouldCloseWhenBrowserNavigationChanged) {
+            return;
+        }
+
+        const listener = () => {
+            if (!isVisible) {
+                return;
+            }
+
+            if (isInternalPopstateInProgress()) {
+                return;
+            }
+
+            onClose?.();
+        };
+
+        window.addEventListener('popstate', listener);
+        return () => {
+            window.removeEventListener('popstate', listener);
+        };
+    }, [isSmallScreenWidth, isVisible, onClose, shouldCloseWhenBrowserNavigationChanged]);
 
     useEffect(() => {
         // Only defer rendering for large screens, pre-calculation is not needed for small screens
