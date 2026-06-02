@@ -156,7 +156,9 @@ function hidePendingFollowupList(reportID: string | undefined, hidden: boolean |
 
 /**
  * Applies a pending concierge response by moving it to REPORT_ACTIONS
- * and clearing the pending state.
+ * and clearing the pending state. Followup buttons render from canonical
+ * report action HTML when they arrive, so this must not arm a skeleton for
+ * plain pre-generated answers.
  */
 function applyPendingConciergeAction(reportID: string | undefined, reportAction: ReportAction) {
     Onyx.update([
@@ -173,7 +175,7 @@ function applyPendingConciergeAction(reportID: string | undefined, reportAction:
         {
             onyxMethod: Onyx.METHOD.SET,
             key: `${ONYXKEYS.COLLECTION.CONCIERGE_PENDING_FOLLOWUP_LIST}${reportID}`,
-            value: {reportActionID: reportAction.reportActionID, createdAt: Date.now()},
+            value: null,
         },
     ]);
 }

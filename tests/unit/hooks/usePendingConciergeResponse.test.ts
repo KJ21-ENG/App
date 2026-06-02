@@ -338,7 +338,7 @@ describe('usePendingConciergeResponse', () => {
             unmount();
         });
 
-        it('also writes the followup-list skeleton flag when the binary reveal applies the optimistic', async () => {
+        it('does not write the followup-list skeleton flag when the binary reveal applies a plain optimistic answer', async () => {
             // Given a short pending Concierge response (under the trickle gate → binary reveal at displayAfter)
             await Onyx.merge(`${ONYXKEYS.COLLECTION.PENDING_CONCIERGE_RESPONSE}${REPORT_ID}`, {
                 reportAction: fakeConciergeAction,
@@ -353,10 +353,9 @@ describe('usePendingConciergeResponse', () => {
             await delay(SHORT_DELAY + 50);
             await waitForBatchedUpdates();
 
-            // Then the followup-list skeleton flag is written for the same action — this is
-            // what drives `<FollowupListSkeleton>` until the canonical reply lands.
+            // Then the plain answer is shown without fake option placeholders.
             const pendingFollowupList = await getOnyxValue(`${ONYXKEYS.COLLECTION.CONCIERGE_PENDING_FOLLOWUP_LIST}${REPORT_ID}` as const);
-            expect(pendingFollowupList?.reportActionID).toBe(REPORT_ACTION_ID);
+            expect(pendingFollowupList).toBeUndefined();
         });
 
         it('cleans up the interval on unmount mid-trickle', async () => {

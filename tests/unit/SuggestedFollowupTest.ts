@@ -31,7 +31,7 @@ describe('SuggestedFollowup actions — followup-list skeleton flag', () => {
     });
 
     describe('applyPendingConciergeAction', () => {
-        it('moves the optimistic action into REPORT_ACTIONS and atomically sets the followup-list pending flag', async () => {
+        it('moves a plain optimistic action into REPORT_ACTIONS without creating a followup-list pending flag', async () => {
             // Given a pending optimistic Concierge response queued for delayed display
             await Onyx.merge(`${ONYXKEYS.COLLECTION.PENDING_CONCIERGE_RESPONSE}${REPORT_ID}`, {
                 reportAction: fakeConciergeAction,
@@ -40,10 +40,8 @@ describe('SuggestedFollowup actions — followup-list skeleton flag', () => {
             await waitForBatchedUpdates();
 
             // When applyPendingConciergeAction commits the optimistic to REPORT_ACTIONS
-            const before = Date.now();
             applyPendingConciergeAction(REPORT_ID, fakeConciergeAction);
             await waitForBatchedUpdates();
-            const after = Date.now();
 
             // Then the action is in REPORT_ACTIONS
             const reportActions = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${REPORT_ID}` as const);
@@ -53,11 +51,23 @@ describe('SuggestedFollowup actions — followup-list skeleton flag', () => {
             const pendingResponse = await getOnyxValue(`${ONYXKEYS.COLLECTION.PENDING_CONCIERGE_RESPONSE}${REPORT_ID}` as const);
             expect(pendingResponse).toBeUndefined();
 
-            // And the followup-list skeleton flag was atomically written for the same action
+            // And no fake option skeleton is armed for a plain pre-generated answer.
             const pendingFollowupList = await getOnyxValue(`${ONYXKEYS.COLLECTION.CONCIERGE_PENDING_FOLLOWUP_LIST}${REPORT_ID}` as const);
-            expect(pendingFollowupList?.reportActionID).toBe(REPORT_ACTION_ID);
-            expect(pendingFollowupList?.createdAt).toBeGreaterThanOrEqual(before);
-            expect(pendingFollowupList?.createdAt).toBeLessThanOrEqual(after);
+            expect(pendingFollowupList).toBeUndefined();
+        });
+
+        it('clears an existing followup-list pending flag when applying a plain optimistic answer', async () => {
+            await Onyx.set(`${ONYXKEYS.COLLECTION.CONCIERGE_PENDING_FOLLOWUP_LIST}${REPORT_ID}`, {
+                reportActionID: REPORT_ACTION_ID,
+                createdAt: Date.now(),
+            });
+            await waitForBatchedUpdates();
+
+            applyPendingConciergeAction(REPORT_ID, fakeConciergeAction);
+            await waitForBatchedUpdates();
+
+            const pendingFollowupList = await getOnyxValue(`${ONYXKEYS.COLLECTION.CONCIERGE_PENDING_FOLLOWUP_LIST}${REPORT_ID}` as const);
+            expect(pendingFollowupList).toBeUndefined();
         });
     });
 
