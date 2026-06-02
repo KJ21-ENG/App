@@ -35,6 +35,9 @@ function focusComposerWithDelay(textInput: InputType | null, delay: number = CON
                 if (forceKeyboardIfAlreadyFocused) {
                     requestKeyboardForFocusedComposer(input, forcedSelectionRange);
                 }
+                if (forcedSelectionRange) {
+                    setTextInputSelection(input, forcedSelectionRange);
+                }
                 return;
             }
 

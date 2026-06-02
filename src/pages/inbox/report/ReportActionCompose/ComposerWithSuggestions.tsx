@@ -259,7 +259,7 @@ function ComposerWithSuggestions({
 
     const composerRef = useRef<ComposerRef | null>(null);
 
-    const {editingState, editingReportActionID, editingReportAction, effectiveDraft, currentEditMessageSelection} = useComposerEditState();
+    const {isEditingInComposer, editingState, editingReportActionID, editingReportAction, effectiveDraft, currentEditMessageSelection} = useComposerEditState();
     const {setEditingMessage, setCurrentEditMessageSelection} = useReportActionActiveEditActions();
 
     const isEditing = editingState !== CONST.REPORT_ACTION_EDIT_MESSAGE_STATE.OFF;
@@ -305,6 +305,9 @@ function ComposerWithSuggestions({
     });
 
     const [selection, setSelection] = useState<TextSelection>(() => currentEditMessageSelection ?? {start: initialText.length, end: initialText.length});
+    const latestEditSelectionRef = useRef<TextSelection>(currentEditMessageSelection ?? {start: initialText.length, end: initialText.length});
+    const latestNonZeroEditSelectionRef = useRef<TextSelection | null>(currentEditMessageSelection?.start || currentEditMessageSelection?.end ? currentEditMessageSelection : null);
+    const lastEditFocusRestoreKeyRef = useRef<string | null>(null);
 
     const {accountID: currentUserAccountID} = useCurrentUserPersonalDetails();
 
@@ -328,10 +331,47 @@ function ComposerWithSuggestions({
         focusComposerWithDelay(composerRef.current, delay)(shouldDelay, forcedSelectionRange, forceKeyboardIfAlreadyFocused).catch(() => {});
     }, []);
 
-    const handleEditFocus = useCallback(() => {
-        focus(true, undefined, true);
+    const getEditSelectionForFocus = useCallback((): Selection | undefined => {
+        if (!isEditingInComposer) {
+            return undefined;
+        }
+
+        const fallbackPosition = commentRef.current.length;
+        const latestSelection = latestEditSelectionRef.current ?? currentEditMessageSelection ?? selection ?? {start: fallbackPosition, end: fallbackPosition};
+        const latestSelectionEnd = latestSelection.end ?? latestSelection.start;
+        const selectionToRestore =
+            fallbackPosition > 0 && latestSelection.start === 0 && latestSelectionEnd === 0 ? (latestNonZeroEditSelectionRef.current ?? latestSelection) : latestSelection;
+        const start = Math.min(selectionToRestore.start, fallbackPosition);
+        const end = Math.min(selectionToRestore.end ?? selectionToRestore.start, fallbackPosition);
+
+        return {start, end};
+    }, [currentEditMessageSelection, isEditingInComposer, selection]);
+
+    const handleEditFocus = useCallback((selectionToRestore?: TextSelection) => {
+        focus(true, selectionToRestore ?? getEditSelectionForFocus(), true);
         onFocus();
-    }, [focus, onFocus]);
+    }, [focus, getEditSelectionForFocus, onFocus]);
+
+    const restoreEditComposerFocus = useCallback(
+        (selectionToRestore?: TextSelection) => {
+            const selectionRange = selectionToRestore ?? getEditSelectionForFocus();
+            if (!selectionRange) {
+                return;
+            }
+
+            const end = selectionRange.end ?? selectionRange.start;
+            const applySelection = () => {
+                composerRef.current?.setSelection?.(selectionRange.start, end);
+            };
+
+            focus(false, selectionRange, true);
+            applySelection();
+            requestAnimationFrame(() => {
+                applySelection();
+            });
+        },
+        [focus, getEditSelectionForFocus],
+    );
 
     const handleEditValueChange = useCallback(
         (nextValue: string) => {
@@ -344,13 +384,51 @@ function ComposerWithSuggestions({
         [onValueChange, setText],
     );
 
+    const setEditSelection = useCallback(
+        (newSelection: TextSelection) => {
+            latestEditSelectionRef.current = newSelection;
+            if (newSelection.start > 0 || (newSelection.end ?? 0) > 0) {
+                latestNonZeroEditSelectionRef.current = newSelection;
+            }
+            setSelection(newSelection);
+            setCurrentEditMessageSelection((prevSelection) => ({
+                ...prevSelection,
+                ...newSelection,
+            }));
+        },
+        [setCurrentEditMessageSelection],
+    );
+
     useEditComposerToggle({
         selection,
         composerRef,
         onFocus: handleEditFocus,
         onValueChange: handleEditValueChange,
-        onSelectionChange: setSelection,
+        onSelectionChange: setEditSelection,
     });
+
+    useEffect(() => {
+        if (!isEditingInComposer || !isFocused || commentRef.current.length === 0) {
+            if (!isFocused) {
+                lastEditFocusRestoreKeyRef.current = null;
+            }
+            return;
+        }
+
+        const focusRestoreKey = `${route.key}-${editingReportActionID ?? ''}`;
+        if (lastEditFocusRestoreKeyRef.current === focusRestoreKey) {
+            return;
+        }
+        lastEditFocusRestoreKeyRef.current = focusRestoreKey;
+
+        const timeoutID = setTimeout(() => {
+            restoreEditComposerFocus();
+        }, CONST.COMPOSER_FOCUS_DELAY);
+
+        return () => {
+            clearTimeout(timeoutID);
+        };
+    }, [editingReportActionID, isEditingInComposer, isFocused, restoreEditComposerFocus, route.key]);
 
     const [modal] = useOnyx(ONYXKEYS.MODAL);
     const [preferredSkinTone = CONST.EMOJI_DEFAULT_SKIN_TONE] = useOnyx(ONYXKEYS.PREFERRED_EMOJI_SKIN_TONE);
@@ -697,18 +775,23 @@ function ComposerWithSuggestions({
     const onSelectionChange = useCallback(
         (e: CustomSelectionChangeEvent) => {
             const newSelection = {...e.nativeEvent.selection};
-            setSelection(newSelection);
-            setCurrentEditMessageSelection((prevSelection) => ({
-                ...prevSelection,
-                ...newSelection,
-            }));
+            const composerElement = composerRef.current as unknown as HTMLElement | null;
+            const composerValue = composerRef.current?.value ?? composerElement?.textContent ?? '';
+            const selectionEnd = newSelection.end ?? newSelection.start;
+            const isTransientEmptyComposerSelection = isEditingInComposer && commentRef.current.length > 0 && composerValue.length === 0 && newSelection.start === 0 && selectionEnd === 0;
+
+            if (isTransientEmptyComposerSelection) {
+                return;
+            }
+
+            setEditSelection(newSelection);
 
             if (!composerRef.current?.isFocused()) {
                 return;
             }
             suggestionsRef.current?.onSelectionChange?.(e);
         },
-        [setCurrentEditMessageSelection, suggestionsRef],
+        [isEditingInComposer, setEditSelection, suggestionsRef],
     );
 
     const hideSuggestionMenu = useCallback(
@@ -751,13 +834,13 @@ function ComposerWithSuggestions({
         delayedAutoFocusRouteKeyRef.current = route.key;
 
         const task = InteractionManager.runAfterInteractions(() => {
-            focus(true);
+            focus(true, getEditSelectionForFocus());
         });
 
         return () => {
             task?.cancel?.();
         };
-    }, [focus, route.key, shouldAutoFocus, shouldDelayAutoFocus]);
+    }, [focus, getEditSelectionForFocus, route.key, shouldAutoFocus, shouldDelayAutoFocus]);
 
     /**
      * Tracks whether there is a composer input inside the side panel on the screen.
@@ -782,10 +865,10 @@ function ComposerWithSuggestions({
                     return;
                 }
 
-                focus(true);
+                focus(true, getEditSelectionForFocus());
             }, shouldTakeOverFocus);
         },
-        [focus, isFocused, isSidePanelHiddenOrLargeScreen, handleSidePanelFocus],
+        [focus, getEditSelectionForFocus, isFocused, isSidePanelHiddenOrLargeScreen, handleSidePanelFocus],
     );
 
     /**
@@ -899,8 +982,8 @@ function ComposerWithSuggestions({
             inputFocusChange(false);
             return;
         }
-        focus(true);
-    }, [focus, prevIsFocused, editFocused, prevIsModalVisible, isFocused, modal?.isVisible, isNextModalWillOpenRef, shouldAutoFocus, isSidePanelHiddenOrLargeScreen, isInSidePanel]);
+        focus(true, getEditSelectionForFocus());
+    }, [focus, getEditSelectionForFocus, prevIsFocused, editFocused, prevIsModalVisible, isFocused, modal?.isVisible, isNextModalWillOpenRef, shouldAutoFocus, isSidePanelHiddenOrLargeScreen, isInSidePanel]);
 
     useEffect(() => {
         // Scrolls the composer to the bottom and sets the selection to the end, so that longer drafts are easier to edit

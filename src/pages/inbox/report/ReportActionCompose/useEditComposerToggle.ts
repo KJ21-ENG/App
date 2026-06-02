@@ -18,7 +18,7 @@ type UseEditComposerToggleProps = {
     onSelectionChange?: (selection: TextSelection) => void;
 
     /** Handle focusing the composer */
-    onFocus?: () => void;
+    onFocus?: (selection?: TextSelection) => void;
 
     /** Handle changing the value of the composer */
     onValueChange?: (value: string) => void;
@@ -57,6 +57,18 @@ function useEditComposerToggle({selection, composerRef, onFocus, onValueChange, 
         shouldForceNativeValueUpdate?: boolean;
     };
 
+    const restoreComposerSelection = (selectionToApply: TextSelection) => {
+        const end = selectionToApply.end ?? selectionToApply.start;
+        const applySelection = () => {
+            composerRef.current?.setSelection?.(selectionToApply.start, end);
+        };
+
+        applySelection();
+        requestAnimationFrame(() => {
+            applySelection();
+        });
+    };
+
     const applyComposerValue = (nextValue: string, options?: ApplyComposerValueOptions) => {
         const defaultSelection: TextSelection = {start: nextValue.length, end: nextValue.length};
         const shouldUseEditingSelection = options?.isEditingInComposer ?? false;
@@ -73,7 +85,8 @@ function useEditComposerToggle({selection, composerRef, onFocus, onValueChange, 
         ReportActionComposeUtils.updateNativeSelectionValue(composerRef, selectionToApply.start, selectionToApply.end ?? selectionToApply.start);
 
         if (options?.isEditingInComposer) {
-            onFocus?.();
+            onFocus?.(selectionToApply);
+            restoreComposerSelection(selectionToApply);
         }
     };
 
