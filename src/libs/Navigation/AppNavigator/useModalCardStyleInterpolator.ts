@@ -5,6 +5,8 @@ import {Animated} from 'react-native';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useSidePanelState from '@hooks/useSidePanelState';
 import useStyleUtils from '@hooks/useStyleUtils';
+import useThemeStyles from '@hooks/useThemeStyles';
+import {isMobileChrome} from '@libs/Browser';
 import variables from '@styles/variables';
 
 type EnterAnimation = {kind: 'slide-and-fade'; distancePx: number} | {kind: 'slide-from-width'} | {kind: 'fade'} | {kind: 'none'};
@@ -20,7 +22,9 @@ type ModalCardStyleInterpolator = (props: ModalCardStyleInterpolatorProps) => St
 const useModalCardStyleInterpolator = (): ModalCardStyleInterpolator => {
     const {shouldUseNarrowLayout} = useResponsiveLayout();
     const StyleUtils = useStyleUtils();
+    const styles = useThemeStyles();
     const {sidePanelOffset, sidePanelNVP, isSidePanelTransitionEnded} = useSidePanelState();
+    const shouldHardenAndroidChromeCard = shouldUseNarrowLayout && isMobileChrome();
 
     const modalCardStyleInterpolator: ModalCardStyleInterpolator = ({
         props: {
@@ -63,7 +67,9 @@ const useModalCardStyleInterpolator = (): ModalCardStyleInterpolator => {
 
         cardStyle.transform = [{translateX}];
 
-        if (enter.kind === 'slide-and-fade') {
+        if (shouldHardenAndroidChromeCard) {
+            Object.assign(cardStyle, styles.appBG, {backfaceVisibility: 'hidden'});
+        } else if (enter.kind === 'slide-and-fade') {
             cardStyle.opacity = progress;
         }
 

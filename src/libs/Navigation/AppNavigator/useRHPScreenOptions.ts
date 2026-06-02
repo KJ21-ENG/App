@@ -4,7 +4,7 @@ import {useMemo} from 'react';
 import {useWideRHPState} from '@components/WideRHPContextProvider';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
-import {isSafari} from '@libs/Browser';
+import {isMobileChrome, isSafari} from '@libs/Browser';
 import Animations from '@libs/Navigation/PlatformStackNavigation/navigationOptions/animation';
 import Presentation from '@libs/Navigation/PlatformStackNavigation/navigationOptions/presentation';
 import type {PlatformStackNavigationOptions} from '@libs/Navigation/PlatformStackNavigation/types/NavigationOptions';
@@ -32,10 +32,11 @@ const useRHPScreenOptions = (): PlatformStackNavigationOptions => {
 
     // We have to use the isSmallScreenWidth instead of shouldUseNarrow layout, because we want to have information about screen width without the context of side modal.
     // eslint-disable-next-line rulesdir/prefer-shouldUseNarrowLayout-instead-of-isSmallScreenWidth
-    const {isSmallScreenWidth} = useResponsiveLayout();
+    const {isSmallScreenWidth, shouldUseNarrowLayout} = useResponsiveLayout();
 
     // Adjust props on wide layout and when the wide RHP is visible
     const shouldAdjustInterpolatorProps = !isSmallScreenWidth && wideRHPRouteKeys.length;
+    const shouldUseCustomInterpolator = isSafari() || (shouldUseNarrowLayout && isMobileChrome());
 
     return useMemo<PlatformStackNavigationOptions>(() => {
         return {
@@ -43,8 +44,8 @@ const useRHPScreenOptions = (): PlatformStackNavigationOptions => {
             animation: Animations.SLIDE_FROM_RIGHT,
             gestureDirection: 'horizontal',
             web: {
-                // The .forHorizontalIOS interpolator from `@react-navigation` is misbehaving on Safari, so we override it with Expensify custom interpolator
-                cardStyleInterpolator: isSafari()
+                // The upstream interpolator misbehaves on Safari and low-end Android Chrome, so use the hardened Expensify interpolator there.
+                cardStyleInterpolator: shouldUseCustomInterpolator
                     ? (props) => customInterpolator({props, enter: {kind: 'slide-from-width'}})
                     : (props) => CardStyleInterpolators.forHorizontalIOS(shouldAdjustInterpolatorProps ? getModifiedCardStyleInterpolatorProps(props) : props),
                 presentation: Presentation.TRANSPARENT_MODAL,
@@ -53,7 +54,7 @@ const useRHPScreenOptions = (): PlatformStackNavigationOptions => {
                 gestureDirection: 'horizontal',
             },
         };
-    }, [customInterpolator, shouldAdjustInterpolatorProps, styles.navigationScreenCardStyle]);
+    }, [customInterpolator, shouldAdjustInterpolatorProps, shouldUseCustomInterpolator, styles.navigationScreenCardStyle]);
 };
 
 export default useRHPScreenOptions;
