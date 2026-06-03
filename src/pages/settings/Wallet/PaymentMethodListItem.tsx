@@ -3,13 +3,16 @@ import type {GestureResponderEvent, StyleProp, ViewStyle} from 'react-native';
 import {View} from 'react-native';
 import type {ValueOf} from 'type-fest';
 import Badge from '@components/Badge';
+import Button from '@components/Button';
 import Icon from '@components/Icon';
 import MenuItem from '@components/MenuItem';
 import OfflineWithFeedback from '@components/OfflineWithFeedback';
 import type {PopoverMenuItem} from '@components/PopoverMenu';
 import PressableWithFeedback from '@components/Pressable/PressableWithFeedback';
 import Text from '@components/Text';
+import TextLink from '@components/TextLink';
 import ThreeDotsMenu from '@components/ThreeDotsMenu';
+import Tooltip from '@components/Tooltip';
 import {useMemoizedLazyExpensifyIcons} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
@@ -27,6 +30,18 @@ import type {Errors} from '@src/types/onyx/OnyxCommon';
 import type PaymentMethod from '@src/types/onyx/PaymentMethod';
 import {isEmptyObject} from '@src/types/utils/EmptyObject';
 import type IconAsset from '@src/types/utils/IconAsset';
+
+type ConnectionStatusDetails = {
+    statusText: string;
+    statusTone?: 'default' | 'success' | 'danger';
+    tooltipText?: string;
+    message?: string;
+    actionText?: string;
+    onActionPress?: (e: GestureResponderEvent | KeyboardEvent | undefined) => void;
+    isActionDisabled?: boolean;
+    linkText?: string;
+    onLinkPress?: (e: GestureResponderEvent | KeyboardEvent) => void;
+};
 
 type PaymentMethodItem = PaymentMethod & {
     key?: string;
@@ -48,6 +63,7 @@ type PaymentMethodItem = PaymentMethod & {
     plaidUrl?: string;
     onThreeDotsMenuPress?: (e: GestureResponderEvent | KeyboardEvent | undefined) => void;
     isCardFrozen?: boolean;
+    connectionStatus?: ConnectionStatusDetails;
     /** Whether the personal bank account is missing required personal info (name, address, phone) */
     isMissingPersonalInfo?: boolean;
 } & BankIcon;
@@ -121,6 +137,7 @@ function PaymentMethodListItem({item, shouldShowDefaultBadge, threeDotsMenuItems
     const isInLockedState = isBusinessBankAccountLocked(item);
     const showThreeDotsMenu = item.shouldShowThreeDotsMenu !== false && !!threeDotsMenuItems && !isInLockedState;
     const isNeedingAction = isAccountNeedingAction(item);
+    const shouldRenderStatusMessage = !!item.connectionStatus?.message;
 
     // Check if this is a Chase personal bank account connected via Plaid
     const isChaseAccountConnectedViaPlaid =
@@ -146,21 +163,39 @@ function PaymentMethodListItem({item, shouldShowDefaultBadge, threeDotsMenuItems
     };
 
     let badgeText;
-    if (isInLockedState) {
+    if (!item.connectionStatus && isInLockedState) {
         badgeText = translate('common.locked');
-    } else if (isNeedingAction) {
+    } else if (!item.connectionStatus && isNeedingAction) {
         badgeText = translate('common.review');
     } else if (shouldShowDefaultBadge) {
         badgeText = translate('paymentMethodList.defaultPaymentMethod');
     }
 
     let badgeIcon;
-    if (isInLockedState) {
+    if (!item.connectionStatus && isInLockedState) {
         badgeIcon = icons.DotIndicator;
     }
 
     // Card state pills (below title, next to description)
     const descriptionAddon = useMemo(() => {
+        if (item.connectionStatus) {
+            const badge = (
+                <Badge
+                    text={item.connectionStatus.statusText}
+                    success={item.connectionStatus.statusTone === 'success'}
+                    error={item.connectionStatus.statusTone === 'danger'}
+                    isCondensed
+                    badgeStyles={[styles.ml0]}
+                />
+            );
+
+            if (item.connectionStatus.tooltipText) {
+                return <Tooltip text={item.connectionStatus.tooltipText}>{badge}</Tooltip>;
+            }
+
+            return badge;
+        }
+
         if (isNeedingAction && shouldShowDefaultBadge) {
             return (
                 <Badge
@@ -191,7 +226,54 @@ function PaymentMethodListItem({item, shouldShowDefaultBadge, threeDotsMenuItems
             );
         }
         return undefined;
-    }, [isNeedingAction, shouldShowDefaultBadge, item.isCardFrozen, item.isInactive, icons.FreezeCard, styles.ml0, styles.mr1, translate]);
+    }, [isNeedingAction, shouldShowDefaultBadge, item.connectionStatus, item.isCardFrozen, item.isInactive, icons.FreezeCard, styles.ml0, styles.mr1, translate]);
+
+    const renderStatusMessage = () => {
+        if (!shouldRenderStatusMessage) {
+            return null;
+        }
+
+        return (
+            <View style={[styles.flexRow, styles.alignItemsCenter, styles.gap3, styles.pb3, shouldUseNarrowLayout ? styles.pl5 : styles.pl8, listItemStyle]}>
+                <View style={[styles.dotIndicatorMessage, styles.flex1]}>
+                    <View
+                        style={styles.offlineFeedbackErrorDot}
+                        role={CONST.ROLE.IMG}
+                        accessibilityLabel={CONST.ACCESSIBILITY_LABELS.ERROR as string}
+                    >
+                        <Icon
+                            src={icons.DotIndicator}
+                            fill={theme.danger}
+                        />
+                    </View>
+                    <View style={styles.offlineFeedbackTextContainer}>
+                        <Text
+                            style={[styles.textDanger, styles.textLabelSupportingNormal]}
+                            accessibilityRole={CONST.ROLE.ALERT}
+                            accessibilityLiveRegion="assertive"
+                        >
+                            {item.connectionStatus?.message}
+                            {!!item.connectionStatus?.linkText && !!item.connectionStatus.onLinkPress && (
+                                <>
+                                    {' '}
+                                    <TextLink onPress={item.connectionStatus.onLinkPress}>{item.connectionStatus.linkText}</TextLink>
+                                </>
+                            )}
+                        </Text>
+                    </View>
+                </View>
+                {!!item.connectionStatus?.actionText && !!item.connectionStatus.onActionPress && (
+                    <Button
+                        small
+                        danger
+                        text={item.connectionStatus.actionText}
+                        onPress={item.connectionStatus.onActionPress}
+                        isDisabled={item.disabled || item.connectionStatus.isActionDisabled}
+                    />
+                )}
+            </View>
+        );
+    };
 
     return (
         <OfflineWithFeedback
@@ -263,6 +345,7 @@ function PaymentMethodListItem({item, shouldShowDefaultBadge, threeDotsMenuItems
                     </PressableWithFeedback>
                 </View>
             )}
+            {renderStatusMessage()}
         </OfflineWithFeedback>
     );
 }
