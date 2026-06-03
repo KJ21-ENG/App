@@ -386,13 +386,15 @@ function WorkspaceWorkflowsPage({policy, route}: WorkspaceWorkflowsPageProps) {
                 text={bankConnectionStatus.tooltipKey ? translate(bankConnectionStatus.tooltipKey) : ''}
                 shouldRender={!!bankConnectionStatus.tooltipKey}
             >
-                <Badge
-                    text={translate(bankConnectionStatus.labelKey)}
-                    success={bankConnectionStatus.tone === 'success'}
-                    error={bankConnectionStatus.tone === 'danger'}
-                    isCondensed
-                    badgeStyles={[styles.ml0]}
-                />
+                <View>
+                    <Badge
+                        text={translate(bankConnectionStatus.labelKey)}
+                        success={bankConnectionStatus.tone === 'success'}
+                        error={bankConnectionStatus.tone === 'danger'}
+                        isCondensed
+                        badgeStyles={[styles.ml0]}
+                    />
+                </View>
             </Tooltip>
         ) : undefined;
         const bankConnectionMessage = bankConnectionStatus?.messageKey ? translate(bankConnectionStatus.messageKey) : undefined;

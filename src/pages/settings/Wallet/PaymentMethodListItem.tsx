@@ -190,7 +190,11 @@ function PaymentMethodListItem({item, shouldShowDefaultBadge, threeDotsMenuItems
             );
 
             if (item.connectionStatus.tooltipText) {
-                return <Tooltip text={item.connectionStatus.tooltipText}>{badge}</Tooltip>;
+                return (
+                    <Tooltip text={item.connectionStatus.tooltipText}>
+                        <View>{badge}</View>
+                    </Tooltip>
+                );
             }
 
             return badge;
