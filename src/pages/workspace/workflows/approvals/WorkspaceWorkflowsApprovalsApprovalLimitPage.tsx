@@ -1,3 +1,4 @@
+import {useNavigationState} from '@react-navigation/native';
 import {Str} from 'expensify-common';
 import React, {useState} from 'react';
 import {View} from 'react-native';
@@ -44,6 +45,7 @@ function WorkspaceWorkflowsApprovalsApprovalLimitPage({policy, isLoadingReportDa
     const {translate} = useLocalize();
     const icons = useMemoizedLazyExpensifyIcons(['Trashcan']);
     const [approvalWorkflow] = useOnyx(ONYXKEYS.APPROVAL_WORKFLOW);
+    const rhpRoutes = useNavigationState((state) => state.routes);
     const personalDetailsByEmail = usePersonalDetailsByEmail();
     const {getCurrencyDecimals} = useCurrencyListActions();
 
@@ -86,8 +88,8 @@ function WorkspaceWorkflowsApprovalsApprovalLimitPage({policy, isLoadingReportDa
 
     const navigateAfterCompletion = () => {
         if (isEditFlow) {
-            // In edit mode, always go directly to the Edit page when saving
-            Navigation.goBack(ROUTES.WORKSPACE_WORKFLOWS_APPROVALS_EDIT.getRoute(policyID, firstApprover));
+            const backToRoute = rhpRoutes.length > 1 ? undefined : ROUTES.WORKSPACE_WORKFLOWS_APPROVALS_EDIT.getRoute(policyID, firstApprover);
+            Navigation.goBack(backToRoute);
             return;
         }
         // Mark that we've completed the initial wizard flow before navigating to the summary page
