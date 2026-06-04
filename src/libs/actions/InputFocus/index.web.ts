@@ -11,7 +11,7 @@ function inputFocusChange(focus: boolean) {
 }
 
 let refSave: HTMLElement | undefined;
-function composerFocusKeepFocusOn(ref: HTMLElement, isFocused: boolean, modal: Modal, onyxFocused: boolean) {
+function composerFocusKeepFocusOn(ref: HTMLElement, isFocused: boolean, modal: Modal, onyxFocused: boolean, restoreFocus?: () => void) {
     if (isFocused && !onyxFocused) {
         inputFocusChange(true);
         ref.focus();
@@ -23,6 +23,10 @@ function composerFocusKeepFocusOn(ref: HTMLElement, isFocused: boolean, modal: M
         if (!ReportActionComposeFocusManager.isFocused()) {
             // Focusing will fail when it is called immediately after closing modal so we call it after interaction.
             InteractionManager.runAfterInteractions(() => {
+                if (restoreFocus) {
+                    restoreFocus();
+                    return;
+                }
                 refSave?.focus();
             });
         } else {

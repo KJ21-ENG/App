@@ -113,6 +113,8 @@ function ReportActionItemMessageEdit({action, reportID, originalReportID, policy
 
     const defaultSelection = useMemo(() => ({start: draft.length, end: draft.length, positionX: 0, positionY: 0}), [draft.length]);
     const [selection, setSelectionState] = useState<TextSelection>(() => currentEditMessageSelection ?? defaultSelection);
+    const latestSelectionRef = useRef<Selection>(selection);
+    latestSelectionRef.current = {start: selection.start, end: selection.end ?? selection.start};
 
     const setSelection = useCallback(
         (newSelection: TextSelection) => {
@@ -168,10 +170,6 @@ function ReportActionItemMessageEdit({action, reportID, originalReportID, policy
         clearAllReportActionDrafts();
     }, [action, reportID]);
 
-    useEffect(() => {
-        composerFocusKeepFocusOn(composerRef.current as HTMLElement, isFocused, modal, onyxInputFocused);
-    }, [isFocused, modal, onyxInputFocused]);
-
     useEffect(
         // Remove focus callback on unmount to avoid stale callbacks
         () => {
@@ -195,6 +193,12 @@ function ReportActionItemMessageEdit({action, reportID, originalReportID, policy
     const focus = useCallback((shouldDelay = false, forcedSelectionRange?: Selection) => {
         focusComposerWithDelay(composerRef.current)(shouldDelay, forcedSelectionRange);
     }, []);
+
+    useEffect(() => {
+        composerFocusKeepFocusOn(composerRef.current as HTMLElement, isFocused, modal, onyxInputFocused, () => {
+            focus(false, latestSelectionRef.current);
+        });
+    }, [focus, isFocused, modal, onyxInputFocused]);
 
     // Take over focus priority
     const setUpComposeFocusManager = useCallback(() => {
