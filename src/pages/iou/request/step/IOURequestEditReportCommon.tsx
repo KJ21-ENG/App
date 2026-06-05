@@ -33,6 +33,9 @@ import StepScreenWrapper from './StepScreenWrapper';
 type TransactionGroupListItem = ListItem & {
     /** reportID of the report */
     value: string;
+
+    /** Report object used when the destination exists only in the Search snapshot */
+    report?: OnyxEntry<Report>;
 };
 
 type Props = {
@@ -42,6 +45,7 @@ type Props = {
     selectedPolicyID?: string;
     transactionPolicyID?: string;
     targetOwnerAccountID?: number;
+    additionalOutstandingReports?: Array<OnyxEntry<Report>>;
     selectReport: (item: TransactionGroupListItem, report?: OnyxEntry<Report>) => void;
     removeFromReport?: () => void;
     isEditing?: boolean;
@@ -60,6 +64,7 @@ function IOURequestEditReportCommon({
     selectedPolicyID,
     targetOwnerAccountID,
     transactionPolicyID,
+    additionalOutstandingReports,
     removeFromReport,
     isEditing = false,
     isUnreported,
@@ -126,13 +131,37 @@ function IOURequestEditReportCommon({
         !isCardTransaction;
 
     const outstandingReports = useOutstandingReports(selectedReportID, selectedPolicyID, resolvedReportOwnerAccountID, isEditing);
+    const mergedOutstandingReports = useMemo(() => {
+        if (!additionalOutstandingReports?.length) {
+            return outstandingReports;
+        }
+
+        const reportsByID = new Map<string, NonNullable<OnyxEntry<Report>>>();
+        for (const report of outstandingReports) {
+            if (!report?.reportID) {
+                continue;
+            }
+
+            reportsByID.set(report.reportID, report);
+        }
+
+        for (const report of additionalOutstandingReports) {
+            if (!report?.reportID || reportsByID.has(report.reportID)) {
+                continue;
+            }
+
+            reportsByID.set(report.reportID, report);
+        }
+
+        return Array.from(reportsByID.values());
+    }, [additionalOutstandingReports, outstandingReports]);
 
     const reportOptions: TransactionGroupListItem[] = useMemo(() => {
-        if (outstandingReports.length === 0) {
+        if (mergedOutstandingReports.length === 0) {
             return [];
         }
 
-        return outstandingReports
+        return mergedOutstandingReports
             .sort((report1, report2) => sortOutstandingReportsBySelected(report1, report2, selectedReportID, localeCompare))
             .filter((report) => !debouncedSearchValue || report?.reportName?.toLowerCase().includes(debouncedSearchValue.toLowerCase()))
             .filter((report): report is NonNullable<typeof report> => report !== undefined)
@@ -166,10 +195,11 @@ function IOURequestEditReportCommon({
                     isSelected: report.reportID === selectedReportID,
                     policyID: report.policyID,
                     reportID: report.reportID,
+                    report,
                     icons: getIconsForExpenseReport(report, personalDetails, policy),
                 };
             });
-    }, [debouncedSearchValue, outstandingReports, selectedReportID, personalDetails, localeCompare, allPolicies, currentUserPersonalDetails.accountID, isPerDiemRequest, isTimeRequest]);
+    }, [debouncedSearchValue, mergedOutstandingReports, selectedReportID, personalDetails, localeCompare, allPolicies, currentUserPersonalDetails.accountID, isPerDiemRequest, isTimeRequest]);
 
     const navigateBack = () => {
         Navigation.goBack(backTo);
@@ -273,7 +303,7 @@ function IOURequestEditReportCommon({
             return false;
         }
 
-        if (outstandingReports.length === 0 || shouldShowNotFoundPageFromProps) {
+        if (mergedOutstandingReports.length === 0 || shouldShowNotFoundPageFromProps) {
             return true;
         }
 
@@ -285,7 +315,7 @@ function IOURequestEditReportCommon({
         const isSubmitter = isReportOwner(selectedReport);
         // If the report is Open, then only submitters, admins can move expenses
         return isOpen && !isAdmin && !isSubmitter;
-    }, [createReportOption, outstandingReports.length, shouldShowNotFoundPageFromProps, selectedReport, isAdmin]);
+    }, [createReportOption, mergedOutstandingReports.length, shouldShowNotFoundPageFromProps, selectedReport, isAdmin]);
 
     const hidePerDiemWarningModal = () => setPerDiemWarningModalVisible(false);
 
@@ -302,7 +332,7 @@ function IOURequestEditReportCommon({
                 data={reportOptions}
                 onSelectRow={handleSelectReport}
                 isRowMultilineSupported
-                shouldShowTextInput={outstandingReports.length >= CONST.STANDARD_LIST_ITEM_LIMIT}
+                shouldShowTextInput={mergedOutstandingReports.length >= CONST.STANDARD_LIST_ITEM_LIMIT}
                 textInputOptions={{
                     value: searchValue,
                     label: translate('common.search'),
