@@ -4,6 +4,7 @@ import Onyx from 'react-native-onyx';
 import * as API from '@libs/API';
 import type {CreateWorkspaceApprovalParams, RemoveWorkspaceApprovalParams, UpdateWorkspaceApprovalParams} from '@libs/API/parameters';
 import {WRITE_COMMANDS} from '@libs/API/types';
+import * as ErrorUtils from '@libs/ErrorUtils';
 import {getDefaultApprover} from '@libs/PolicyUtils';
 import {calculateApprovers, convertApprovalWorkflowToPolicyEmployees, getOverLimitForwardsToDisplayName} from '@libs/WorkflowUtils';
 import CONST from '@src/CONST';
@@ -60,6 +61,7 @@ function createApprovalWorkflow({approvalWorkflow, policy, addExpenseApprovalsTa
             value: {
                 employeeList: updatedEmployees,
                 approvalMode: CONST.POLICY.APPROVAL_MODE.ADVANCED,
+                errorFields: {approvalMode: null},
             },
         },
     ];
@@ -71,6 +73,7 @@ function createApprovalWorkflow({approvalWorkflow, policy, addExpenseApprovalsTa
             value: {
                 employeeList: previousEmployeeList,
                 approvalMode: previousApprovalMode,
+                errorFields: {approvalMode: ErrorUtils.getMicroSecondOnyxErrorWithTranslationKey('workflowsApproverPage.genericErrorMessage')},
             },
         },
     ];
@@ -81,6 +84,7 @@ function createApprovalWorkflow({approvalWorkflow, policy, addExpenseApprovalsTa
             key: `${ONYXKEYS.COLLECTION.POLICY}${policy.id}`,
             value: {
                 employeeList: Object.fromEntries(Object.keys(updatedEmployees).map((key) => [key, {pendingAction: null, pendingFields: null}])),
+                errorFields: {approvalMode: null},
             },
         },
     ];
@@ -167,6 +171,7 @@ function updateApprovalWorkflow(approvalWorkflow: ApprovalWorkflow, membersToRem
             value: {
                 employeeList: updatedEmployees,
                 approvalMode: updatedApprovalMode,
+                errorFields: {approvalMode: null},
                 ...(newDefaultApprover ? {approver: newDefaultApprover} : {}),
             },
         },
@@ -180,6 +185,7 @@ function updateApprovalWorkflow(approvalWorkflow: ApprovalWorkflow, membersToRem
                 employeeList: previousEmployeeList,
                 approvalMode: previousApprovalMode,
                 pendingFields: {employeeList: null},
+                errorFields: {approvalMode: ErrorUtils.getMicroSecondOnyxErrorWithTranslationKey('workflowsApproverPage.genericErrorMessage')},
                 ...(newDefaultApprover ? {approver: previousDefaultApprover} : {}),
             },
         },
@@ -191,6 +197,7 @@ function updateApprovalWorkflow(approvalWorkflow: ApprovalWorkflow, membersToRem
             key: `${ONYXKEYS.COLLECTION.POLICY}${policy.id}`,
             value: {
                 employeeList: Object.fromEntries(Object.keys(updatedEmployees).map((key) => [key, {pendingAction: null, pendingFields: null}])),
+                errorFields: {approvalMode: null},
             },
         },
     ];
@@ -233,6 +240,7 @@ function removeApprovalWorkflow(approvalWorkflow: ApprovalWorkflow, policy: Onyx
             value: {
                 employeeList: updatedEmployees,
                 approvalMode: shouldKeepAdvancedMode ? CONST.POLICY.APPROVAL_MODE.ADVANCED : CONST.POLICY.APPROVAL_MODE.BASIC,
+                errorFields: {approvalMode: null},
             },
         },
     ];
@@ -244,6 +252,7 @@ function removeApprovalWorkflow(approvalWorkflow: ApprovalWorkflow, policy: Onyx
             value: {
                 employeeList: previousEmployeeList,
                 approvalMode: CONST.POLICY.APPROVAL_MODE.ADVANCED,
+                errorFields: {approvalMode: ErrorUtils.getMicroSecondOnyxErrorWithTranslationKey('workflowsApproverPage.genericErrorMessage')},
             },
         },
     ];
@@ -254,6 +263,7 @@ function removeApprovalWorkflow(approvalWorkflow: ApprovalWorkflow, policy: Onyx
             key: `${ONYXKEYS.COLLECTION.POLICY}${policy.id}`,
             value: {
                 employeeList: Object.fromEntries(Object.keys(updatedEmployees).map((key) => [key, {pendingAction: null}])),
+                errorFields: {approvalMode: null},
             },
         },
     ];

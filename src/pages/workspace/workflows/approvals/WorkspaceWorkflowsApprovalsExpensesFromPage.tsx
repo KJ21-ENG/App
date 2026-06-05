@@ -17,6 +17,7 @@ import type {PlatformStackScreenProps} from '@libs/Navigation/PlatformStackNavig
 import type {WorkspaceSplitNavigatorParamList} from '@libs/Navigation/types';
 import {getPersonalDetailByEmail} from '@libs/PersonalDetailsUtils';
 import {canEditWorkspaceSettings, getDefaultApprover, getMemberAccountIDsForWorkspace, isPendingDeletePolicy} from '@libs/PolicyUtils';
+import {canSelectMemberForApprovalWorkflow} from '@libs/WorkflowUtils';
 import AccessOrNotFoundWrapper from '@pages/workspace/AccessOrNotFoundWrapper';
 import MemberRightIcon from '@pages/workspace/MemberRightIcon';
 import withPolicyAndFullscreenLoading from '@pages/workspace/withPolicyAndFullscreenLoading';
@@ -99,7 +100,6 @@ function WorkspaceWorkflowsApprovalsExpensesFromPage({policy, isLoadingReportDat
         );
     }, [approvalWorkflow?.members, policy?.employeeList, policy?.owner, policyMemberEmailsToAccountIDs, translate, icons.FallbackAvatar]);
 
-    const approversEmail = approvalWorkflow?.approvers.map((member) => member?.email);
     const allApprovers: SelectionListApprover[] = [...selectedMembers];
 
     if (approvalWorkflow?.availableMembers) {
@@ -124,7 +124,9 @@ function WorkspaceWorkflowsApprovalsExpensesFromPage({policy, isLoadingReportDat
                 };
             })
             .filter(
-                (member) => (!policy?.preventSelfApproval || !approversEmail?.includes(member.login)) && !selectedMembers.some((selectedOption) => selectedOption.login === member.login),
+                (member) =>
+                    (!policy?.preventSelfApproval || canSelectMemberForApprovalWorkflow({email: member.login, approvers: approvalWorkflow.approvers})) &&
+                    !selectedMembers.some((selectedOption) => selectedOption.login === member.login),
             );
 
         allApprovers.push(...availableMembers);

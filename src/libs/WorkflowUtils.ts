@@ -46,6 +46,18 @@ type GetApproversParams = {
     firstEmail: string;
 };
 
+type CanSelectMemberAsTerminalApproverParams = {
+    email: string;
+    approverIndex: number;
+    approvers: Array<Approver | undefined>;
+    employeeList: PolicyEmployeeList | undefined;
+};
+
+type CanSelectMemberForApprovalWorkflowParams = {
+    email: string;
+    approvers: Array<Approver | undefined>;
+};
+
 /** Resolve the display name for an over-limit forwarder email, falling back to the email itself */
 function getOverLimitForwardsToDisplayName(overLimitForwardsTo: string | undefined, personalDetailsByEmail: PersonalDetailsList): string | undefined {
     if (!overLimitForwardsTo) {
@@ -90,6 +102,26 @@ function calculateApprovers({employees, firstEmail, personalDetailsByEmail}: Get
     }
 
     return approvers;
+}
+
+function isTerminalEmployeeApprover(email: string, employeeList: PolicyEmployeeList | undefined): boolean {
+    const employee = employeeList?.[email];
+    return !employee?.forwardsTo && !employee?.overLimitForwardsTo;
+}
+
+function canSelectMemberAsTerminalApprover({email, approverIndex, approvers, employeeList}: CanSelectMemberAsTerminalApproverParams): boolean {
+    const lastApproverIndex = Math.max(approvers.length - 1, 0);
+    return approverIndex > 0 && approverIndex >= lastApproverIndex && isTerminalEmployeeApprover(email, employeeList);
+}
+
+function canSelectMemberForApprovalWorkflow({email, approvers}: CanSelectMemberForApprovalWorkflowParams): boolean {
+    const matchingApproverIndex = approvers.findIndex((approver) => approver?.email === email);
+    if (matchingApproverIndex === -1) {
+        return true;
+    }
+
+    const matchingApprover = approvers.at(matchingApproverIndex);
+    return matchingApproverIndex > 0 && matchingApproverIndex === approvers.length - 1 && !matchingApprover?.forwardsTo && !matchingApprover?.overLimitForwardsTo;
 }
 
 /** Build a Member from a policy employee using personal details for avatar/displayName */
@@ -805,12 +837,15 @@ function resolveOptimisticAgent({
 
 export {
     calculateApprovers,
+    canSelectMemberAsTerminalApprover,
+    canSelectMemberForApprovalWorkflow,
     convertPolicyEmployeesToApprovalWorkflows,
     convertApprovalWorkflowToPolicyEmployees,
     getApprovalLimitDescription,
     getEligibleExistingBusinessBankAccounts,
     getOpenConnectedToPolicyBusinessBankAccounts,
     getOverLimitForwardsToDisplayName,
+    isTerminalEmployeeApprover,
     INITIAL_APPROVAL_WORKFLOW,
     mergeWorkflowMembersWithAvailableMembers,
     resolveOptimisticAgent,
