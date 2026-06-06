@@ -19,22 +19,42 @@ import usePermissions from '@hooks/usePermissions';
 import useSelfDMReport from '@hooks/useSelfDMReport';
 import useThemeStyles from '@hooks/useThemeStyles';
 import {mergeTransactionRequest} from '@libs/actions/MergeTransaction';
+import getIsNarrowLayout from '@libs/getIsNarrowLayout';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
 import {buildMergedTransactionData, getTransactionThreadReportID} from '@libs/MergeTransactionUtils';
 import isSearchTopmostFullScreenRoute from '@libs/Navigation/helpers/isSearchTopmostFullScreenRoute';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackScreenProps} from '@libs/Navigation/PlatformStackNavigation/types';
 import type {MergeTransactionNavigatorParamList} from '@libs/Navigation/types';
-import {findSelfDMReportID} from '@libs/ReportUtils';
+import {findSelfDMReportID, getReportTransactions} from '@libs/ReportUtils';
 import type {SkeletonSpanReasonAttributes} from '@libs/telemetry/useSkeletonSpan';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
+import type {Route} from '@src/ROUTES';
 import type SCREENS from '@src/SCREENS';
-import type {Transaction} from '@src/types/onyx';
+import type {MergeTransaction, Transaction} from '@src/types/onyx';
 import isLoadingOnyxValue from '@src/types/utils/isLoadingOnyxValue';
 
 type ConfirmationPageProps = PlatformStackScreenProps<MergeTransactionNavigatorParamList, typeof SCREENS.MERGE_TRANSACTION.CONFIRMATION_PAGE>;
+
+function getReportIDToRemoveFromNavigation(mergeTransaction: OnyxEntry<MergeTransaction>, targetTransaction: OnyxEntry<Transaction>, sourceTransaction: OnyxEntry<Transaction>) {
+    if (!mergeTransaction || !targetTransaction || !sourceTransaction) {
+        return;
+    }
+
+    const transactionToDelete = mergeTransaction.reportID === targetTransaction.reportID ? sourceTransaction : targetTransaction;
+    if (!transactionToDelete.reportID || transactionToDelete.reportID === CONST.REPORT.UNREPORTED_REPORT_ID) {
+        return;
+    }
+
+    return getReportTransactions(transactionToDelete.reportID).length === 1 ? transactionToDelete.reportID : undefined;
+}
+
+function getBackToRouteFromReportRoute(reportRoute: ReturnType<typeof Navigation.getReportRouteByID>) {
+    const backToRoute = reportRoute?.params && 'backTo' in reportRoute.params ? reportRoute.params.backTo : undefined;
+    return typeof backToRoute === 'string' ? (backToRoute as Route) : undefined;
+}
 
 function ConfirmationPage({route}: ConfirmationPageProps) {
     const {translate} = useLocalize();
@@ -71,33 +91,48 @@ function ConfirmationPage({route}: ConfirmationPageProps) {
             return;
         }
         const reportID = mergeTransaction.reportID === CONST.REPORT.UNREPORTED_REPORT_ID ? (findSelfDMReportID() ?? CONST.REPORT.UNREPORTED_REPORT_ID) : mergeTransaction.reportID;
+        const reportIDToDismiss = reportID !== CONST.REPORT.UNREPORTED_REPORT_ID ? reportID : undefined;
+        const searchReportIDToOpen = targetTransactionThreadReportID ?? reportIDToDismiss;
+        const isSearchTopmost = isSearchTopmostFullScreenRoute();
+        const reportIDToRemoveFromNavigation = getReportIDToRemoveFromNavigation(mergeTransaction, targetTransaction, sourceTransaction);
+        const initialReportScreenToRemove = Navigation.getReportRouteByID(reportIDToRemoveFromNavigation);
+        const destinationBackTo = getBackToRouteFromReportRoute(initialReportScreenToRemove);
+        const destinationRoute = reportIDToDismiss ? ROUTES.REPORT_WITH_ID.getRoute(reportIDToDismiss, undefined, undefined, destinationBackTo) : undefined;
+
+        const removeDeletedReportFromNavigation = () => {
+            const reportScreenToRemove = Navigation.getReportRouteByID(reportIDToRemoveFromNavigation);
+
+            if (reportScreenToRemove?.key && reportIDToRemoveFromNavigation !== reportIDToDismiss) {
+                Navigation.removeScreenByKey(reportScreenToRemove.key);
+            }
+        };
+        const submitMergeTransaction = () => {
+            mergeTransactionRequest({
+                mergeTransactionID: transactionID,
+                mergeTransaction,
+                targetTransaction,
+                sourceTransaction,
+                targetTransactionThreadReport,
+                targetTransactionThreadParentReport,
+                targetTransactionThreadParentReportNextStep,
+                allTransactionViolations,
+                policy: targetTransactionPolicy,
+                policyTags,
+                policyCategories,
+                currentUserAccountIDParam,
+                currentUserEmailParam,
+                isASAPSubmitBetaEnabled,
+                delegateAccountID,
+                selfDMReport,
+            });
+            removeDeletedReportFromNavigation();
+        };
 
         setIsMergingExpenses(true);
-        mergeTransactionRequest({
-            mergeTransactionID: transactionID,
-            mergeTransaction,
-            targetTransaction,
-            sourceTransaction,
-            targetTransactionThreadReport,
-            targetTransactionThreadParentReport,
-            targetTransactionThreadParentReportNextStep,
-            allTransactionViolations,
-            policy: targetTransactionPolicy,
-            policyTags,
-            policyCategories,
-            currentUserAccountIDParam,
-            currentUserEmailParam,
-            isASAPSubmitBetaEnabled,
-            delegateAccountID,
-            selfDMReport,
-        });
-
-        const reportIDToDismiss = reportID !== CONST.REPORT.UNREPORTED_REPORT_ID ? reportID : undefined;
-
-        const searchReportIDToOpen = targetTransactionThreadReportID ?? reportIDToDismiss;
 
         // If we're in search (or the topmost route is search), dismiss the modal and open the expense in the RHP
-        if ((isOnSearch || isSearchTopmostFullScreenRoute()) && searchReportIDToOpen) {
+        if ((isOnSearch || isSearchTopmost) && searchReportIDToOpen) {
+            submitMergeTransaction();
             Navigation.dismissModal();
             Navigation.setNavigationActionToMicrotaskQueue(() => {
                 Navigation.navigate(ROUTES.SEARCH_REPORT.getRoute({reportID: searchReportIDToOpen}));
@@ -105,11 +140,25 @@ function ConfirmationPage({route}: ConfirmationPageProps) {
             return;
         }
 
-        if (reportIDToDismiss && reportID !== targetTransaction.reportID) {
-            Navigation.dismissModalWithReport({reportID: reportIDToDismiss});
+        if (destinationRoute && reportID !== targetTransaction.reportID) {
+            if (getIsNarrowLayout()) {
+                Navigation.dismissModal({
+                    afterTransition: () => {
+                        Navigation.navigate(destinationRoute, {
+                            afterTransition: submitMergeTransaction,
+                        });
+                    },
+                });
+                return;
+            }
+
+            Navigation.revealRouteBeforeDismissingModal(destinationRoute, {
+                afterTransition: submitMergeTransaction,
+            });
             return;
         }
 
+        submitMergeTransaction();
         Navigation.dismissToSuperWideRHP();
     };
 

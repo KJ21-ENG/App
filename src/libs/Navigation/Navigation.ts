@@ -910,6 +910,46 @@ function removeScreenFromNavigationState(screen: string) {
     });
 }
 
+function removeRouteByKeyFromState<TState extends State>(state: TState, key: string): {didRemove: boolean; state: TState} {
+    let didRemove = false;
+    const routes = state.routes.flatMap((route) => {
+        if (route.key === key) {
+            didRemove = true;
+            return [];
+        }
+
+        if (!route.state?.routes) {
+            return [route];
+        }
+
+        const result = removeRouteByKeyFromState(route.state as State, key);
+        if (!result.didRemove) {
+            return [route];
+        }
+
+        didRemove = true;
+        return [
+            {
+                ...route,
+                state: result.state,
+            },
+        ];
+    });
+
+    if (!didRemove || routes.length === 0) {
+        return {didRemove: false, state};
+    }
+
+    return {
+        didRemove: true,
+        state: {
+            ...state,
+            routes,
+            ...(typeof state.index === 'number' ? {index: Math.min(state.index, routes.length - 1)} : {}),
+        } as TState,
+    };
+}
+
 function isTopmostRouteModalScreen() {
     const topmostRouteName = navigationRef.getRootState()?.routes?.at(-1)?.name;
     return isSideModalNavigator(topmostRouteName);
@@ -918,12 +958,8 @@ function isTopmostRouteModalScreen() {
 function removeScreenByKey(key: string) {
     isNavigationReady().then(() => {
         navigationRef.current?.dispatch((state) => {
-            const routes = state.routes?.filter((item) => item.key !== key);
-            return CommonActions.reset({
-                ...state,
-                routes,
-                index: routes.length < state.routes.length ? state.index - 1 : state.index,
-            });
+            const result = removeRouteByKeyFromState(state, key);
+            return CommonActions.reset(result.state);
         });
     });
 }

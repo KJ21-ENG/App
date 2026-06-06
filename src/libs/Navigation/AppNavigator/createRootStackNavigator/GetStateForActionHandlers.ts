@@ -423,7 +423,8 @@ function handleReplaceFullscreenUnderRHP(
             };
         });
         const updatedTabState = {...existingTabState, routes: updatedTabRoutes, index: targetTabIndex};
-        const updatedTabRoute = {...existingTabRoute, state: updatedTabState} as StackNavigationState<ParamListBase>['routes'][number];
+        const sanitizedTabRoute = withSanitizedDeepLinkParams(existingTabRoute, undefined);
+        const updatedTabRoute = {...sanitizedTabRoute, state: updatedTabState} as StackNavigationState<ParamListBase>['routes'][number];
         // Save original route so handleRemoveFullscreenUnderRHP can fully restore it on cancel.
         preInsertedOriginalTabRoute = existingTabRoute;
         const newRoutes = [...routesWithoutRHP.slice(0, tabNavIndex), updatedTabRoute, ...routesWithoutRHP.slice(tabNavIndex + 1), rhpRoute];
