@@ -108,6 +108,7 @@ type WorkspacePageOption = {
     titleKey: TranslationPaths;
     icon: ExpensifyIconName;
     getRoute: (policyID: string) => Route;
+    keywords?: string[];
     policyFeature?: PolicyFeature;
     feature?: PolicyFeatureName;
     requiresProtectedItems?: boolean;
@@ -131,13 +132,30 @@ const PROTECTED_WORKSPACE_FEATURES: PolicyFeature[] = [
 ];
 
 const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
-    {titleKey: 'workspace.common.profile', icon: 'Building', getRoute: (id) => ROUTES.WORKSPACE_OVERVIEW.getRoute(id)},
-    {titleKey: 'workspace.common.members', icon: 'Users', getRoute: (id) => ROUTES.WORKSPACE_MEMBERS.getRoute(id)},
-    {titleKey: 'workspace.common.rooms', icon: 'Hashtag', getRoute: (id) => ROUTES.WORKSPACE_ROOMS.getRoute(id), isAvailable: ({isRoomsBetaEnabled}) => isRoomsBetaEnabled},
+    {
+        titleKey: 'workspace.common.profile',
+        icon: 'Building',
+        getRoute: (id) => ROUTES.WORKSPACE_OVERVIEW.getRoute(id),
+        keywords: ['overview'],
+    },
+    {
+        titleKey: 'workspace.common.members',
+        icon: 'Users',
+        getRoute: (id) => ROUTES.WORKSPACE_MEMBERS.getRoute(id),
+        keywords: ['member'],
+    },
+    {
+        titleKey: 'workspace.common.rooms',
+        icon: 'Hashtag',
+        getRoute: (id) => ROUTES.WORKSPACE_ROOMS.getRoute(id),
+        keywords: ['room'],
+        isAvailable: ({isRoomsBetaEnabled}) => isRoomsBetaEnabled,
+    },
     {
         titleKey: 'common.reports',
         icon: 'Document',
         getRoute: (id) => ROUTES.WORKSPACE_REPORTS.getRoute(id),
+        keywords: ['report'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.REPORT_FIELDS,
     },
@@ -145,6 +163,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.accounting',
         icon: 'Sync',
         getRoute: (id) => ROUTES.POLICY_ACCOUNTING.getRoute(id),
+        keywords: ['accounting'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.ACCOUNTING,
         feature: CONST.POLICY.MORE_FEATURES.ARE_CONNECTIONS_ENABLED,
@@ -153,6 +172,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.hr',
         icon: 'Users',
         getRoute: (id) => ROUTES.WORKSPACE_HR.getRoute(id),
+        keywords: ['human resources', 'people'],
         requiresProtectedItems: true,
         requiresMoreFeaturesRead: true,
         feature: CONST.POLICY.MORE_FEATURES.IS_HR_ENABLED,
@@ -161,6 +181,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.receiptPartners',
         icon: 'Receipt',
         getRoute: (id) => ROUTES.WORKSPACE_RECEIPT_PARTNERS.getRoute(id),
+        keywords: ['receipt partner'],
         requiresProtectedItems: true,
         requiresMoreFeaturesRead: true,
         feature: CONST.POLICY.MORE_FEATURES.ARE_RECEIPT_PARTNERS_ENABLED,
@@ -169,6 +190,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.categories',
         icon: 'Folder',
         getRoute: (id) => ROUTES.WORKSPACE_CATEGORIES.getRoute(id),
+        keywords: ['category'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.CATEGORIES,
         feature: CONST.POLICY.MORE_FEATURES.ARE_CATEGORIES_ENABLED,
@@ -177,6 +199,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.tags',
         icon: 'Tag',
         getRoute: (id) => ROUTES.WORKSPACE_TAGS.getRoute(id),
+        keywords: ['tag'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.TAGS,
         feature: CONST.POLICY.MORE_FEATURES.ARE_TAGS_ENABLED,
@@ -185,6 +208,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.taxes',
         icon: 'Coins',
         getRoute: (id) => ROUTES.WORKSPACE_TAXES.getRoute(id),
+        keywords: ['tax'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.TAXES,
         feature: CONST.POLICY.MORE_FEATURES.ARE_TAXES_ENABLED,
@@ -193,6 +217,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.workflows',
         icon: 'Workflows',
         getRoute: (id) => ROUTES.WORKSPACE_WORKFLOWS.getRoute(id),
+        keywords: ['workflow'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.WORKFLOWS,
         feature: CONST.POLICY.MORE_FEATURES.ARE_WORKFLOWS_ENABLED,
@@ -201,6 +226,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.rules',
         icon: 'Feed',
         getRoute: (id) => ROUTES.WORKSPACE_RULES.getRoute(id),
+        keywords: ['rule'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.RULES,
         feature: CONST.POLICY.MORE_FEATURES.ARE_RULES_ENABLED,
@@ -209,6 +235,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.distanceRates',
         icon: 'Car',
         getRoute: (id) => ROUTES.WORKSPACE_DISTANCE_RATES.getRoute(id),
+        keywords: ['distance rate', 'mileage'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.DISTANCE_RATES,
         feature: CONST.POLICY.MORE_FEATURES.ARE_DISTANCE_RATES_ENABLED,
@@ -217,6 +244,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.travel',
         icon: 'LuggageWithLines',
         getRoute: (id) => ROUTES.WORKSPACE_TRAVEL.getRoute(id),
+        keywords: ['trip'],
         requiresProtectedItems: true,
         requiresMoreFeaturesRead: true,
         feature: CONST.POLICY.MORE_FEATURES.IS_TRAVEL_ENABLED,
@@ -225,6 +253,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.expensifyCard',
         icon: 'ExpensifyCard',
         getRoute: (id) => ROUTES.WORKSPACE_EXPENSIFY_CARD.getRoute(id),
+        keywords: ['card'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.EXPENSIFY_CARD,
         feature: CONST.POLICY.MORE_FEATURES.ARE_EXPENSIFY_CARDS_ENABLED,
@@ -233,6 +262,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.companyCards',
         icon: 'CreditCard',
         getRoute: (id) => ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(id),
+        keywords: ['company card', 'cards'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.COMPANY_CARDS,
         feature: CONST.POLICY.MORE_FEATURES.ARE_COMPANY_CARDS_ENABLED,
@@ -241,6 +271,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'common.perDiem',
         icon: 'CalendarSolid',
         getRoute: (id) => ROUTES.WORKSPACE_PER_DIEM.getRoute(id),
+        keywords: ['per diem'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.PER_DIEM,
         feature: CONST.POLICY.MORE_FEATURES.ARE_PER_DIEM_RATES_ENABLED,
@@ -249,6 +280,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'iou.time',
         icon: 'Clock',
         getRoute: (id) => ROUTES.WORKSPACE_TIME_TRACKING.getRoute(id),
+        keywords: ['time tracking'],
         requiresProtectedItems: true,
         requiresMoreFeaturesRead: true,
         feature: CONST.POLICY.MORE_FEATURES.IS_TIME_TRACKING_ENABLED,
@@ -257,17 +289,25 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.invoices',
         icon: 'InvoiceGeneric',
         getRoute: (id) => ROUTES.WORKSPACE_INVOICES.getRoute(id),
+        keywords: ['invoice'],
         requiresProtectedItems: true,
         requiresMoreFeaturesRead: true,
         feature: CONST.POLICY.MORE_FEATURES.ARE_INVOICES_ENABLED,
     },
-    {titleKey: 'workspace.common.moreFeatures', icon: 'Gear', getRoute: (id) => ROUTES.WORKSPACE_MORE_FEATURES.getRoute(id), requiresProtectedItems: true, requiresMoreFeaturesRead: true},
+    {
+        titleKey: 'workspace.common.moreFeatures',
+        icon: 'Gear',
+        getRoute: (id) => ROUTES.WORKSPACE_MORE_FEATURES.getRoute(id),
+        keywords: ['features'],
+        requiresProtectedItems: true,
+        requiresMoreFeaturesRead: true,
+    },
 ];
 
 const WORKSPACE_NAVIGATION_ICONS = Array.from(new Set(WORKSPACE_PAGE_OPTIONS.map((option) => option.icon)));
 
-function doesOptionMatchQuery(title: string, query: string, contextText?: string, keywords?: string[]) {
-    return [title, contextText, ...(keywords ?? [])].filter(Boolean).join(' ').toLowerCase().includes(query);
+function doesOptionMatchQuery(title: string, query: string, keywords?: string[]) {
+    return [title, ...(keywords ?? [])].filter(Boolean).join(' ').toLowerCase().includes(query);
 }
 
 function getIndexedSpendMenuItems(typeMenuSections: SearchTypeMenuSection[]): SearchTypeMenuItem[] {
@@ -314,7 +354,7 @@ function buildNavigationOptionRows(
     return options
         .filter((option) => option.shouldShow?.() !== false)
         .map((option) => ({option, title: translate(option.titleKey)}))
-        .filter(({option, title}) => doesOptionMatchQuery(title, normalizedQuery, rightTab?.text, option.keywords))
+        .filter(({option, title}) => doesOptionMatchQuery(title, normalizedQuery, option.keywords))
         .map(
             ({option, title}): SearchQueryItem => ({
                 text: translate('search.goTo', {destination: title}),
@@ -409,7 +449,7 @@ function getSpendNavigationSearchOptions(
     const spendText = translate('common.spend');
     return getIndexedSpendMenuItems(typeMenuSections)
         .map((item) => ({item, title: translate(item.translationPath)}))
-        .filter(({title}) => doesOptionMatchQuery(title, normalizedQuery, spendText))
+        .filter(({item, title}) => doesOptionMatchQuery(title, normalizedQuery, [item.key]))
         .map(
             ({item, title}): SearchQueryItem => ({
                 text: translate('search.goTo', {destination: title}),
@@ -475,7 +515,7 @@ function getWorkspaceNavigationSearchOptions(
             }
 
             const title = translate(option.titleKey);
-            if (!doesOptionMatchQuery(title, normalizedQuery, workspaceName)) {
+            if (!doesOptionMatchQuery(title, normalizedQuery, option.keywords)) {
                 continue;
             }
 
