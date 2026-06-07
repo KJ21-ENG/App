@@ -2,7 +2,7 @@ import type {OnboardingInvite} from '@src/CONST';
 import type {OnboardingPurpose} from './index';
 
 /** The tasks of IntroSelected model */
-type IntroSelectedTask = 'viewTour' | 'createWorkspace' | 'setupCategories' | 'setupTags' | 'setupCategoriesAndTags';
+type IntroSelectedTask = 'viewTour' | 'createWorkspace' | 'createReport' | 'setupCategories' | 'setupTags' | 'setupCategoriesAndTags';
 
 /** Model of onboarding */
 type IntroSelected = {
@@ -20,6 +20,9 @@ type IntroSelected = {
 
     /** Task reportID for 'createWorkspace' type */
     createWorkspace?: string;
+
+    /** Task reportID for 'createReport' type */
+    createReport?: string;
 
     /** Company size selected during onboarding */
     companySize?: string;

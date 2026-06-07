@@ -260,6 +260,7 @@ type TaskForParameters =
           taskReportID: string;
           parentReportID: string;
           parentReportActionID: string;
+          assigneeAccountID?: number;
           assigneeChatReportID?: string;
           createdTaskReportActionID: string;
           completedTaskReportActionID?: string;

@@ -11795,7 +11795,10 @@ function prepareOnboardingOnyxData({
     const optimisticConciergeReportActionID: string | undefined = shouldUseFollowupsInsteadOfTasks ? rand64() : undefined;
 
     let createWorkspaceTaskReportID;
+    let createReportTaskReportID;
     let addExpenseApprovalsTaskReportID;
+    let viewTourTaskReportID;
+    let setupCategoriesTaskReportID;
     let setupTagsTaskReportID;
     let setupCategoriesAndTagsTaskReportID;
     const tasks = onboardingMessage.tasks;
@@ -11835,7 +11838,15 @@ function prepareOnboardingOnyxData({
             );
             const emailCreatingAction = CONST.EMAIL.CONCIERGE;
             const taskCreatedAction = buildOptimisticCreatedReportAction({emailCreatingAction});
-            const taskReportAction = buildOptimisticTaskCommentReportAction(currentTask.reportID, taskTitle, 0, `task for ${taskTitle}`, targetChatReportID, actorAccountID, index + 3);
+            const taskReportAction = buildOptimisticTaskCommentReportAction(
+                currentTask.reportID,
+                taskTitle,
+                currentTask.managerID,
+                `task for ${taskTitle}`,
+                targetChatReportID,
+                actorAccountID,
+                index + 3,
+            );
             currentTask.parentReportActionID = taskReportAction.reportAction.reportActionID;
 
             let isTaskAutoCompleted: boolean = task.autoCompleted;
@@ -11857,8 +11868,17 @@ function prepareOnboardingOnyxData({
             if (task.type === CONST.ONBOARDING_TASK_TYPE.CREATE_WORKSPACE) {
                 createWorkspaceTaskReportID = currentTask.reportID;
             }
+            if (task.type === CONST.ONBOARDING_TASK_TYPE.CREATE_REPORT) {
+                createReportTaskReportID = currentTask.reportID;
+            }
             if (task.type === CONST.ONBOARDING_TASK_TYPE.ADD_EXPENSE_APPROVALS) {
                 addExpenseApprovalsTaskReportID = currentTask.reportID;
+            }
+            if (task.type === CONST.ONBOARDING_TASK_TYPE.VIEW_TOUR) {
+                viewTourTaskReportID = currentTask.reportID;
+            }
+            if (task.type === CONST.ONBOARDING_TASK_TYPE.SETUP_CATEGORIES) {
+                setupCategoriesTaskReportID = currentTask.reportID;
             }
             if (task.type === CONST.ONBOARDING_TASK_TYPE.SETUP_TAGS) {
                 setupTagsTaskReportID = currentTask.reportID;
@@ -11895,6 +11915,7 @@ function prepareOnboardingOnyxData({
         taskReportID: currentTask.reportID,
         parentReportID: currentTask.parentReportID,
         parentReportActionID: taskReportAction.reportAction.reportActionID,
+        assigneeAccountID: currentTask.managerID,
         createdTaskReportActionID: taskCreatedAction.reportActionID,
         completedTaskReportActionID: completedTaskReportAction?.reportActionID,
         title: currentTask.reportName ?? '',
@@ -12075,7 +12096,10 @@ function prepareOnboardingOnyxData({
             value: {
                 choice: engagementChoice,
                 createWorkspace: createWorkspaceTaskReportID,
+                createReport: createReportTaskReportID,
                 addExpenseApprovals: addExpenseApprovalsTaskReportID,
+                viewTour: viewTourTaskReportID,
+                setupCategories: setupCategoriesTaskReportID,
                 setupTags: setupTagsTaskReportID,
                 setupCategoriesAndTags: setupCategoriesAndTagsTaskReportID,
             },
@@ -12100,8 +12124,19 @@ function prepareOnboardingOnyxData({
     }
 
     const successData: Array<
-        TupleToUnion<typeof tasksForSuccessData> | OnyxUpdate<typeof ONYXKEYS.COLLECTION.POLICY | typeof ONYXKEYS.PERSONAL_DETAILS_LIST | typeof ONYXKEYS.NVP_ONBOARDING>
+        | TupleToUnion<typeof tasksForSuccessData>
+        | OnyxUpdate<typeof ONYXKEYS.COLLECTION.POLICY | typeof ONYXKEYS.PERSONAL_DETAILS_LIST | typeof ONYXKEYS.NVP_ONBOARDING | typeof ONYXKEYS.NVP_INTRO_SELECTED>
     > = shouldUseFollowupsInsteadOfTasks ? [] : [...tasksForSuccessData];
+
+    successData.push({
+        onyxMethod: Onyx.METHOD.MERGE,
+        key: ONYXKEYS.NVP_INTRO_SELECTED,
+        value: {
+            createReport: createReportTaskReportID,
+            viewTour: viewTourTaskReportID,
+            setupCategories: setupCategoriesTaskReportID,
+        },
+    });
 
     if (message) {
         successData.push({
@@ -12148,7 +12183,10 @@ function prepareOnboardingOnyxData({
             key: ONYXKEYS.NVP_INTRO_SELECTED,
             value: {
                 createWorkspace: null,
+                createReport: null,
                 addExpenseApprovals: null,
+                viewTour: null,
+                setupCategories: null,
                 setupCategoriesAndTags: null,
                 setupTags: null,
             },
