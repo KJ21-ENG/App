@@ -190,7 +190,7 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
         titleKey: 'workspace.common.categories',
         icon: 'Folder',
         getRoute: (id) => ROUTES.WORKSPACE_CATEGORIES.getRoute(id),
-        keywords: ['category'],
+        keywords: ['category', 'categories'],
         requiresProtectedItems: true,
         policyFeature: CONST.POLICY.POLICY_FEATURE.CATEGORIES,
         feature: CONST.POLICY.MORE_FEATURES.ARE_CATEGORIES_ENABLED,
@@ -316,6 +316,20 @@ function getIndexedSpendMenuItems(typeMenuSections: SearchTypeMenuSection[]): Se
 
 function getSpendNavigationIconNames(typeMenuSections: SearchTypeMenuSection[]): ExpensifyIconName[] {
     return Array.from(new Set(getIndexedSpendMenuItems(typeMenuSections).map((item) => item.icon)));
+}
+
+function getSpendNavigationKeywords(item: SearchTypeMenuItem): string[] {
+    if (item.key === CONST.SEARCH.SEARCH_KEYS.TOP_CATEGORIES) {
+        return [item.key, 'category', 'categories'];
+    }
+    if (item.key === CONST.SEARCH.SEARCH_KEYS.TOP_MERCHANTS) {
+        return [item.key, 'merchant', 'merchants'];
+    }
+    if (item.key === CONST.SEARCH.SEARCH_KEYS.TOP_SPENDERS) {
+        return [item.key, 'spender', 'spenders'];
+    }
+
+    return [item.key];
 }
 
 function getPolicyFeatureStates(policy: Policy): Partial<Record<PolicyFeatureName, boolean>> {
@@ -449,7 +463,7 @@ function getSpendNavigationSearchOptions(
     const spendText = translate('common.spend');
     return getIndexedSpendMenuItems(typeMenuSections)
         .map((item) => ({item, title: translate(item.translationPath)}))
-        .filter(({item, title}) => doesOptionMatchQuery(title, normalizedQuery, [item.key]))
+        .filter(({item, title}) => doesOptionMatchQuery(title, normalizedQuery, getSpendNavigationKeywords(item)))
         .map(
             ({item, title}): SearchQueryItem => ({
                 text: translate('search.goTo', {destination: title}),
