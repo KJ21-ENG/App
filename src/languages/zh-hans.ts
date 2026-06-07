@@ -7970,6 +7970,7 @@ ${reportName}
         recentChats: '最近聊天',
         serverResults: '搜索结果',
         searchIn: '搜索范围',
+        goTo: ({destination}: {destination: string}) => `前往${destination}`,
         askConcierge: (message: string) => `询问 Concierge“${message}”`,
         searchPlaceholder: '搜索内容...',
         suggestions: '建议',

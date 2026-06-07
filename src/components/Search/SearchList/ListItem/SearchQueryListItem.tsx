@@ -1,14 +1,18 @@
 import React from 'react';
 import {View} from 'react-native';
 import type {ValueOf} from 'type-fest';
+import Avatar from '@components/Avatar';
 import Icon from '@components/Icon';
 import BaseListItem from '@components/SelectionList/ListItem/BaseListItem';
 import type {ListItem, ListItemFocusEventHandler} from '@components/SelectionList/ListItem/types';
+import Text from '@components/Text';
 import TextWithTooltip from '@components/TextWithTooltip';
 import useTheme from '@hooks/useTheme';
 import useThemeStyles from '@hooks/useThemeStyles';
 import type {OptionData} from '@libs/ReportUtils';
-import type CONST from '@src/CONST';
+import type {AvatarSource} from '@libs/UserAvatarUtils';
+import CONST from '@src/CONST';
+import type {Route} from '@src/ROUTES';
 import type IconAsset from '@src/types/utils/IconAsset';
 
 type SearchQueryItem = ListItem & {
@@ -20,6 +24,15 @@ type SearchQueryItem = ListItem & {
     autocompleteID?: string;
     roomType?: ValueOf<typeof CONST.SEARCH.DATA_TYPES>;
     mapKey?: string;
+    route?: Route;
+    onSelectAction?: () => void;
+    rightText?: string;
+    rightAvatar?: {
+        source: AvatarSource;
+        name: string;
+        id: string;
+    };
+    rightIcon?: IconAsset;
 };
 
 type SearchQueryListItemProps = {
@@ -89,6 +102,36 @@ function SearchQueryListItem({item, isFocused, showTooltip, onSelectRow, onFocus
                         />
                     )}
                 </View>
+                {(!!item.rightAvatar || !!item.rightIcon || !!item.rightText) && (
+                    <View style={[styles.flexRow, styles.alignItemsCenter, styles.ml2, styles.flexShrink1, styles.overflowHidden]}>
+                        {!!item.rightAvatar && (
+                            <Avatar
+                                source={item.rightAvatar.source}
+                                type={CONST.ICON_TYPE_WORKSPACE}
+                                name={item.rightAvatar.name}
+                                avatarID={item.rightAvatar.id}
+                                size={CONST.AVATAR_SIZE.MID_SUBSCRIPT}
+                                containerStyles={styles.mr1}
+                            />
+                        )}
+                        {!item.rightAvatar && !!item.rightIcon && (
+                            <Icon
+                                src={item.rightIcon}
+                                fill={theme.icon}
+                                small
+                                additionalStyles={styles.mr1}
+                            />
+                        )}
+                        {!!item.rightText && (
+                            <Text
+                                numberOfLines={1}
+                                style={[styles.textMicroSupporting, styles.flexShrink1, styles.overflowHidden]}
+                            >
+                                {item.rightText}
+                            </Text>
+                        )}
+                    </View>
+                )}
             </>
         </BaseListItem>
     );

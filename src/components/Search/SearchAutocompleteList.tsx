@@ -437,7 +437,9 @@ function SearchAutocompleteList({
 
         const pushSection = (section: Section<AutocompleteListItem>) => {
             nextSections.push(section);
-            nextSuggestionsCount += section.data.filter((item) => item.keyForList !== CONST.SEARCH.SEARCH_ROUTER_ITEM_TYPE.FIND_ITEM).length;
+            nextSuggestionsCount += section.data.filter(
+                (item) => item.keyForList !== CONST.SEARCH.SEARCH_ROUTER_ITEM_TYPE.FIND_ITEM && item.searchItemType !== CONST.SEARCH.SEARCH_ROUTER_ITEM_TYPE.NAVIGATE,
+            ).length;
         };
 
         if (searchQueryItems && searchQueryItems.length > 0) {
