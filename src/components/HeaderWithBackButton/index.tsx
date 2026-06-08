@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import {Keyboard, StyleSheet, View} from 'react-native';
+import {Keyboard, Platform, StyleSheet, View} from 'react-native';
 import type {SvgProps} from 'react-native-svg';
 import ActivityIndicator from '@components/ActivityIndicator';
 import Avatar from '@components/Avatar';
@@ -253,6 +253,7 @@ function HeaderWithBackButton({
                                 }
                             }}
                             style={[styles.touchableButtonImage]}
+                            focusable={Platform.OS === 'ios' ? false : undefined}
                             role={CONST.ROLE.BUTTON}
                             accessibilityLabel={translate('common.back')}
                             id={CONST.BACK_BUTTON_NATIVE_ID}
