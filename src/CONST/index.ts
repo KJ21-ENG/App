@@ -7561,7 +7561,7 @@ const CONST = {
             ASK_CONCIERGE: 'askConcierge',
             NAVIGATE: 'navigate',
         },
-        NAVIGATION_SUGGESTION_MIN_QUERY_LENGTH: 3,
+        NAVIGATION_SUGGESTION_MIN_QUERY_LENGTH: 2,
         SEARCH_USER_FRIENDLY_KEYS: {
             TYPE: 'type',
             STATUS: 'status',
