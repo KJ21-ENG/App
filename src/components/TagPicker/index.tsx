@@ -161,7 +161,7 @@ function TagPicker({
         ref: inputCallbackRef as (ref: BaseTextInputRef | null) => void,
     };
 
-    const listItemTitleStyles = [styles.breakAll, styles.w100];
+    const listItemTitleStyles = styles.w100;
 
     return (
         <SelectionListWithSections
@@ -175,6 +175,8 @@ function TagPicker({
             shouldShowTextInput={availableTagsCount >= CONST.STANDARD_LIST_ITEM_LIMIT}
             initiallyFocusedItemKey={selectedOptionKey}
             onSelectRow={onSubmit}
+            isRowMultilineSupported
+            titleNumberOfLines={5}
         />
     );
 }

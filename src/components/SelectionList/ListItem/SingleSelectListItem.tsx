@@ -19,6 +19,7 @@ function SingleSelectListItem<TItem extends ListItem>({
     isMultilineSupported = false,
     isAlternateTextMultilineSupported = false,
     alternateTextNumberOfLines = 2,
+    titleNumberOfLines,
     onFocus,
     shouldSyncFocus,
     wrapperStyle,
@@ -44,6 +45,7 @@ function SingleSelectListItem<TItem extends ListItem>({
             isMultilineSupported={isMultilineSupported}
             isAlternateTextMultilineSupported={isAlternateTextMultilineSupported}
             alternateTextNumberOfLines={alternateTextNumberOfLines}
+            titleNumberOfLines={titleNumberOfLines}
             onFocus={onFocus}
             shouldSyncFocus={shouldSyncFocus}
             wrapperStyle={[styles.optionRow, wrapperStyle]}

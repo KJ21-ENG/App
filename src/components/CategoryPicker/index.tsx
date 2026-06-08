@@ -92,7 +92,7 @@ function CategoryPicker({selectedCategory, policyID, onSubmit, addBottomSafeArea
             addBottomSafeAreaPadding={addBottomSafeAreaPadding}
             style={{listItemTitleStyles: styles.w100}}
             isRowMultilineSupported
-            titleNumberOfLines={3}
+            titleNumberOfLines={5}
         />
     );
 }
