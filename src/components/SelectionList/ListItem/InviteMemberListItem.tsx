@@ -89,6 +89,8 @@ function InviteMemberListItem<TItem extends ListItem>({
                             fallbackDisplayName={item.text ?? item.alternateText ?? undefined}
                             singleAvatarContainerStyle={[styles.actionAvatar, styles.mr3]}
                             reportID={item.reportID}
+                            report={item.report}
+                            policy={item.policy}
                             accountIDs={accountID ? [accountID] : undefined}
                         />
                     )}

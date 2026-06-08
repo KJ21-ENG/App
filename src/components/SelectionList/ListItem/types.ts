@@ -1,5 +1,6 @@
 import type {ReactElement, ReactNode} from 'react';
 import type {BlurEvent, NativeSyntheticEvent, Role, StyleProp, TargetedEvent, TextStyle, ViewStyle} from 'react-native';
+import type {OnyxEntry} from 'react-native-onyx';
 import type {AnimatedStyle} from 'react-native-reanimated';
 import type {ValueOf} from 'type-fest';
 import type {HoldMenuCallback} from '@components/Search';
@@ -15,6 +16,8 @@ import type CursorStyles from '@styles/utils/cursor/types';
 import type CONST from '@src/CONST';
 import type {SplitExpense} from '@src/types/onyx/IOU';
 import type {Errors, Icon, PendingAction} from '@src/types/onyx/OnyxCommon';
+import type Policy from '@src/types/onyx/Policy';
+import type Report from '@src/types/onyx/Report';
 import type {ReceiptErrors} from '@src/types/onyx/Transaction';
 import type WithSentryLabel from '@src/types/utils/SentryLabel';
 import type BareUserListItem from './BareUserListItem';
@@ -96,8 +99,14 @@ type ListItem<K extends string | number = string> = {
     /** ID of the report */
     reportID?: string;
 
+    /** Report object used when the report exists outside live Onyx */
+    report?: OnyxEntry<Report>;
+
     /** ID of the policy */
     policyID?: string;
+
+    /** Policy object used when the policy exists outside live Onyx */
+    policy?: OnyxEntry<Policy>;
 
     /** ID of the group */
     groupID?: string;

@@ -21,7 +21,7 @@ import IOURequestEditReportCommon from '@pages/iou/request/step/IOURequestEditRe
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES, {DYNAMIC_ROUTES} from '@src/ROUTES';
-import type {PersonalDetails, Report, ReportNameValuePairs, Transaction} from '@src/types/onyx';
+import type {PersonalDetails, PersonalDetailsList, Policy, Report, ReportNameValuePairs, Transaction} from '@src/types/onyx';
 
 type TransactionGroupListItem = ListItem & {
     /** reportID of the report */
@@ -74,7 +74,7 @@ function SearchTransactionsChangeReport() {
     const areAllTransactionsUnreported =
         selectedTransactionsKeys.length > 0 && selectedTransactionsKeys.every((transactionKey) => selectedTransactions[transactionKey]?.reportID === CONST.REPORT.UNREPORTED_REPORT_ID);
     const selectedTransactionPolicyID = useMemo(() => {
-        if (!areAllTransactionsUnreported || selectedTransactionsKeys.length === 0) {
+        if (selectedTransactionsKeys.length === 0) {
             return undefined;
         }
 
@@ -88,10 +88,11 @@ function SearchTransactionsChangeReport() {
         }
 
         return policyIDs.every((policyID) => policyID === firstPolicyID) ? firstPolicyID : undefined;
-    }, [areAllTransactionsUnreported, selectedTransactions, selectedTransactionsKeys]);
+    }, [selectedTransactions, selectedTransactionsKeys]);
     // Get the policyID from the selected transactions' report to pass to usePolicyForMovingExpenses
     // This ensures the "Create report" button shows the correct workspace instead of the user's default
     const selectedReportPolicyID = selectedReportID ? allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${selectedReportID}`]?.policyID : undefined;
+    const selectedPolicyIDForOutstandingReports = areAllTransactionsUnreported || !selectedReportPolicyID ? selectedTransactionPolicyID : undefined;
     const policyIDForMovingExpenses = selectedReportPolicyID ?? selectedTransactionPolicyID;
     const {policyForMovingExpensesID, shouldSelectPolicy} = usePolicyForMovingExpenses(hasPerDiemTransactions, undefined, policyIDForMovingExpenses);
     const policyForMovingExpenses = policyForMovingExpensesID ? allPolicies?.[`${ONYXKEYS.COLLECTION.POLICY}${policyForMovingExpensesID}`] : undefined;
@@ -117,18 +118,38 @@ function SearchTransactionsChangeReport() {
         const report = getReportOrDraftReport(reportIDWithOwner, undefined, undefined, undefined, allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${reportIDWithOwner}`]);
         return report?.ownerAccountID;
     }, [selectedTransactions, selectedTransactionsKeys, allReports]);
-    const snapshotOutstandingReports = useMemo(() => {
+    const snapshotMoveData = useMemo<{
+        outstandingReports: Array<OnyxEntry<Report>>;
+        policies: OnyxCollection<Policy>;
+        personalDetails: PersonalDetailsList;
+    }>(() => {
         const snapshotData = currentSearchResults?.data;
         const resolvedTargetOwnerAccountID = targetOwnerAccountID ?? session?.accountID;
 
         if (!snapshotData || !resolvedTargetOwnerAccountID) {
-            return [];
+            return {
+                outstandingReports: [],
+                policies: {},
+                personalDetails: {},
+            };
         }
 
         const snapshotReportsByPolicyID: Record<string, OnyxCollection<Report>> = {};
         const snapshotReportNameValuePairs: OnyxCollection<ReportNameValuePairs> = {};
+        const snapshotPolicies: OnyxCollection<Policy> = {};
+        let snapshotPersonalDetails: PersonalDetailsList = {};
 
         for (const [key, value] of Object.entries(snapshotData)) {
+            if (key === ONYXKEYS.PERSONAL_DETAILS_LIST) {
+                snapshotPersonalDetails = (value as PersonalDetailsList | undefined) ?? {};
+                continue;
+            }
+
+            if (key.startsWith(ONYXKEYS.COLLECTION.POLICY)) {
+                snapshotPolicies[key as `${typeof ONYXKEYS.COLLECTION.POLICY}${string}`] = value as OnyxEntry<Policy>;
+                continue;
+            }
+
             if (key.startsWith(ONYXKEYS.COLLECTION.REPORT_NAME_VALUE_PAIRS)) {
                 snapshotReportNameValuePairs[key as `${typeof ONYXKEYS.COLLECTION.REPORT_NAME_VALUE_PAIRS}${string}`] = value as OnyxEntry<ReportNameValuePairs>;
                 continue;
@@ -150,12 +171,25 @@ function SearchTransactionsChangeReport() {
             };
         }
 
-        const policyIDs = selectedTransactionPolicyID ? [selectedTransactionPolicyID] : Object.keys(snapshotReportsByPolicyID);
-        return policyIDs.flatMap((policyID) =>
+        const policyIDs = policyIDForMovingExpenses ? [policyIDForMovingExpenses] : Object.keys(snapshotReportsByPolicyID);
+        const outstandingReports = policyIDs.flatMap((policyID) =>
             getOutstandingReportsForUser(policyID, resolvedTargetOwnerAccountID, snapshotReportsByPolicyID[policyID] ?? {}, snapshotReportNameValuePairs, true),
         );
-    }, [currentSearchResults?.data, selectedTransactionPolicyID, session?.accountID, targetOwnerAccountID]);
-    const targetOwnerPersonalDetails = useMemo(() => getPersonalDetailsForAccountID(targetOwnerAccountID, personalDetails) as PersonalDetails, [personalDetails, targetOwnerAccountID]);
+
+        return {
+            outstandingReports,
+            policies: snapshotPolicies,
+            personalDetails: snapshotPersonalDetails,
+        };
+    }, [currentSearchResults?.data, policyIDForMovingExpenses, session?.accountID, targetOwnerAccountID]);
+    const mergedPersonalDetails = useMemo<PersonalDetailsList>(
+        () => ({...snapshotMoveData.personalDetails, ...(personalDetails ?? {})}),
+        [personalDetails, snapshotMoveData.personalDetails],
+    );
+    const targetOwnerPersonalDetails = useMemo(
+        () => getPersonalDetailsForAccountID(targetOwnerAccountID, mergedPersonalDetails) as PersonalDetails,
+        [mergedPersonalDetails, targetOwnerAccountID],
+    );
     const createReportForPolicy = (shouldDismissEmptyReportsConfirmation?: boolean) => {
         const optimisticReport = createNewReport(
             targetOwnerPersonalDetails,
@@ -293,9 +327,12 @@ function SearchTransactionsChangeReport() {
             isEditing
             isUnreported={areAllTransactionsUnreported}
             targetOwnerAccountID={targetOwnerAccountID}
-            selectedPolicyID={selectedTransactionPolicyID}
+            selectedPolicyID={selectedPolicyIDForOutstandingReports}
             transactionPolicyID={policyIDForMovingExpenses}
-            additionalOutstandingReports={snapshotOutstandingReports}
+            additionalOutstandingReports={snapshotMoveData.outstandingReports}
+            additionalPolicies={snapshotMoveData.policies}
+            additionalPersonalDetails={snapshotMoveData.personalDetails}
+            shouldShowCreateReportOption
             isPerDiemRequest={hasPerDiemTransactions}
         />
     );
