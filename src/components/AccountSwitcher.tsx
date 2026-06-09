@@ -35,6 +35,8 @@ import Text from './Text';
 import Tooltip from './Tooltip';
 import EducationalTooltip from './Tooltip/EducationalTooltip';
 
+const ACCOUNT_SWITCHER_POPOVER_POSITION_HORIZONTAL = 12 + variables.navigationTabBarSize;
+
 type AccountSwitcherProps = {
     /* Whether the screen is focused. Used to hide the product training tooltip */
     isScreenFocused: boolean;
@@ -64,7 +66,7 @@ function AccountSwitcher({isScreenFocused, renderSwitchButton}: AccountSwitcherP
     const {windowHeight} = useWindowDimensions();
 
     const [shouldShowDelegatorMenu, setShouldShowDelegatorMenu] = useState(false);
-    const [anchorPosition, setAnchorPosition] = useState<AnchorPosition>({horizontal: 0, vertical: 0});
+    const [anchorPosition, setAnchorPosition] = useState<AnchorPosition>({horizontal: ACCOUNT_SWITCHER_POPOVER_POSITION_HORIZONTAL, vertical: 0});
     const delegators = account?.delegatedAccess?.delegators ?? [];
 
     const isActingAsDelegate = !!account?.delegatedAccess?.delegate;
@@ -112,7 +114,7 @@ function AccountSwitcher({isScreenFocused, renderSwitchButton}: AccountSwitcherP
 
         const position = getClickedTargetLocation(buttonRef.current as unknown as HTMLDivElement);
         setAnchorPosition({
-            horizontal: position.right,
+            horizontal: ACCOUNT_SWITCHER_POPOVER_POSITION_HORIZONTAL,
             vertical: position.y + position.height,
         });
     }, []);
@@ -316,7 +318,7 @@ function AccountSwitcher({isScreenFocused, renderSwitchButton}: AccountSwitcherP
                     anchorRef={buttonRef}
                     anchorPosition={anchorPosition}
                     anchorAlignment={{
-                        horizontal: CONST.MODAL.ANCHOR_ORIGIN_HORIZONTAL.RIGHT,
+                        horizontal: CONST.MODAL.ANCHOR_ORIGIN_HORIZONTAL.LEFT,
                         vertical: CONST.MODAL.ANCHOR_ORIGIN_VERTICAL.TOP,
                     }}
                     menuItems={menuItems()}
