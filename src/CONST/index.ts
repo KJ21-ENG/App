@@ -262,10 +262,6 @@ const CONST = {
         INPUT: 'INPUT',
         TEXTAREA: 'TEXTAREA',
     },
-    POPOVER_ACCOUNT_SWITCHER_POSITION: {
-        horizontal: 12 + variables.navigationTabBarSize,
-        vertical: 72,
-    },
     POPOVER_DROPDOWN_WIDTH: 334,
     POPOVER_DROPDOWN_MIN_HEIGHT: 0,
     POPOVER_DROPDOWN_MAX_HEIGHT: 416,
