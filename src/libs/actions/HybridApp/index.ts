@@ -2,6 +2,7 @@ import HybridAppModule from '@expensify/react-native-hybrid-app';
 import Onyx from 'react-native-onyx';
 import type {OnyxEntry} from 'react-native-onyx';
 import Navigation from '@libs/Navigation/Navigation';
+import {addHybridAppLifecycleBreadcrumb} from '@libs/telemetry/hybridAppLifecycleTelemetry';
 import {isLockedToNewApp, shouldBlockOldAppExit} from '@libs/TryNewDotUtils';
 import {setIsGPSInProgressModalOpen} from '@userActions/isGPSInProgressModalOpen';
 import CONFIG from '@src/CONFIG';
@@ -96,26 +97,44 @@ type CloseReactNativeAppParams = {
 };
 
 function closeReactNativeApp({shouldSetNVP, isTrackingGPS, shouldIgnoreTryNewDotLoading = false}: CloseReactNativeAppParams) {
+    addHybridAppLifecycleBreadcrumb('closeReactNativeApp requested', {
+        shouldSetNVP,
+        isTrackingGPS,
+        shouldIgnoreTryNewDotLoading,
+        isLoadingTryNewDot,
+        hasTryNewDot: currentTryNewDot !== undefined,
+    });
+
     if (isLockedToNewApp(currentTryNewDot)) {
+        addHybridAppLifecycleBreadcrumb('closeReactNativeApp blocked: locked to NewDot', {shouldSetNVP});
         return;
     }
 
     if (isTrackingGPS) {
+        addHybridAppLifecycleBreadcrumb('closeReactNativeApp blocked: GPS tracking in progress', {shouldSetNVP});
         setIsGPSInProgressModalOpen(true);
         return;
     }
 
     if (!shouldIgnoreTryNewDotLoading && shouldBlockOldAppExit(currentTryNewDot, isLoadingTryNewDot, shouldSetNVP)) {
+        addHybridAppLifecycleBreadcrumb('closeReactNativeApp blocked: TryNewDot exit guard', {
+            shouldSetNVP,
+            isLoadingTryNewDot,
+        });
         return;
     }
 
+    addHybridAppLifecycleBreadcrumb('closeReactNativeApp clearing preloaded routes', {shouldSetNVP});
     Navigation.clearPreloadedRoutes();
     if (CONFIG.IS_HYBRID_APP) {
+        addHybridAppLifecycleBreadcrumb('closeReactNativeApp setting closingReactNativeApp Onyx flag', {shouldSetNVP});
         Onyx.merge(ONYXKEYS.HYBRID_APP, {closingReactNativeApp: true});
     }
 
+    addHybridAppLifecycleBreadcrumb('closeReactNativeApp calling native HybridApp close', {shouldSetNVP});
     // eslint-disable-next-line no-restricted-properties
     HybridAppModule.closeReactNativeApp({shouldSetNVP});
+    addHybridAppLifecycleBreadcrumb('closeReactNativeApp native close returned synchronously', {shouldSetNVP});
 }
 
 /*

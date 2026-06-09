@@ -8,6 +8,7 @@ import {setupNewDotAfterTransitionFromOldDot} from './libs/actions/Session';
 import Log from './libs/Log';
 import {endSpan, startSpan} from './libs/telemetry/activeSpans';
 import {addBootsplashBreadcrumb} from './libs/telemetry/bootsplashTelemetry';
+import {addHybridAppLifecycleBreadcrumb, startHybridAppLifecycleAppStateBreadcrumbs} from './libs/telemetry/hybridAppLifecycleTelemetry';
 import ONYXKEYS from './ONYXKEYS';
 import {useSplashScreenActions} from './SplashScreenStateContext';
 import isLoadingOnyxValue from './types/utils/isLoadingOnyxValue';
@@ -19,8 +20,15 @@ function HybridAppHandler() {
 
     const finalizeTransitionFromOldDot = (hybridAppSettings: HybridAppSettings) => {
         const loggedOutFromOldDot = !!hybridAppSettings.hybridApp.loggedOutFromOldDot;
+        addHybridAppLifecycleBreadcrumb('finalizeTransitionFromOldDot starting', {
+            loggedOutFromOldDot,
+            pressedTryNewExpensify: !!hybridAppSettings.hybridApp.pressedTryNewExpensify,
+            isSingleNewDotEntry: !!hybridAppSettings.hybridApp.isSingleNewDotEntry,
+            transitionStartTimestamp: hybridAppSettings.hybridApp.transitionStartTimestamp,
+        });
 
         setupNewDotAfterTransitionFromOldDot(hybridAppSettings, tryNewDot).then(() => {
+            addHybridAppLifecycleBreadcrumb('finalizeTransitionFromOldDot resolved', {loggedOutFromOldDot});
             if (loggedOutFromOldDot) {
                 endSpan(CONST.TELEMETRY.SPAN_APP_STARTUP);
                 endSpan(CONST.TELEMETRY.SPAN_BOOTSPLASH.ROOT);
@@ -37,15 +45,24 @@ function HybridAppHandler() {
         }
 
         addBootsplashBreadcrumb('HybridAppHandler: Requesting settings');
+        addHybridAppLifecycleBreadcrumb('HybridAppHandler requesting settings', {isLoadingTryNewDot});
+        const cleanupAppStateBreadcrumbs = startHybridAppLifecycleAppStateBreadcrumbs();
         getHybridAppSettings().then((hybridAppSettings: HybridAppSettings | null) => {
             if (!hybridAppSettings) {
                 // Native method can send non-null value only once per NewDot lifecycle. It prevents issues with multiple initializations during reloads on debug builds.
                 Log.info('[HybridApp] `getHybridAppSettings` called more than once during single NewDot lifecycle. Skipping initialization.');
                 addBootsplashBreadcrumb('HybridAppHandler: null settings, skipping');
+                addHybridAppLifecycleBreadcrumb('HybridAppHandler received null settings');
                 return;
             }
 
             addBootsplashBreadcrumb('HybridAppHandler: Settings received', {loggedOutFromOldDot: String(!!hybridAppSettings.hybridApp.loggedOutFromOldDot)});
+            addHybridAppLifecycleBreadcrumb('HybridAppHandler settings received', {
+                loggedOutFromOldDot: !!hybridAppSettings.hybridApp.loggedOutFromOldDot,
+                pressedTryNewExpensify: !!hybridAppSettings.hybridApp.pressedTryNewExpensify,
+                isSingleNewDotEntry: !!hybridAppSettings.hybridApp.isSingleNewDotEntry,
+                transitionStartTimestamp: hybridAppSettings.hybridApp.transitionStartTimestamp,
+            });
 
             // Resolve splash state ASAP — this is the earliest moment we know
             // whether the native splash is on screen or not
@@ -71,6 +88,8 @@ function HybridAppHandler() {
 
             finalizeTransitionFromOldDot(hybridAppSettings);
         });
+
+        return cleanupAppStateBreadcrumbs;
     }, [finalizeTransitionFromOldDot, isLoadingTryNewDot, setSplashScreenState]);
 
     return null;
