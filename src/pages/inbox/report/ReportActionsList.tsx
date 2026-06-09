@@ -329,6 +329,7 @@ function ReportActionsList({
             currentVerticalScrollingOffsetRef: scrollOffsetRef,
             readActionSkippedRef,
             hasNewerActions,
+            newestReportActionID: renderedVisibleReportActions.at(0)?.reportActionID,
             unreadMarkerReportActionIndex,
             isInverted: true,
             onTrackScrolling: (event: NativeSyntheticEvent<NativeScrollEvent>) => {

@@ -24,6 +24,9 @@ type Args = {
     /** Whether the report has newer actions to load */
     hasNewerActions: boolean;
 
+    /** The report action ID for the newest action included in the list data */
+    newestReportActionID?: string;
+
     /** Callback to call on every scroll event */
     onTrackScrolling: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 
@@ -38,6 +41,7 @@ export default function useReportUnreadMessageScrollTracking({
     reportID,
     currentVerticalScrollingOffsetRef,
     hasNewerActions,
+    newestReportActionID,
     readActionSkippedRef,
     onTrackScrolling,
     unreadMarkerReportActionIndex,
@@ -55,6 +59,8 @@ export default function useReportUnreadMessageScrollTracking({
         isFocused: boolean;
         hasOnceLoadedReportActions: boolean;
         actionBadgeTargetIndex: number;
+        hasNewerActions: boolean;
+        newestReportActionID?: string;
     }>({
         reportID,
         unreadMarkerReportActionIndex,
@@ -62,6 +68,8 @@ export default function useReportUnreadMessageScrollTracking({
         isFocused: true,
         hasOnceLoadedReportActions,
         actionBadgeTargetIndex,
+        hasNewerActions,
+        newestReportActionID,
     });
     // We want to save the updated value on ref to use it in onViewableItemsChanged
     // because FlatList requires the callback to be stable and we cannot add a dependency on the useCallback.
@@ -126,14 +134,15 @@ export default function useReportUnreadMessageScrollTracking({
         const unreadActionIndex = ref.current.unreadMarkerReportActionIndex;
         const hasUnreadMarkerReportAction = unreadActionIndex !== -1;
         const unreadActionVisible = isInverted ? unreadActionIndex >= minIndex : unreadActionIndex <= maxIndex;
+        const newestReportActionIDFromRef = ref.current.newestReportActionID;
+        const newestActionVisible =
+            !!newestReportActionIDFromRef &&
+            viewableItems.some((viewableItem) => viewableItem.item?.reportActionID === newestReportActionIDFromRef);
+        const newestActionReached = newestActionVisible && !ref.current.hasNewerActions;
 
-        // display floating button if the unread report action is out of view
-        if (!unreadActionVisible && hasUnreadMarkerReportAction) {
-            setIsFloatingMessageCounterVisible(true);
-        }
-        // hide floating button if the unread report action becomes visible
-        if (unreadActionVisible && hasUnreadMarkerReportAction) {
-            setIsFloatingMessageCounterVisible(false);
+        // The unread marker can be visible while newer unread actions are below the fold, so gate the pill on the newest action.
+        if (hasUnreadMarkerReportAction) {
+            setIsFloatingMessageCounterVisible(!newestActionReached);
         }
 
         // if we're scrolled closer than the offset and read action has been skipped then mark message as read
@@ -163,11 +172,13 @@ export default function useReportUnreadMessageScrollTracking({
     // the state of floating button because onViewableItemsChanged on  FlatList will only be called when viewable items change.
     useEffect(() => {
         ref.current.unreadMarkerReportActionIndex = unreadMarkerReportActionIndex;
+        ref.current.newestReportActionID = newestReportActionID;
+        ref.current.hasNewerActions = hasNewerActions;
 
         if (ref.current.previousViewableItems.length) {
             onViewableItemsChanged({viewableItems: ref.current.previousViewableItems, changed: []});
         }
-    }, [onViewableItemsChanged, unreadMarkerReportActionIndex]);
+    }, [hasNewerActions, newestReportActionID, onViewableItemsChanged, unreadMarkerReportActionIndex]);
 
     // When actionBadgeTargetIndex changes, recalculate visibility
     useEffect(() => {

@@ -425,6 +425,7 @@ function MoneyRequestReportActionsList({onLayout}: MoneyRequestReportListProps) 
         unreadMarkerReportActionIndex,
         isInverted: false,
         hasNewerActions,
+        newestReportActionID: lastAction?.reportActionID,
         onTrackScrolling: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
             const {layoutMeasurement, contentSize, contentOffset} = event.nativeEvent;
             const fullContentHeight = contentSize.height;
