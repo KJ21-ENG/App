@@ -8,6 +8,7 @@ type AssignCompanyCardParams = {
     encryptedCardNumber: string;
     email: string;
     startDate: string;
+    assignmentDate: string;
     reportActionID: string;
 };
 

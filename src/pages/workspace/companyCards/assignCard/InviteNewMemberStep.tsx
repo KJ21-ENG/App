@@ -1,3 +1,4 @@
+import {format} from 'date-fns';
 import React, {useEffect} from 'react';
 import InteractiveStepWrapper from '@components/InteractiveStepWrapper';
 import type {WithCurrentUserPersonalDetailsProps} from '@components/withCurrentUserPersonalDetails';
@@ -54,6 +55,7 @@ function InviteNewMemberStep({route, currentUserPersonalDetails}: InviteeNewMemb
         const cardToAssign: Partial<AssignCardData> = {
             email: assignCard?.cardToAssign?.invitingMemberEmail,
             customCardName: defaultCardName,
+            assignmentDate: assignCard?.cardToAssign?.assignmentDate ?? format(new Date(), CONST.DATE.FNS_FORMAT_STRING),
             invitingMemberEmail: '',
         };
 

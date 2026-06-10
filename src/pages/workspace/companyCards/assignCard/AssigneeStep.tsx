@@ -1,3 +1,4 @@
+import {format} from 'date-fns';
 import {Str} from 'expensify-common';
 import React, {useEffect, useMemo, useState} from 'react';
 import {Keyboard} from 'react-native';
@@ -79,6 +80,7 @@ function AssigneeStep({route}: AssigneeStepProps) {
         const defaultCardName = getDefaultCardName(memberName);
         const cardToAssign: Partial<AssignCardData> = {
             email: assignee?.login ?? '',
+            assignmentDate: assignCard?.cardToAssign?.assignmentDate ?? format(new Date(), CONST.DATE.FNS_FORMAT_STRING),
             ...(!assignCard?.cardToAssign?.customCardName ? {customCardName: defaultCardName} : {}),
         };
 

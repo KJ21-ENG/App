@@ -2873,6 +2873,11 @@ const ROUTES = {
         getRoute: (params: WorkspaceCompanyCardsAssignCardParams) =>
             `workspaces/${params.policyID}/company-cards/${encodeURIComponent(params.feed)}/assign-card/${encodeURIComponent(params.cardID)}/card-selection` as const,
     },
+    WORKSPACE_COMPANY_CARDS_ASSIGN_CARD_ASSIGNMENT_DATE: {
+        route: 'workspaces/:policyID/company-cards/:feed/assign-card/:cardID/assignment-date',
+        getRoute: (params: WorkspaceCompanyCardsAssignCardParams) =>
+            `workspaces/${params.policyID}/company-cards/${encodeURIComponent(params.feed)}/assign-card/${encodeURIComponent(params.cardID)}/assignment-date` as const,
+    },
     WORKSPACE_COMPANY_CARDS_ASSIGN_CARD_TRANSACTION_START_DATE: {
         route: 'workspaces/:policyID/company-cards/:feed/assign-card/:cardID/transaction-start-date',
         getRoute: (params: WorkspaceCompanyCardsAssignCardParams) =>

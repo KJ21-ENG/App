@@ -5580,6 +5580,9 @@ const translations = {
             noActiveCards: 'No active cards on this feed',
             somethingMightBeBroken:
                 '<muted-text><centered-text>Or something might be broken. Either way, if you have any questions, just <concierge-link>contact Concierge</concierge-link>.</centered-text></muted-text>',
+            chooseAssignmentDate: 'Choose an assignment date',
+            assignmentDateDescription: 'Choose when this card assignment should take effect. Pick today to assign the card immediately.',
+            assignmentDate: 'Assignment date',
             chooseTransactionStartDate: 'Choose a transaction start date',
             startDateDescription: "Choose your import start date. We'll sync all transactions from this date onwards.",
             editStartDateDescription: "Choose a new transaction start date. We'll sync all transactions from that date onwards, excluding those we already imported.",
@@ -5588,6 +5591,7 @@ const translations = {
             customCloseDate: 'Custom close date',
             letsDoubleCheck: "Let's double check that everything looks right.",
             confirmationDescription: "We'll begin importing transactions immediately.",
+            confirmationDescriptionLater: 'This card assignment is scheduled for later. Transactions will begin importing after the assignment takes effect.',
             card: 'Card',
             cardName: 'Card name',
             brokenConnectionError: '<rbr>Card feed connection is broken. Please <a href="#">log into your bank</a> so we can establish the connection again.</rbr>',

@@ -115,7 +115,7 @@ function CardSelectionStep({route}: CardSelectionStepProps) {
         if (isEditing) {
             Navigation.navigate(ROUTES.WORKSPACE_COMPANY_CARDS_ASSIGN_CARD_CONFIRMATION.getRoute({policyID, feed, cardID}));
         } else {
-            Navigation.navigate(ROUTES.WORKSPACE_COMPANY_CARDS_ASSIGN_CARD_TRANSACTION_START_DATE.getRoute({policyID, feed, cardID}));
+            Navigation.navigate(ROUTES.WORKSPACE_COMPANY_CARDS_ASSIGN_CARD_ASSIGNMENT_DATE.getRoute({policyID, feed, cardID}));
         }
     };
 

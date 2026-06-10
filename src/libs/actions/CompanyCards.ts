@@ -1,3 +1,4 @@
+import {format} from 'date-fns';
 import type {NullishDeep, OnyxEntry, OnyxUpdate} from 'react-native-onyx';
 import Onyx from 'react-native-onyx';
 import type {LocaleContextProps} from '@components/LocaleContextProvider';
@@ -411,7 +412,7 @@ function assignWorkspaceCompanyCard(
     if (!policy?.id) {
         return;
     }
-    const {bankName, email = '', encryptedCardNumber = '', startDate = '', customCardName = ''} = data;
+    const {bankName, email = '', encryptedCardNumber = '', startDate = '', assignmentDate = format(new Date(), CONST.DATE.FNS_FORMAT_STRING), customCardName = ''} = data;
     const assigneeDetails = PersonalDetailsUtils.getPersonalDetailByEmail(email);
     const optimisticCardAssignedReportAction = ReportUtils.buildOptimisticCardAssignedReportAction(assigneeDetails?.accountID ?? CONST.DEFAULT_NUMBER_ID, currentUserAccountID);
 
@@ -423,6 +424,7 @@ function assignWorkspaceCompanyCard(
         cardName: customCardName,
         email,
         startDate,
+        assignmentDate,
         reportActionID: optimisticCardAssignedReportAction.reportActionID,
     };
     const policyExpenseChat = ReportUtils.getPolicyExpenseChat(policy.ownerAccountID ?? CONST.DEFAULT_NUMBER_ID, policy.id);

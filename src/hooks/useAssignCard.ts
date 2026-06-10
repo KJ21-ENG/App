@@ -1,3 +1,4 @@
+import {format} from 'date-fns';
 import {useRef} from 'react';
 import {importPlaidAccounts} from '@libs/actions/Plaid';
 import {
@@ -158,6 +159,7 @@ function useInitialAssignCardStep({policyID, selectedFeed}: UseInitialAssignCard
             bankName,
             cardName,
             encryptedCardNumber: cardID,
+            assignmentDate: format(new Date(), CONST.DATE.FNS_FORMAT_STRING),
         };
 
         // Refetch plaid card list

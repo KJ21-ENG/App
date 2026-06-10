@@ -723,6 +723,7 @@ const SCREENS = {
         COMPANY_CARDS_ASSIGN_CARD_BANK_CONNECTION: 'Workspace_CompanyCards_AssignCard_Bank_Connection',
         COMPANY_CARDS_ASSIGN_CARD_PLAID_CONNECTION: 'Workspace_CompanyCards_AssignCard_Plaid_Connection',
         COMPANY_CARDS_ASSIGN_CARD_CARD_SELECTION: 'Workspace_CompanyCards_AssignCard_Card_Selection',
+        COMPANY_CARDS_ASSIGN_CARD_ASSIGNMENT_DATE: 'Workspace_CompanyCards_AssignCard_Assignment_Date',
         COMPANY_CARDS_ASSIGN_CARD_TRANSACTION_START_DATE: 'Workspace_CompanyCards_AssignCard_Transaction_Start_Date',
         COMPANY_CARDS_ASSIGN_CARD_CARD_NAME: 'Workspace_CompanyCards_AssignCard_Card_Name',
         COMPANY_CARDS_ASSIGN_CARD_CONFIRMATION: 'Workspace_CompanyCards_AssignCard_Confirmation',

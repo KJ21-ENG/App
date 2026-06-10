@@ -5373,6 +5373,9 @@ ${amount} para ${merchant} - ${date}`,
             noActiveCards: 'No hay tarjetas activas en este feed',
             somethingMightBeBroken:
                 '<muted-text><centered-text>O algo podría estar roto. De cualquier manera, si tienes alguna pregunta, <concierge-link>contacta a Concierge</concierge-link>.</centered-text></muted-text>',
+            chooseAssignmentDate: 'Elige una fecha de asignación',
+            assignmentDateDescription: 'Elige cuándo debe entrar en vigor esta asignación de tarjeta. Elige hoy para asignar la tarjeta inmediatamente.',
+            assignmentDate: 'Fecha de asignación',
             chooseTransactionStartDate: 'Elige una fecha de inicio de transacciones',
             startDateDescription: 'Importaremos todas las transacciones desde esta fecha en adelante. Si no se especifica una fecha, iremos tan atrás como lo permita tu banco.',
             editStartDateDescription:
@@ -5382,6 +5385,7 @@ ${amount} para ${merchant} - ${date}`,
             customCloseDate: 'Fecha de cierre personalizada',
             letsDoubleCheck: 'Verifiquemos que todo esté bien.',
             confirmationDescription: 'Comenzaremos a importar transacciones inmediatamente.',
+            confirmationDescriptionLater: 'Esta asignación de tarjeta está programada para más adelante. Las transacciones comenzarán a importarse cuando la asignación entre en vigor.',
             card: 'Tarjeta',
             cardName: 'Nombre de la tarjeta',
             brokenConnectionError:

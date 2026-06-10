@@ -47,6 +47,9 @@ type AssignCardData = {
     /** The transaction start date of the card */
     startDate: string;
 
+    /** The effective assignment date of the card */
+    assignmentDate: string;
+
     /** An option based on which the transaction start date is chosen */
     dateOption: string;
 

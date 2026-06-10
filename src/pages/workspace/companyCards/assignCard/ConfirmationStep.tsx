@@ -1,3 +1,4 @@
+import {format, isAfter, parseISO, startOfToday} from 'date-fns';
 import {Str} from 'expensify-common';
 import React, {useEffect, useState} from 'react';
 import {View} from 'react-native';
@@ -63,6 +64,8 @@ function ConfirmationStep({route}: ConfirmationStepProps) {
     const domainOrWorkspaceAccountID = getDomainOrWorkspaceAccountID(workspaceAccountID, companyCardFeedData);
 
     const cardToAssign = assignCard?.cardToAssign;
+    const assignmentDate = cardToAssign?.assignmentDate ?? format(new Date(), CONST.DATE.FNS_FORMAT_STRING);
+    const isFutureAssignmentDate = isAfter(parseISO(assignmentDate), startOfToday());
 
     const cardholder = getPersonalDetailByEmail(cardToAssign?.email ?? '');
     const cardholderName = Str.removeSMSDomain(cardholder?.displayName ?? '');
@@ -137,6 +140,11 @@ function ConfirmationStep({route}: ConfirmationStepProps) {
                     Navigation.navigate(ROUTES.WORKSPACE_COMPANY_CARDS_ASSIGN_CARD_TRANSACTION_START_DATE.getRoute(routeParams));
                 });
                 break;
+            case CONST.COMPANY_CARD.STEP.ASSIGNMENT_DATE:
+                Navigation.setNavigationActionToMicrotaskQueue(() => {
+                    Navigation.navigate(ROUTES.WORKSPACE_COMPANY_CARDS_ASSIGN_CARD_ASSIGNMENT_DATE.getRoute(routeParams));
+                });
+                break;
             case CONST.COMPANY_CARD.STEP.CARD_NAME:
                 Navigation.navigate(ROUTES.WORKSPACE_COMPANY_CARDS_ASSIGN_CARD_CARD_NAME.getRoute(routeParams));
                 break;
@@ -169,7 +177,9 @@ function ConfirmationStep({route}: ConfirmationStepProps) {
                 addBottomSafeAreaPadding
             >
                 <Text style={[styles.textHeadlineLineHeightXXL, styles.ph5, styles.mt3]}>{translate('workspace.companyCards.letsDoubleCheck')}</Text>
-                <Text style={[styles.textSupporting, styles.ph5, styles.mv3]}>{translate('workspace.companyCards.confirmationDescription')}</Text>
+                <Text style={[styles.textSupporting, styles.ph5, styles.mv3]}>
+                    {translate(isFutureAssignmentDate ? 'workspace.companyCards.confirmationDescriptionLater' : 'workspace.companyCards.confirmationDescription')}
+                </Text>
                 <MenuItemWithTopDescription
                     description={translate('workspace.companyCards.card')}
                     title={maskCardNumber(cardToAssign?.cardName ?? '', cardToAssign?.bankName)}
@@ -185,6 +195,12 @@ function ConfirmationStep({route}: ConfirmationStepProps) {
                     iconType={CONST.ICON_TYPE_AVATAR}
                     shouldShowRightIcon
                     onPress={() => editStep(CONST.COMPANY_CARD.STEP.ASSIGNEE)}
+                />
+                <MenuItemWithTopDescription
+                    description={translate('workspace.companyCards.assignmentDate')}
+                    title={assignmentDate}
+                    shouldShowRightIcon
+                    onPress={() => editStep(CONST.COMPANY_CARD.STEP.ASSIGNMENT_DATE)}
                 />
                 <MenuItemWithTopDescription
                     description={translate('workspace.moreFeatures.companyCards.transactionStartDate')}
