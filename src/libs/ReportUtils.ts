@@ -5116,6 +5116,10 @@ function canModifyHoldStatus(report: Report, reportAction: ReportAction, current
     return (isAdmin || isManager) && isProcessingReport(report);
 }
 
+function hasPendingTransactionUpdate(transaction: OnyxEntry<Transaction>): boolean {
+    return !!transaction?.pendingAction || Object.values(transaction?.pendingFields ?? {}).some(Boolean);
+}
+
 function canHoldUnholdReportAction(
     report: OnyxEntry<Report>,
     reportAction: OnyxEntry<ReportAction>,
@@ -5144,8 +5148,13 @@ function canHoldUnholdReportAction(
     const canModifyUnholdStatus = !isTrackExpenseMoneyReport && (isAdmin || (isActionOwner && isHoldActionCreator) || isApprover);
 
     const canHoldOrUnholdRequest = !isRequestSettled && !isApproved && !isClosed && !isDeletedParentAction(reportAction);
-    const canHoldRequest = canHoldOrUnholdRequest && !isOnHold && canModifyStatus && !isScanning(transaction);
-
+    const canHoldRequest =
+        canHoldOrUnholdRequest &&
+        !isOnHold &&
+        canModifyStatus &&
+        !isScanning(transaction) &&
+        !isReceiptBeingScanned(transaction) &&
+        !hasPendingTransactionUpdate(transaction);
     const canUnholdRequest = !!(canHoldOrUnholdRequest && isOnHold && (isRequestIOU ? isHoldActionCreator : canModifyUnholdStatus));
 
     return {canHoldRequest, canUnholdRequest};
