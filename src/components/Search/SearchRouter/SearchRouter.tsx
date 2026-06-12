@@ -81,6 +81,7 @@ import {
     getWorkspaceNavigationSearchOptions,
     NAVIGATION_OPTION_ICONS,
     NAVIGATION_TAB_ICONS,
+    shouldShowNavigationSearchOptions,
     TOP_LEVEL_NAVIGATION_ICONS,
     WORKSPACE_NAVIGATION_ICONS,
 } from './navigationOptions';
@@ -310,7 +311,7 @@ function SearchRouter({onRouterClose, shouldHideInputCaret, isSearchRouterDispla
 
     const getAdditionalSections: GetAdditionalSectionsCallback = useCallback(
         ({recentReports}, sectionIndex) => {
-            if (textInputValue.trim().length > CONST.SEARCH.NAVIGATION_SUGGESTION_MIN_QUERY_LENGTH) {
+            if (shouldShowNavigationSearchOptions(textInputValue)) {
                 const navigationItems = getBalancedNavigationSearchOptions([
                     getTopLevelNavigationSearchOptions(textInputValue, translate, expensifyIcons, topLevelNavigationActions),
                     getNavigationSearchOptions(textInputValue, translate, expensifyIcons, accountNavigationContext),
@@ -514,6 +515,9 @@ function SearchRouter({onRouterClose, shouldHideInputCaret, isSearchRouterDispla
                             return;
                         }
                         if (route) {
+                            if (item.shouldResetSearchContextOnSelect) {
+                                setSearchContext(false);
+                            }
                             Navigation.navigate(route);
                         }
                     });

@@ -26,6 +26,7 @@ type SearchQueryItem = ListItem & {
     mapKey?: string;
     route?: Route;
     onSelectAction?: () => void;
+    shouldResetSearchContextOnSelect?: boolean;
     rightText?: string;
     rightAvatar?: {
         source: AvatarSource;

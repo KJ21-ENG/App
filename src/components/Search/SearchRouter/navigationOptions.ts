@@ -86,6 +86,7 @@ const TOP_LEVEL_NAVIGATION_OPTIONS = (actions: TopLevelNavigationActions): Navig
 const TOP_LEVEL_NAVIGATION_ICONS: ExpensifyIconName[] = ['Home', 'Inbox', 'ReceiptMultiple', 'Buildings', 'User'];
 const NAVIGATION_TAB_ICONS: ExpensifyIconName[] = ['User', 'ReceiptMultiple'];
 const MAX_NAVIGATION_RESULTS = 8;
+const GO_NAVIGATION_QUERY = 'go';
 
 const INDEXED_SPEND_SEARCH_KEYS = new Set<SearchKey>([
     CONST.SEARCH.SEARCH_KEYS.EXPENSES,
@@ -306,8 +307,22 @@ const WORKSPACE_PAGE_OPTIONS: WorkspacePageOption[] = [
 
 const WORKSPACE_NAVIGATION_ICONS = Array.from(new Set(WORKSPACE_PAGE_OPTIONS.map((option) => option.icon)));
 
-function doesOptionMatchQuery(title: string, query: string, keywords?: string[]) {
-    return [title, ...(keywords ?? [])].filter(Boolean).join(' ').toLowerCase().includes(query);
+function normalizeNavigationQuery(query: string) {
+    return query.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function shouldShowNavigationSearchOptions(query: string) {
+    const normalizedQuery = normalizeNavigationQuery(query);
+    return normalizedQuery === GO_NAVIGATION_QUERY || normalizedQuery.length > CONST.SEARCH.NAVIGATION_SUGGESTION_MIN_QUERY_LENGTH;
+}
+
+function getGoToSearchText(title: string) {
+    return `${GO_NAVIGATION_QUERY} to ${title}`;
+}
+
+function doesOptionMatchQuery(title: string, query: string, keywords?: string[], displayText?: string) {
+    const normalizedQuery = normalizeNavigationQuery(query);
+    return [title, getGoToSearchText(title), displayText, ...(keywords ?? [])].filter(Boolean).join(' ').toLowerCase().includes(normalizedQuery);
 }
 
 function getIndexedSpendMenuItems(typeMenuSections: SearchTypeMenuSection[]): SearchTypeMenuItem[] {
@@ -360,18 +375,21 @@ function buildNavigationOptionRows(
     icons: Partial<Record<ExpensifyIconName, IconAsset>>,
     rightTab?: {text: string; icon?: IconAsset},
 ): SearchQueryItem[] {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = normalizeNavigationQuery(query);
     if (!normalizedQuery) {
         return [];
     }
 
     return options
         .filter((option) => option.shouldShow?.() !== false)
-        .map((option) => ({option, title: translate(option.titleKey)}))
-        .filter(({option, title}) => doesOptionMatchQuery(title, normalizedQuery, option.keywords))
+        .map((option) => {
+            const title = translate(option.titleKey);
+            return {option, title, displayText: translate('search.goTo', {destination: title})};
+        })
+        .filter(({option, title, displayText}) => doesOptionMatchQuery(title, normalizedQuery, option.keywords, displayText))
         .map(
-            ({option, title}): SearchQueryItem => ({
-                text: translate('search.goTo', {destination: title}),
+            ({option, displayText}): SearchQueryItem => ({
+                text: displayText,
                 singleIcon: icons[option.icon],
                 rightText: rightTab?.text,
                 rightIcon: rightTab?.icon,
@@ -455,24 +473,28 @@ function getSpendNavigationSearchOptions(
     typeMenuSections: SearchTypeMenuSection[],
     icons: Partial<Record<ExpensifyIconName, IconAsset>>,
 ): SearchQueryItem[] {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = normalizeNavigationQuery(query);
     if (!normalizedQuery) {
         return [];
     }
 
     const spendText = translate('common.spend');
     return getIndexedSpendMenuItems(typeMenuSections)
-        .map((item) => ({item, title: translate(item.translationPath)}))
-        .filter(({item, title}) => doesOptionMatchQuery(title, normalizedQuery, getSpendNavigationKeywords(item)))
+        .map((item) => {
+            const title = translate(item.translationPath);
+            return {item, title, displayText: translate('search.goTo', {destination: title})};
+        })
+        .filter(({item, title, displayText}) => doesOptionMatchQuery(title, normalizedQuery, getSpendNavigationKeywords(item), displayText))
         .map(
-            ({item, title}): SearchQueryItem => ({
-                text: translate('search.goTo', {destination: title}),
+            ({item, displayText}): SearchQueryItem => ({
+                text: displayText,
                 singleIcon: icons[item.icon],
                 rightText: spendText,
                 rightIcon: icons.ReceiptMultiple,
                 keyForList: `${CONST.SEARCH.SEARCH_ROUTER_ITEM_TYPE.NAVIGATE}-${item.key}`,
                 searchItemType: CONST.SEARCH.SEARCH_ROUTER_ITEM_TYPE.NAVIGATE,
                 route: ROUTES.SEARCH_ROOT.getRoute({query: item.searchQuery}),
+                shouldResetSearchContextOnSelect: true,
             }),
         );
 }
@@ -489,7 +511,7 @@ function getWorkspaceNavigationSearchOptions(
     {policies, currentUserEmail, isRoomsBetaEnabled}: WorkspaceNavigationParams,
     icons: Partial<Record<ExpensifyIconName, IconAsset>>,
 ): SearchQueryItem[] {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = normalizeNavigationQuery(query);
     if (!normalizedQuery) {
         return [];
     }
@@ -529,12 +551,13 @@ function getWorkspaceNavigationSearchOptions(
             }
 
             const title = translate(option.titleKey);
-            if (!doesOptionMatchQuery(title, normalizedQuery, option.keywords)) {
+            const displayText = translate('search.goTo', {destination: title});
+            if (!doesOptionMatchQuery(title, normalizedQuery, option.keywords, displayText)) {
                 continue;
             }
 
             rows.push({
-                text: translate('search.goTo', {destination: title}),
+                text: displayText,
                 singleIcon: icons[option.icon],
                 rightText: workspaceName,
                 rightAvatar: workspaceAvatar,
@@ -555,6 +578,7 @@ export {
     TOP_LEVEL_NAVIGATION_ICONS,
     MAX_NAVIGATION_RESULTS,
     getBalancedNavigationSearchOptions,
+    shouldShowNavigationSearchOptions,
     getTopLevelNavigationSearchOptions,
     getNavigationSearchOptions,
     getSpendNavigationSearchOptions,
