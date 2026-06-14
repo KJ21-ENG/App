@@ -76,6 +76,7 @@ function ImageRenderer({tnode}: CustomRendererProps<TBlock>) {
 
     const thumbnailImageComponent = (
         <ThumbnailImage
+            attachmentID={attachmentID}
             previewSourceURL={processedPreviewSource}
             style={styles.webViewStyles.tagStyles.img}
             isAuthTokenRequired={isAttachmentOrReceipt}

@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import type {ImageResizeMode, ImageSourcePropType, StyleProp, ViewStyle} from 'react-native';
 import {View} from 'react-native';
+import useCachedAttachmentSource, {isCacheableAttachmentSource} from '@hooks/useCachedAttachmentSource';
 import {useMemoizedLazyExpensifyIcons} from '@hooks/useLazyAsset';
 import useNetwork from '@hooks/useNetwork';
 import useStyleUtils from '@hooks/useStyleUtils';
@@ -24,6 +25,9 @@ import ImageWithSizeCalculation from './ImageWithSizeCalculation';
 const thumbnailDimensionsCache = new Map<string, {width: number; height: number}>();
 
 type ThumbnailImageProps = {
+    /** Attachment ID used to recover cached local images */
+    attachmentID?: string;
+
     /** Source URL for the preview image */
     previewSourceURL: string | ImageSourcePropType;
 
@@ -89,6 +93,7 @@ type ThumbnailImageProps = {
 };
 
 function ThumbnailImage({
+    attachmentID,
     previewSourceURL,
     altText,
     style,
@@ -115,10 +120,17 @@ function ThumbnailImage({
     const styles = useThemeStyles();
     const theme = useTheme();
     const {isOffline} = useNetwork();
+    const {source: cachedPreviewSourceURL, isSourceResolvedFromCache} = useCachedAttachmentSource({
+        attachmentID,
+        source: typeof previewSourceURL === 'string' ? previewSourceURL : undefined,
+    });
+    const previewSourceURLToDisplay = typeof previewSourceURL === 'string' ? cachedPreviewSourceURL : previewSourceURL;
+    const isLocalSource = typeof previewSourceURLToDisplay === 'string' && isCacheableAttachmentSource(previewSourceURLToDisplay);
+    const isAuthTokenRequiredForSource = isAuthTokenRequired && !isLocalSource && !isSourceResolvedFromCache;
     const [failedLoadKey, setFailedLoadKey] = useState<{url: string | ImageSourcePropType; isOffline: boolean} | null>(null);
-    const failedToLoad = failedLoadKey !== null && failedLoadKey.url === previewSourceURL && failedLoadKey.isOffline === isOffline;
+    const failedToLoad = failedLoadKey !== null && failedLoadKey.url === previewSourceURLToDisplay && failedLoadKey.isOffline === isOffline;
 
-    const cachedDimensions = shouldDynamicallyResize && typeof previewSourceURL === 'string' ? thumbnailDimensionsCache.get(previewSourceURL) : null;
+    const cachedDimensions = shouldDynamicallyResize && typeof previewSourceURLToDisplay === 'string' ? thumbnailDimensionsCache.get(previewSourceURLToDisplay) : null;
     const [imageDimensions, setImageDimensions] = useState({width: cachedDimensions?.width ?? imageWidth, height: cachedDimensions?.height ?? imageHeight});
     const {thumbnailDimensionsStyles} = useThumbnailDimensions(imageDimensions.width, imageDimensions.height);
     const StyleUtils = useStyleUtils();
@@ -128,8 +140,8 @@ function ThumbnailImage({
             return;
         }
 
-        if (typeof previewSourceURL === 'string') {
-            thumbnailDimensionsCache.set(previewSourceURL, {width, height});
+        if (typeof previewSourceURLToDisplay === 'string') {
+            thumbnailDimensionsCache.set(previewSourceURLToDisplay, {width, height});
         }
 
         setImageDimensions({width, height});
@@ -137,7 +149,7 @@ function ThumbnailImage({
 
     const sizeStyles = shouldDynamicallyResize ? [thumbnailDimensionsStyles] : [styles.w100, styles.h100];
 
-    if (failedToLoad || previewSourceURL === '') {
+    if (failedToLoad || previewSourceURLToDisplay === '') {
         const fallbackColor = StyleUtils.getBackgroundColorStyle(fallbackIconBackground ?? theme.border);
 
         return (
@@ -159,17 +171,17 @@ function ThumbnailImage({
             {!!isDeleted && <AttachmentDeletedIndicator containerStyles={[...sizeStyles]} />}
             <View style={[...sizeStyles, styles.alignItemsCenter, styles.justifyContentCenter]}>
                 <ImageWithSizeCalculation
-                    url={previewSourceURL}
+                    url={previewSourceURLToDisplay}
                     altText={altText}
                     onMeasure={(args) => {
                         updateImageSize(args);
                         onMeasure?.();
                     }}
                     onLoadFailure={() => {
-                        setFailedLoadKey({url: previewSourceURL, isOffline});
+                        setFailedLoadKey({url: previewSourceURLToDisplay, isOffline});
                         onLoadFailure?.();
                     }}
-                    isAuthTokenRequired={isAuthTokenRequired}
+                    isAuthTokenRequired={isAuthTokenRequiredForSource}
                     objectPosition={objectPosition}
                     loadingIconSize={loadingIconSize}
                     loadingIndicatorStyles={loadingIndicatorStyles}

@@ -219,13 +219,13 @@ function AttachmentModalBaseContent({
     const falseSV = useSharedValue(false);
     const stateValue = useMemo<AttachmentCarouselPagerStateContextType>(
         () => ({
-            pagerItems: [{source: sourceForAttachmentView, index: 0, isActive: true}],
+            pagerItems: [{source: sourceForAttachmentView, index: 0, isActive: true, attachmentID}],
             activePage: 0,
             pagerRef: undefined,
             isPagerScrolling: falseSV,
             isScrollEnabled: falseSV,
         }),
-        [falseSV, sourceForAttachmentView],
+        [attachmentID, falseSV, sourceForAttachmentView],
     );
 
     const actionsValue = useMemo<AttachmentCarouselPagerActionsContextType>(
@@ -266,6 +266,7 @@ function AttachmentModalBaseContent({
                 <AttachmentCarouselPagerStateContext.Provider value={stateValue}>
                     <AttachmentCarouselPagerActionsContext.Provider value={actionsValue}>
                         <AttachmentView
+                            attachmentID={attachmentID}
                             containerStyles={[styles.mh5]}
                             source={sourceForAttachmentView}
                             isAuthTokenRequired={isAuthTokenRequiredState}

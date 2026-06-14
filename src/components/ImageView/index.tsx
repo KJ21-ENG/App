@@ -9,11 +9,11 @@ import type {ImageOnLoadEvent} from '@components/Image/types';
 import Lightbox from '@components/Lightbox';
 import LoadingIndicator from '@components/LoadingIndicator';
 import PressableWithoutFeedback from '@components/Pressable/PressableWithoutFeedback';
+import useCachedAttachmentSource, {isCacheableAttachmentSource} from '@hooks/useCachedAttachmentSource';
 import useNetwork from '@hooks/useNetwork';
 import useStyleUtils from '@hooks/useStyleUtils';
 import useThemeStyles from '@hooks/useThemeStyles';
 import {canUseTouchScreen as canUseTouchScreenUtil} from '@libs/DeviceCapabilities';
-import {isLocalFile} from '@libs/fileDownload/FileUtils';
 import CONST from '@src/CONST';
 import type {Dimensions} from '@src/types/utils/Layout';
 import type ImageViewProps from './types';
@@ -28,10 +28,12 @@ function calculateZoomScale(containerSize: Dimensions, imageSize: Dimensions) {
 
 type ZoomDelta = {offsetX: number; offsetY: number};
 
-function ImageView({isAuthTokenRequired = false, url, fileName, onError}: ImageViewProps) {
+function ImageView({attachmentID, isAuthTokenRequired = false, url, fileName, onError}: ImageViewProps) {
     const styles = useThemeStyles();
     const StyleUtils = useStyleUtils();
     const {isOffline} = useNetwork();
+    const {source: urlToDisplay, isSourceResolvedFromCache} = useCachedAttachmentSource({attachmentID, source: url});
+    const isAuthTokenRequiredForSource = isAuthTokenRequired && !isCacheableAttachmentSource(urlToDisplay) && !isSourceResolvedFromCache;
     const scrollableRef = useRef<View & HTMLDivElement>(null);
     const canUseTouchScreen = canUseTouchScreenUtil();
 
@@ -71,6 +73,10 @@ function ImageView({isAuthTokenRequired = false, url, fileName, onError}: ImageV
 
     const imageLoadingEnd = () => {
         setIsLoading(false);
+    };
+
+    const imageLoadError = () => {
+        onError?.();
     };
 
     const onContainerPressIn = (e: GestureResponderEvent) => {
@@ -188,19 +194,17 @@ function ImageView({isAuthTokenRequired = false, url, fileName, onError}: ImageV
 
     // isLocalToUserDeviceFile means the file is located on the user device,
     // not loaded on the server yet (the user is offline when loading this file in fact)
-    let isLocalToUserDeviceFile = isLocalFile(url);
-    if (isLocalToUserDeviceFile && typeof url === 'string' && url.startsWith('/chat-attachments')) {
-        isLocalToUserDeviceFile = false;
-    }
+    const isLocalToUserDeviceFile = isCacheableAttachmentSource(urlToDisplay);
 
     const shouldShowOfflineIndicator = isOffline && !isLoading && !isLocalToUserDeviceFile;
     if (canUseTouchScreen) {
         return (
             <Lightbox
-                key={url}
-                uri={url}
-                isAuthTokenRequired={isAuthTokenRequired}
-                onError={onError}
+                key={urlToDisplay}
+                attachmentID={attachmentID}
+                uri={urlToDisplay}
+                isAuthTokenRequired={isAuthTokenRequiredForSource}
+                onError={imageLoadError}
             />
         );
     }
@@ -226,8 +230,8 @@ function ImageView({isAuthTokenRequired = false, url, fileName, onError}: ImageV
             >
                 {/* eslint-disable-next-line react-native-a11y/has-valid-accessibility-ignores-invert-colors -- Custom Image wrapper does not support this prop. */}
                 <Image
-                    source={{uri: url}}
-                    isAuthTokenRequired={isAuthTokenRequired}
+                    source={{uri: urlToDisplay}}
+                    isAuthTokenRequired={isAuthTokenRequiredForSource}
                     style={[styles.h100, styles.w100]}
                     resizeMode={RESIZE_MODES.contain}
                     onLoadStart={imageLoadingStart}
@@ -238,7 +242,7 @@ function ImageView({isAuthTokenRequired = false, url, fileName, onError}: ImageV
                         setIsLoading(true);
                         setIsZoomed(false);
                     }}
-                    onError={onError}
+                    onError={imageLoadError}
                 />
             </PressableWithoutFeedback>
 

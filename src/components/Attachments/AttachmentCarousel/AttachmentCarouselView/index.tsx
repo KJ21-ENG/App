@@ -150,15 +150,27 @@ function AttachmentCarouselView({
         [cellWidth],
     );
 
+    const pagerItems = useMemo(
+        () =>
+            attachments.map((item, index) => ({
+                source: item.source,
+                previewSource: item.previewSource,
+                index,
+                isActive: index === page,
+                attachmentID: item.attachmentID,
+            })),
+        [attachments, page],
+    );
+
     const stateValue = useMemo<AttachmentCarouselPagerStateContextType>(
         () => ({
-            pagerItems: [{source, index: 0, isActive: true}],
-            activePage: 0,
+            pagerItems,
+            activePage: page,
             pagerRef,
             isPagerScrolling,
             isScrollEnabled,
         }),
-        [source, isPagerScrolling, isScrollEnabled],
+        [pagerItems, page, isPagerScrolling, isScrollEnabled],
     );
 
     const actionsValue = useMemo<AttachmentCarouselPagerActionsContextType>(
