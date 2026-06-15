@@ -1,5 +1,6 @@
 import {circularDeepEqual} from 'fast-equals';
 import React, {useEffect, useState, useTransition} from 'react';
+import {Platform} from 'react-native';
 import Modal from '@components/Modal';
 import {isInternalPopstateInProgress} from '@components/Modal/internalPopstateGuard';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
@@ -21,7 +22,13 @@ function PopoverWithMeasuredContent({shouldWrapModalChildrenInScrollViewIfBottom
     const [isReadyToCalculatePosition, setIsReadyToCalculatePosition] = useState(false);
 
     useEffect(() => {
-        if (!isSmallScreenWidth || !shouldCloseWhenBrowserNavigationChanged) {
+        if (
+            Platform.OS !== 'web' ||
+            !isSmallScreenWidth ||
+            !shouldCloseWhenBrowserNavigationChanged ||
+            typeof window === 'undefined' ||
+            typeof window.addEventListener !== 'function'
+        ) {
             return;
         }
 
