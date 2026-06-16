@@ -5,14 +5,17 @@ import type {MarkTransactionViolationAsResolvedParams, RejectExpenseReportParams
 import {WRITE_COMMANDS} from '@libs/API/types';
 import DateUtils from '@libs/DateUtils';
 import {getMicroSecondOnyxErrorWithTranslationKey} from '@libs/ErrorUtils';
+import {addIssue92246DebugLog} from '@libs/Issue92246Debug';
 import isSearchTopmostFullScreenRoute from '@libs/Navigation/helpers/isSearchTopmostFullScreenRoute';
 import {navigationRef} from '@libs/Navigation/Navigation';
 import {buildNextStepNew, buildOptimisticNextStep} from '@libs/NextStepUtils';
 import {getLoginByAccountID} from '@libs/PersonalDetailsUtils';
 import {isDelayedSubmissionEnabled} from '@libs/PolicyUtils';
-import {getIOUActionForReportID} from '@libs/ReportActionsUtils';
+import {getAllReportActions, getIOUActionForReportID} from '@libs/ReportActionsUtils';
 import {
+    buildOptimisticCreatedReportAction,
     buildOptimisticExpenseReport,
+    buildOptimisticIOUReportAction,
     buildOptimisticMarkedAsResolvedReportAction,
     buildOptimisticMoneyRequestEntities,
     buildOptimisticMovedTransactionAction,
@@ -21,6 +24,9 @@ import {
     buildOptimisticReportLevelRejectAction,
     buildOptimisticReportLevelRejectCommentAction,
     buildOptimisticReportPreview,
+    buildOptimisticSelfDMReport,
+    buildOptimisticUnreportedTransactionAction,
+    findSelfDMReportID,
     generateReportID,
     getDisplayedReportID,
     getParsedComment,
@@ -52,6 +58,7 @@ type RejectMoneyRequestData = {
             | typeof ONYXKEYS.COLLECTION.RAM_ONLY_REPORT_LOADING_STATE
             | typeof ONYXKEYS.COLLECTION.REPORT_NAME_VALUE_PAIRS
             | typeof ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS
+            | typeof ONYXKEYS.SELF_DM_REPORT_ID
         >
     >;
     successData: Array<
@@ -70,6 +77,7 @@ type RejectMoneyRequestData = {
     >;
     parameters: RejectMoneyRequestParams;
     urlToNavigateBack: Route | undefined;
+    debugContext: Issue92246DebugContext;
 };
 
 type RejectMoneyRequestOptions = {
@@ -77,6 +85,397 @@ type RejectMoneyRequestOptions = {
     existingRejectedReport?: OnyxEntry<OnyxTypes.Report>;
     setExistingRejectedReport?: (report: OnyxEntry<OnyxTypes.Report>) => void;
 };
+
+type Issue92246DebugContext = {
+    transactionID?: string;
+    sourceReportID?: string;
+    sourceChatReportID?: string;
+    childReportID?: string;
+    rejectedToReportID?: string;
+    selfDMReportID?: string;
+    rejectedActionReportActionID?: string;
+    rejectedCommentReportActionID?: string;
+    reportPreviewReportActionID?: string;
+    createdIOUReportActionID?: string;
+    expenseMovedReportActionID?: string;
+    expenseCreatedReportActionID?: string;
+    selfDMCreatedReportActionID?: string;
+    urlToNavigateBack?: Route;
+};
+
+type Issue92246DebugOnyxUpdate = {
+    onyxMethod: unknown;
+    key: string;
+    value: unknown;
+};
+
+const ISSUE_92246_SETTLED_SNAPSHOT_DELAYS = [250, 1000, 3000, 7000];
+
+function getObjectKeys(value: unknown): string[] | undefined {
+    if (!value || typeof value !== 'object') {
+        return undefined;
+    }
+
+    return Object.keys(value as Record<string, unknown>);
+}
+
+function summarizeWaypoints(waypoints: unknown) {
+    if (!waypoints || typeof waypoints !== 'object') {
+        return waypoints ?? null;
+    }
+
+    return Object.fromEntries(
+        Object.entries(waypoints as Record<string, Record<string, unknown>>).map(([key, waypoint]) => [
+            key,
+            {
+                name: waypoint?.name,
+                address: waypoint?.address,
+                lat: waypoint?.lat,
+                lng: waypoint?.lng,
+            },
+        ]),
+    );
+}
+
+function summarizeRoutes(routes: unknown) {
+    if (!routes || typeof routes !== 'object') {
+        return routes ?? null;
+    }
+
+    return Object.fromEntries(
+        Object.entries(routes as Record<string, Record<string, unknown>>).map(([key, route]) => [
+            key,
+            {
+                distance: route?.distance,
+                geometryType: (route?.geometry as Record<string, unknown> | undefined)?.type,
+                hasCoordinates: Array.isArray((route?.geometry as Record<string, unknown> | undefined)?.coordinates),
+            },
+        ]),
+    );
+}
+
+function summarizeTransaction(transaction: OnyxEntry<OnyxTypes.Transaction>) {
+    if (!transaction) {
+        return null;
+    }
+
+    return {
+        keys: getObjectKeys(transaction),
+        transactionID: transaction.transactionID,
+        reportID: transaction.reportID,
+        transactionThreadReportID: transaction.transactionThreadReportID,
+        iouRequestType: transaction.iouRequestType,
+        amount: transaction.amount,
+        modifiedAmount: transaction.modifiedAmount,
+        currency: transaction.currency,
+        modifiedCurrency: transaction.modifiedCurrency,
+        merchant: transaction.merchant,
+        modifiedMerchant: transaction.modifiedMerchant,
+        category: transaction.category,
+        tag: transaction.tag,
+        created: transaction.created,
+        modifiedCreated: transaction.modifiedCreated,
+        pendingAction: transaction.pendingAction,
+        pendingFields: transaction.pendingFields,
+        errorFields: transaction.errorFields,
+        errors: transaction.errors,
+        routes: summarizeRoutes(transaction.routes),
+        modifiedWaypoints: summarizeWaypoints(transaction.modifiedWaypoints),
+        comment: transaction.comment
+            ? {
+                  keys: getObjectKeys(transaction.comment),
+                  comment: transaction.comment.comment,
+                  type: transaction.comment.type,
+                  customUnit: transaction.comment.customUnit,
+                  units: transaction.comment.units,
+                  waypoints: summarizeWaypoints(transaction.comment.waypoints),
+                  odometerStart: transaction.comment.odometerStart,
+                  odometerEnd: transaction.comment.odometerEnd,
+                  dismissedViolations: transaction.comment.dismissedViolations,
+                  source: transaction.comment.source,
+                  originalTransactionID: transaction.comment.originalTransactionID,
+              }
+            : null,
+    };
+}
+
+function summarizeReport(report: OnyxEntry<OnyxTypes.Report>) {
+    if (!report) {
+        return null;
+    }
+
+    return {
+        keys: getObjectKeys(report),
+        reportID: report.reportID,
+        type: report.type,
+        chatType: report.chatType,
+        policyID: report.policyID,
+        chatReportID: report.chatReportID,
+        parentReportID: report.parentReportID,
+        parentReportActionID: report.parentReportActionID,
+        ownerAccountID: report.ownerAccountID,
+        managerID: report.managerID,
+        total: report.total,
+        currency: report.currency,
+        stateNum: report.stateNum,
+        statusNum: report.statusNum,
+        transactionCount: report.transactionCount,
+        hasOutstandingChildRequest: report.hasOutstandingChildRequest,
+        lastMessageText: report.lastMessageText,
+        lastVisibleActionCreated: report.lastVisibleActionCreated,
+        lastActionType: report.lastActionType,
+        pendingAction: report.pendingAction,
+        pendingFields: report.pendingFields,
+        errorFields: report.errorFields,
+        errors: report.errors,
+        isDeletedParentAction: report.isDeletedParentAction,
+    };
+}
+
+function summarizeOriginalMessage(originalMessage: unknown) {
+    if (!originalMessage || typeof originalMessage !== 'object') {
+        return originalMessage ?? null;
+    }
+
+    const rawOriginalMessage = originalMessage as Record<string, unknown>;
+    const fieldsToPick = [
+        'type',
+        'IOUReportID',
+        'IOUTransactionID',
+        'amount',
+        'currency',
+        'comment',
+        'deleted',
+        'lastModified',
+        'childReportID',
+        'parentReportID',
+        'parentReportActionID',
+        'customUnitName',
+        'customUnitRateName',
+        'customUnitSubRateName',
+        'rateName',
+        'rate',
+        'unit',
+    ];
+
+    return {
+        keys: Object.keys(rawOriginalMessage),
+        picked: Object.fromEntries(fieldsToPick.filter((key) => key in rawOriginalMessage).map((key) => [key, rawOriginalMessage[key]])),
+    };
+}
+
+function summarizeActionMessage(message: unknown) {
+    if (!message) {
+        return null;
+    }
+
+    const summarizeMessageItem = (item: unknown) => {
+        if (!item || typeof item !== 'object') {
+            return item ?? null;
+        }
+
+        const rawItem = item as Record<string, unknown>;
+        return {
+            keys: Object.keys(rawItem),
+            type: rawItem.type,
+            text: rawItem.text,
+            htmlLength: typeof rawItem.html === 'string' ? rawItem.html.length : undefined,
+        };
+    };
+
+    if (Array.isArray(message)) {
+        return message.slice(0, 3).map(summarizeMessageItem);
+    }
+
+    return summarizeMessageItem(message);
+}
+
+function summarizeReportAction(action: OnyxEntry<OnyxTypes.ReportAction>) {
+    if (!action) {
+        return null;
+    }
+
+    return {
+        keys: getObjectKeys(action),
+        reportActionID: action.reportActionID,
+        actionName: action.actionName,
+        created: action.created,
+        actorAccountID: action.actorAccountID,
+        reportID: action.reportID,
+        parentReportID: action.parentReportID,
+        childReportID: action.childReportID,
+        childType: action.childType,
+        childStateNum: action.childStateNum,
+        childStatusNum: action.childStatusNum,
+        childMoneyRequestCount: action.childMoneyRequestCount,
+        childLastMoneyRequestComment: action.childLastMoneyRequestComment,
+        childLastVisibleActionCreated: action.childLastVisibleActionCreated,
+        childOwnerAccountID: action.childOwnerAccountID,
+        pendingAction: action.pendingAction,
+        errorFields: action.errorFields,
+        errors: action.errors,
+        originalMessage: summarizeOriginalMessage(action.originalMessage),
+        message: summarizeActionMessage(action.message),
+    };
+}
+
+function summarizeReportActionPatchMap(value: unknown) {
+    if (!value || typeof value !== 'object') {
+        return value ?? null;
+    }
+
+    return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([reportActionID, actionPatch]) => [
+            reportActionID,
+            actionPatch && typeof actionPatch === 'object' && ('reportActionID' in actionPatch || 'actionName' in actionPatch)
+                ? summarizeReportAction(actionPatch as OnyxTypes.ReportAction)
+                : actionPatch,
+        ]),
+    );
+}
+
+function summarizeReportActions(reportID: string | undefined, highlightedReportActionIDs: Array<string | undefined> = []) {
+    if (!reportID) {
+        return null;
+    }
+
+    const reportActions = getAllReportActions(reportID);
+    const actionValues = Object.values(reportActions ?? {});
+    const sortedActions = actionValues.sort((firstAction, secondAction) => (firstAction.created ?? '').localeCompare(secondAction.created ?? ''));
+    const highlightedActions = Object.fromEntries(
+        highlightedReportActionIDs
+            .filter((reportActionID): reportActionID is string => !!reportActionID)
+            .map((reportActionID) => [reportActionID, summarizeReportAction(reportActions?.[reportActionID])]),
+    );
+
+    return {
+        reportID,
+        actionCount: actionValues.length,
+        actionIDs: Object.keys(reportActions ?? {}),
+        highlightedActions,
+        lastActions: sortedActions.slice(-6).map(summarizeReportAction),
+    };
+}
+
+function summarizeOnyxUpdateValue(key: string, value: unknown) {
+    if (value === null || value === undefined) {
+        return value ?? null;
+    }
+
+    if (key.startsWith(ONYXKEYS.COLLECTION.REPORT_ACTIONS)) {
+        return summarizeReportActionPatchMap(value);
+    }
+
+    if (key.startsWith(ONYXKEYS.COLLECTION.TRANSACTION)) {
+        return summarizeTransaction(value as OnyxTypes.Transaction);
+    }
+
+    if (key.startsWith(ONYXKEYS.COLLECTION.REPORT_METADATA) || key.startsWith(ONYXKEYS.COLLECTION.REPORT_NAME_VALUE_PAIRS)) {
+        return value;
+    }
+
+    if (key.startsWith(ONYXKEYS.COLLECTION.REPORT)) {
+        return summarizeReport(value as OnyxTypes.Report);
+    }
+
+    return value;
+}
+
+function summarizeOnyxUpdates(updates: ReadonlyArray<Issue92246DebugOnyxUpdate>, debugContext: Issue92246DebugContext) {
+    return {
+        count: updates.length,
+        keys: updates.map((update) => update.key),
+        updates: updates.map((update) => ({
+            method: update.onyxMethod,
+            key: update.key,
+            value: summarizeOnyxUpdateValue(update.key, update.value),
+        })),
+        highlightedContext: debugContext,
+    };
+}
+
+function getNavigationDebugState() {
+    const currentRoute = navigationRef.getCurrentRoute();
+    const rootState = navigationRef.getRootState();
+
+    return {
+        currentRouteName: currentRoute?.name,
+        currentRouteParams: currentRoute?.params,
+        rootRouteNames: rootState?.routes.map((route) => route.name),
+    };
+}
+
+function getUniqueReportIDs(reportIDs: Array<string | undefined>) {
+    return [...new Set(reportIDs.filter((reportID): reportID is string => !!reportID))];
+}
+
+function buildIssue92246OnyxSnapshot(debugContext: Issue92246DebugContext) {
+    const allTransactions = getAllTransactions();
+    const allReports = getAllReports();
+    const sourceReport = debugContext.sourceReportID ? allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${debugContext.sourceReportID}`] : undefined;
+    const sourceChatReportID = debugContext.sourceChatReportID ?? sourceReport?.chatReportID;
+    const transaction = debugContext.transactionID ? allTransactions?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${debugContext.transactionID}`] : undefined;
+    const sourceIOUAction =
+        debugContext.sourceReportID && debugContext.transactionID ? getIOUActionForReportID(debugContext.sourceReportID, debugContext.transactionID) : undefined;
+    const rejectedToReportID = debugContext.rejectedToReportID ?? debugContext.selfDMReportID;
+    const childReportID = debugContext.childReportID ?? sourceIOUAction?.childReportID ?? transaction?.transactionThreadReportID;
+    const reportIDs = getUniqueReportIDs([debugContext.sourceReportID, sourceChatReportID, childReportID, rejectedToReportID, debugContext.selfDMReportID]);
+    const reportSummaries = Object.fromEntries(reportIDs.map((reportID) => [reportID, summarizeReport(allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${reportID}`])]));
+
+    return {
+        debugContext: {
+            ...debugContext,
+            sourceChatReportID,
+            childReportID,
+            rejectedToReportID,
+        },
+        navigation: getNavigationDebugState(),
+        transaction: summarizeTransaction(transaction),
+        reports: reportSummaries,
+        reportTransactions: Object.fromEntries(
+            reportIDs.map((reportID) => [
+                reportID,
+                getReportTransactions(reportID).map((reportTransaction) => ({
+                    transactionID: reportTransaction.transactionID,
+                    reportID: reportTransaction.reportID,
+                    amount: reportTransaction.amount,
+                    modifiedAmount: reportTransaction.modifiedAmount,
+                    currency: reportTransaction.currency,
+                    modifiedCurrency: reportTransaction.modifiedCurrency,
+                    iouRequestType: reportTransaction.iouRequestType,
+                })),
+            ]),
+        ),
+        reportActions: {
+            sourceExpenseReport: summarizeReportActions(debugContext.sourceReportID, [debugContext.rejectedActionReportActionID, debugContext.rejectedCommentReportActionID]),
+            sourceChatReport: summarizeReportActions(sourceChatReportID, [sourceReport?.parentReportActionID, debugContext.reportPreviewReportActionID]),
+            childThreadReport: summarizeReportActions(childReportID, [debugContext.expenseMovedReportActionID]),
+            rejectedToReport: summarizeReportActions(rejectedToReportID, [debugContext.createdIOUReportActionID, debugContext.expenseCreatedReportActionID, debugContext.selfDMCreatedReportActionID]),
+            selfDMReport: summarizeReportActions(debugContext.selfDMReportID, [debugContext.createdIOUReportActionID, debugContext.selfDMCreatedReportActionID]),
+        },
+        derivedActions: {
+            sourceIOUAction: summarizeReportAction(sourceIOUAction),
+            rejectedToReportIOUAction:
+                rejectedToReportID && debugContext.transactionID ? summarizeReportAction(getIOUActionForReportID(rejectedToReportID, debugContext.transactionID)) : null,
+        },
+    };
+}
+
+function addIssue92246StateSnapshotLog(event: string, debugContext: Issue92246DebugContext, extraDetails?: Record<string, unknown>) {
+    addIssue92246DebugLog(event, {
+        ...extraDetails,
+        snapshot: buildIssue92246OnyxSnapshot(debugContext),
+    });
+}
+
+function scheduleIssue92246SettledStateSnapshots(debugContext: Issue92246DebugContext) {
+    addIssue92246StateSnapshotLog('rejectMoneyRequest after API.write immediate state', debugContext, {delayMS: 0});
+    ISSUE_92246_SETTLED_SNAPSHOT_DELAYS.forEach((delayMS) => {
+        setTimeout(() => {
+            addIssue92246StateSnapshotLog('rejectMoneyRequest settled state snapshot', debugContext, {delayMS});
+        }, delayMS);
+    });
+}
 
 function dismissRejectUseExplanation() {
     const parameters: SetNameValuePairParams = {
@@ -137,6 +536,12 @@ function prepareRejectMoneyRequestData(
     const isUserOnSearchMoneyRequestReport = isSearchTopmostFullScreenRoute() && lastRoute?.name === SCREENS.SEARCH.MONEY_REQUEST_REPORT;
 
     if (!report || !transaction) {
+        addIssue92246DebugLog('prepareRejectMoneyRequestData missing data', {
+            transactionID,
+            reportID,
+            hasReport: !!report,
+            hasTransaction: !!transaction,
+        });
         return undefined;
     }
 
@@ -151,8 +556,24 @@ function prepareRejectMoneyRequestData(
     let createdIOUReportActionID;
     let expenseMovedReportActionID;
     let expenseCreatedReportActionID;
+    let selfDMReportIDForParameters;
+    let selfDMReportIDForDebug;
+    let selfDMCreatedReportActionID;
 
     const hasMultipleExpenses = getReportTransactions(reportID).length > 1;
+    addIssue92246DebugLog('prepareRejectMoneyRequestData start', {
+        transactionID,
+        reportID,
+        reportType: report.type,
+        reportPolicyID: report.policyID,
+        reportChatReportID: report.chatReportID,
+        childReportID,
+        isPolicyDelayedSubmissionEnabled,
+        isIOU,
+        hasMultipleExpenses,
+        shouldUseBulkAction: !!shouldUseBulkAction,
+        existingRejectedToReportID: rejectedToReportID,
+    });
     const transactionCommentCleanup = (() => {
         if (!transaction?.comment?.dismissedViolations?.[CONST.VIOLATIONS.AUTO_REPORTED_REJECTED_EXPENSE]) {
             return undefined;
@@ -179,6 +600,7 @@ function prepareRejectMoneyRequestData(
             | typeof ONYXKEYS.COLLECTION.RAM_ONLY_REPORT_LOADING_STATE
             | typeof ONYXKEYS.COLLECTION.REPORT_NAME_VALUE_PAIRS
             | typeof ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS
+            | typeof ONYXKEYS.SELF_DM_REPORT_ID
         >
     > = [];
 
@@ -311,6 +733,212 @@ function prepareRejectMoneyRequestData(
                 });
             }
 
+            if (!isIOU) {
+                const currentTime = DateUtils.getDBTime();
+                let selfDMReportID = findSelfDMReportID(allReports);
+
+                if (!selfDMReportID) {
+                    const optimisticSelfDMReport = buildOptimisticSelfDMReport(currentTime);
+                    selfDMReportID = optimisticSelfDMReport.reportID;
+                    const selfDMCreatedReportAction = buildOptimisticCreatedReportAction({emailCreatingAction: currentUserLogin, created: currentTime});
+                    selfDMCreatedReportActionID = selfDMCreatedReportAction.reportActionID;
+
+                    optimisticData.push(
+                        {
+                            onyxMethod: Onyx.METHOD.SET,
+                            key: `${ONYXKEYS.COLLECTION.REPORT}${selfDMReportID}`,
+                            value: {
+                                ...optimisticSelfDMReport,
+                                pendingFields: {
+                                    createChat: CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD,
+                                },
+                            },
+                        },
+                        {
+                            onyxMethod: Onyx.METHOD.MERGE,
+                            key: ONYXKEYS.SELF_DM_REPORT_ID,
+                            value: selfDMReportID,
+                        },
+                        {
+                            onyxMethod: Onyx.METHOD.MERGE,
+                            key: `${ONYXKEYS.COLLECTION.REPORT_METADATA}${selfDMReportID}`,
+                            value: {
+                                isOptimisticReport: true,
+                            },
+                        },
+                        {
+                            onyxMethod: Onyx.METHOD.SET,
+                            key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${selfDMReportID}`,
+                            value: {
+                                [selfDMCreatedReportAction.reportActionID]: selfDMCreatedReportAction,
+                            },
+                        },
+                    );
+
+                    successData.push(
+                        {
+                            onyxMethod: Onyx.METHOD.MERGE,
+                            key: `${ONYXKEYS.COLLECTION.REPORT}${selfDMReportID}`,
+                            value: {
+                                pendingFields: {
+                                    createChat: null,
+                                },
+                            },
+                        },
+                        {
+                            onyxMethod: Onyx.METHOD.MERGE,
+                            key: `${ONYXKEYS.COLLECTION.REPORT_METADATA}${selfDMReportID}`,
+                            value: {
+                                isOptimisticReport: false,
+                            },
+                        },
+                        {
+                            onyxMethod: Onyx.METHOD.MERGE,
+                            key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${selfDMReportID}`,
+                            value: {
+                                [selfDMCreatedReportAction.reportActionID]: {
+                                    pendingAction: null,
+                                },
+                            },
+                        },
+                    );
+
+                    failureData.push(
+                        {
+                            onyxMethod: Onyx.METHOD.SET,
+                            key: `${ONYXKEYS.COLLECTION.REPORT}${selfDMReportID}`,
+                            value: null,
+                        },
+                        {
+                            onyxMethod: Onyx.METHOD.MERGE,
+                            key: `${ONYXKEYS.COLLECTION.REPORT_METADATA}${selfDMReportID}`,
+                            value: null,
+                        },
+                        {
+                            onyxMethod: Onyx.METHOD.MERGE,
+                            key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${selfDMReportID}`,
+                            value: null,
+                        },
+                    );
+                }
+
+                selfDMReportIDForParameters = selfDMReportID;
+                selfDMReportIDForDebug = selfDMReportID;
+
+                const selfDMMoneyRequestAction = buildOptimisticIOUReportAction({
+                    type: CONST.IOU.REPORT_ACTION_TYPE.TRACK,
+                    amount: transactionAmount,
+                    currency: getCurrency(transaction),
+                    comment: reportAction?.originalMessage?.comment ?? transaction?.comment?.comment ?? '',
+                    participants: [{accountID: report.ownerAccountID}],
+                    transactionID,
+                    iouReportID: selfDMReportID,
+                });
+                selfDMMoneyRequestAction.childReportID = childReportID;
+                if (reportAction) {
+                    selfDMMoneyRequestAction.message = reportAction.message;
+                    selfDMMoneyRequestAction.originalMessage = {
+                        ...reportAction.originalMessage,
+                        IOUTransactionID: transactionID,
+                        type: CONST.IOU.REPORT_ACTION_TYPE.TRACK,
+                    };
+                }
+
+                createdIOUReportActionID = selfDMMoneyRequestAction.reportActionID;
+
+                const unreportedAction = buildOptimisticUnreportedTransactionAction(childReportID, reportID);
+                expenseMovedReportActionID = unreportedAction.reportActionID;
+
+                optimisticData.push(
+                    {
+                        onyxMethod: Onyx.METHOD.MERGE,
+                        key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${selfDMReportID}`,
+                        value: {
+                            [selfDMMoneyRequestAction.reportActionID]: selfDMMoneyRequestAction,
+                        },
+                    },
+                    {
+                        onyxMethod: Onyx.METHOD.MERGE,
+                        key: `${ONYXKEYS.COLLECTION.REPORT}${childReportID}`,
+                        value: {
+                            parentReportActionID: selfDMMoneyRequestAction.reportActionID,
+                            parentReportID: selfDMReportID,
+                            chatReportID: selfDMReportID,
+                            policyID: CONST.POLICY.ID_FAKE,
+                        },
+                    },
+                    {
+                        onyxMethod: Onyx.METHOD.MERGE,
+                        key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${childReportID}`,
+                        value: {
+                            [unreportedAction.reportActionID]: unreportedAction,
+                        },
+                    },
+                );
+
+                successData.push(
+                    {
+                        onyxMethod: Onyx.METHOD.MERGE,
+                        key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${selfDMReportID}`,
+                        value: {
+                            [selfDMMoneyRequestAction.reportActionID]: null,
+                        },
+                    },
+                    {
+                        onyxMethod: Onyx.METHOD.MERGE,
+                        key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${childReportID}`,
+                        value: {
+                            [unreportedAction.reportActionID]: {
+                                pendingAction: null,
+                            },
+                        },
+                    },
+                );
+
+                failureData.push(
+                    {
+                        onyxMethod: Onyx.METHOD.MERGE,
+                        key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${selfDMReportID}`,
+                        value: {
+                            [selfDMMoneyRequestAction.reportActionID]: null,
+                        },
+                    },
+                    {
+                        onyxMethod: Onyx.METHOD.MERGE,
+                        key: `${ONYXKEYS.COLLECTION.REPORT}${childReportID}`,
+                        value: {
+                            parentReportActionID: transactionThreadReport?.parentReportActionID,
+                            parentReportID: transactionThreadReport?.parentReportID,
+                            chatReportID: transactionThreadReport?.chatReportID,
+                            policyID: transactionThreadReport?.policyID,
+                        },
+                    },
+                    {
+                        onyxMethod: Onyx.METHOD.MERGE,
+                        key: `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${childReportID}`,
+                        value: {
+                            [unreportedAction.reportActionID]: null,
+                        },
+                    },
+                );
+
+                addIssue92246DebugLog('single expense rejected to selfDM', {
+                    transactionID,
+                    sourceReportID: reportID,
+                    sourceChatReportID: report.chatReportID,
+                    selfDMReportID,
+                    didCreateSelfDM: !!selfDMCreatedReportActionID,
+                    selfDMCreatedReportActionID,
+                    createdIOUReportActionID,
+                    expenseMovedReportActionID,
+                    childReportID,
+                    previousThreadParentReportID: transactionThreadReport?.parentReportID,
+                    previousThreadParentReportActionID: transactionThreadReport?.parentReportActionID,
+                    nextThreadParentReportID: selfDMReportID,
+                    nextThreadParentReportActionID: selfDMMoneyRequestAction.reportActionID,
+                });
+            }
+
             // Add success data for report deletion (no action needed, report is already deleted)
             successData.push({
                 onyxMethod: Onyx.METHOD.MERGE,
@@ -342,8 +970,9 @@ function prepareRejectMoneyRequestData(
                 const lastRouteParams = lastRoute?.params;
                 urlToNavigateBack = lastRouteParams && 'backTo' in lastRouteParams ? lastRouteParams?.backTo : undefined;
             } else {
-                // Go back to the expense chat
-                urlToNavigateBack = ROUTES.REPORT_WITH_ID.getRoute(report.chatReportID);
+                // Go back to the destination chat. For a single expense rejected from a manually submitted report,
+                // this is the selfDM where the expense becomes unreported again.
+                urlToNavigateBack = ROUTES.REPORT_WITH_ID.getRoute(selfDMReportIDForDebug ?? report.chatReportID);
             }
         }
     } else if (hasMultipleExpenses && !shouldUseBulkAction) {
@@ -743,7 +1372,7 @@ function prepareRejectMoneyRequestData(
 
     // Update hasOutstandingChildRequest on the chat report after all optimistic updates
     if (policyExpenseChat) {
-        const excludedReportID = rejectedToReportID ?? reportID;
+        const excludedReportID = hasMultipleExpenses ? (rejectedToReportID ?? reportID) : reportID;
         const shouldHaveOutstandingChildRequest = hasOutstandingChildRequest(
             policyExpenseChat,
             excludedReportID,
@@ -842,6 +1471,12 @@ function prepareRejectMoneyRequestData(
             lastVisibleActionCreated: optimisticRejectReportActionComment.created,
         });
     }
+    if (selfDMReportIDForDebug) {
+        reportsToUpdate.push({
+            reportID: selfDMReportIDForDebug,
+            lastVisibleActionCreated: optimisticRejectReportActionComment.created,
+        });
+    }
 
     const lastReadTime = DateUtils.subtractMillisecondsFromDateTime(optimisticRejectReportAction.created, 1);
     // Add optimistic data for all reports
@@ -893,9 +1528,37 @@ function prepareRejectMoneyRequestData(
         createdIOUReportActionID,
         expenseMovedReportActionID,
         expenseCreatedReportActionID,
+        selfDMReportID: selfDMReportIDForParameters,
+        selfDMCreatedReportActionID,
     };
 
-    return {optimisticData, successData, failureData, parameters, urlToNavigateBack: urlToNavigateBack as Route};
+    const debugContext: Issue92246DebugContext = {
+        transactionID,
+        sourceReportID: reportID,
+        sourceChatReportID: report.chatReportID,
+        childReportID,
+        rejectedToReportID,
+        selfDMReportID: selfDMReportIDForDebug,
+        rejectedActionReportActionID: optimisticRejectReportAction.reportActionID,
+        rejectedCommentReportActionID: optimisticRejectReportActionComment.reportActionID,
+        reportPreviewReportActionID: reportPreviewAction?.reportActionID,
+        createdIOUReportActionID,
+        expenseMovedReportActionID,
+        expenseCreatedReportActionID,
+        selfDMCreatedReportActionID,
+        urlToNavigateBack: urlToNavigateBack as Route,
+    };
+
+    addIssue92246DebugLog('prepareRejectMoneyRequestData parameters', parameters);
+    addIssue92246StateSnapshotLog('prepareRejectMoneyRequestData before API.write state', debugContext, {
+        parameters,
+        urlToNavigateBack,
+        optimisticData: summarizeOnyxUpdates(optimisticData, debugContext),
+        successData: summarizeOnyxUpdates(successData, debugContext),
+        failureData: summarizeOnyxUpdates(failureData, debugContext),
+    });
+
+    return {optimisticData, successData, failureData, parameters, urlToNavigateBack: urlToNavigateBack as Route, debugContext};
 }
 
 function rejectMoneyRequest(
@@ -912,9 +1575,19 @@ function rejectMoneyRequest(
     if (!data) {
         return;
     }
-    const {urlToNavigateBack, optimisticData, successData, failureData, parameters} = data;
+    const {urlToNavigateBack, optimisticData, successData, failureData, parameters, debugContext} = data;
+    addIssue92246DebugLog('rejectMoneyRequest API.write prepared', {
+        command: WRITE_COMMANDS.REJECT_MONEY_REQUEST,
+        parameters,
+        urlToNavigateBack,
+        optimisticKeys: optimisticData.map((update) => update.key),
+        successKeys: successData.map((update) => update.key),
+        failureKeys: failureData.map((update) => update.key),
+        navigationBeforeWrite: getNavigationDebugState(),
+    });
     // Make API call
     API.write(WRITE_COMMANDS.REJECT_MONEY_REQUEST, parameters, {optimisticData, successData, failureData});
+    scheduleIssue92246SettledStateSnapshots(debugContext);
 
     return urlToNavigateBack;
 }
@@ -998,9 +1671,74 @@ function rejectExpenseReport(
     currentUserAccountID: number | undefined,
     currentUserDisplayName: string | undefined,
     currentUserAvatarSource: AvatarSource | undefined,
+    policy?: OnyxEntry<OnyxTypes.Policy>,
+    currentUserLogin = '',
+    betas?: OnyxEntry<OnyxTypes.Beta[]>,
 ) {
     const {reportID} = report;
     const isRejectToSubmitter = targetAccountID === report.ownerAccountID;
+    const transactions = getReportTransactions(reportID);
+    const transactionID = transactions.at(0)?.transactionID;
+
+    addIssue92246DebugLog('rejectExpenseReport start', {
+        reportID,
+        report: summarizeReport(report),
+        targetAccountID,
+        ownerAccountID: report.ownerAccountID,
+        policyID: policy?.id ?? report.policyID,
+        hasPolicy: !!policy,
+        isDelayedSubmissionEnabled: policy ? isDelayedSubmissionEnabled(policy) : undefined,
+        isRejectToSubmitter,
+        transactionCount: transactions.length,
+        firstTransactionID: transactionID,
+        snapshot: buildIssue92246OnyxSnapshot({
+            sourceReportID: reportID,
+            sourceChatReportID: report.chatReportID,
+            transactionID,
+        }),
+    });
+
+    if (isRejectToSubmitter && policy && !isDelayedSubmissionEnabled(policy)) {
+        if (transactions.length === 1 && transactionID) {
+            addIssue92246DebugLog('rejectExpenseReport routed to rejectMoneyRequest', {
+                reportID,
+                transactionID,
+                targetAccountID,
+                policyID: policy.id,
+            });
+            const urlToNavigateBack = rejectMoneyRequest(
+                transactionID,
+                reportID,
+                comment,
+                policy,
+                currentUserAccountID ?? CONST.DEFAULT_NUMBER_ID,
+                currentUserLogin || getLoginByAccountID(currentUserAccountID ?? CONST.DEFAULT_NUMBER_ID) || '',
+                betas,
+            );
+            addIssue92246DebugLog('rejectExpenseReport money-request path returned navigation target', {
+                reportID,
+                transactionID,
+                urlToNavigateBack,
+                note: 'RejectExpenseReportPage uses this route as the Navigation.goBack target when present.',
+            });
+            return urlToNavigateBack;
+        }
+
+        addIssue92246DebugLog('rejectExpenseReport kept report-level path because transaction routing was not eligible', {
+            reportID,
+            targetAccountID,
+            policyID: policy.id,
+            transactionCount: transactions.length,
+            firstTransactionID: transactionID,
+        });
+    }
+
+    addIssue92246DebugLog('rejectExpenseReport using report-level API', {
+        reportID,
+        targetAccountID,
+        isRejectToSubmitter,
+    });
+
     const baseTimestamp = DateUtils.getDBTime();
     const optimisticRejectAction = buildOptimisticReportLevelRejectAction(isRejectToSubmitter, currentUserAccountID, currentUserDisplayName, currentUserAvatarSource, baseTimestamp);
     const parsedComment = getParsedComment(comment);

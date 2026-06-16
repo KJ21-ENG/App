@@ -9,6 +9,8 @@ type RejectMoneyRequestParams = {
     createdIOUReportActionID?: string;
     expenseMovedReportActionID?: string;
     expenseCreatedReportActionID?: string;
+    selfDMReportID?: string;
+    selfDMCreatedReportActionID?: string;
 };
 
 export default RejectMoneyRequestParams;

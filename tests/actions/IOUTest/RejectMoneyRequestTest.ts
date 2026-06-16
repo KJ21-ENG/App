@@ -10,7 +10,7 @@ import OnyxUpdateManager from '@src/libs/actions/OnyxUpdateManager';
 import * as API from '@src/libs/API';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
-import type {Policy, Report} from '@src/types/onyx';
+import type {Policy, Report, ReportAction} from '@src/types/onyx';
 import type Transaction from '@src/types/onyx/Transaction';
 import createRandomPolicy from '../../utils/collections/policies';
 import {createRandomReport} from '../../utils/collections/reports';
@@ -90,6 +90,9 @@ describe('actions/IOU/RejectMoneyRequest', () => {
         const TEST_USER_EMAIL = 'test@email.com';
         const MANAGER_ACCOUNT_ID = 2;
         const ADMIN_ACCOUNT_ID = 3;
+        const SELF_DM_REPORT_ID = 'selfDMReport';
+        const TRANSACTION_THREAD_REPORT_ID = 'transactionThreadReport';
+        const MONEY_REQUEST_REPORT_ACTION_ID = 'moneyRequestAction';
 
         beforeEach(async () => {
             // Set up test data
@@ -133,6 +136,62 @@ describe('actions/IOU/RejectMoneyRequest', () => {
             await Onyx.set(ONYXKEYS.SESSION, {accountID: ADMIN_ACCOUNT_ID});
             await waitForBatchedUpdates();
         });
+
+        const seedSelfDMAndMoneyRequestThread = async (expenseReport: Report, expenseTransaction: Transaction) => {
+            const selfDMReport: Report = {
+                ...createRandomReport(99, CONST.REPORT.CHAT_TYPE.SELF_DM),
+                reportID: SELF_DM_REPORT_ID,
+                type: CONST.REPORT.TYPE.CHAT,
+                ownerAccountID: TEST_USER_ACCOUNT_ID,
+                participants: {
+                    [TEST_USER_ACCOUNT_ID]: {
+                        notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.MUTE,
+                    },
+                },
+                parentReportID: undefined,
+                parentReportActionID: undefined,
+            };
+            const moneyRequestAction: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.IOU> = {
+                reportActionID: MONEY_REQUEST_REPORT_ACTION_ID,
+                reportID: expenseReport.reportID,
+                actionName: CONST.REPORT.ACTIONS.TYPE.IOU,
+                actorAccountID: TEST_USER_ACCOUNT_ID,
+                childReportID: TRANSACTION_THREAD_REPORT_ID,
+                created: '2026-06-01 00:00:00.000',
+                message: [
+                    {
+                        type: CONST.REPORT.MESSAGE.TYPE.COMMENT,
+                        html: 'Test Merchant',
+                        text: 'Test Merchant',
+                    },
+                ],
+                originalMessage: {
+                    IOUTransactionID: expenseTransaction.transactionID,
+                    amount: expenseTransaction.amount,
+                    currency: expenseTransaction.currency,
+                    type: CONST.IOU.REPORT_ACTION_TYPE.CREATE,
+                },
+                pendingAction: null,
+                shouldShow: true,
+            };
+            const transactionThreadReport: Report = {
+                ...createRandomReport(100, undefined),
+                reportID: TRANSACTION_THREAD_REPORT_ID,
+                type: CONST.REPORT.TYPE.CHAT,
+                parentReportID: expenseReport.reportID,
+                parentReportActionID: moneyRequestAction.reportActionID,
+                chatReportID: chatReport?.reportID,
+                policyID: policy?.id,
+            };
+
+            await Onyx.set(ONYXKEYS.SELF_DM_REPORT_ID, SELF_DM_REPORT_ID);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${SELF_DM_REPORT_ID}`, selfDMReport);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${TRANSACTION_THREAD_REPORT_ID}`, transactionThreadReport);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReport.reportID}`, {
+                [moneyRequestAction.reportActionID]: moneyRequestAction,
+            });
+            await waitForBatchedUpdates();
+        };
 
         afterEach(async () => {
             await Onyx.clear();
@@ -181,6 +240,57 @@ describe('actions/IOU/RejectMoneyRequest', () => {
                     }),
                 ]),
             );
+        });
+
+        it('should move a single rejected expense to selfDM when submission frequency is disabled', async () => {
+            // eslint-disable-next-line rulesdir/no-multiple-api-calls
+            const writeSpy = jest.spyOn(API, 'write').mockImplementation(jest.fn());
+            const manualSubmissionPolicy = {
+                ...policy,
+                autoReporting: false,
+            };
+            const expenseReport = {...iouReport, type: CONST.REPORT.TYPE.EXPENSE};
+
+            await Onyx.set(`${ONYXKEYS.COLLECTION.POLICY}${manualSubmissionPolicy?.id}`, manualSubmissionPolicy);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${expenseReport.reportID}`, expenseReport);
+            await seedSelfDMAndMoneyRequestThread(expenseReport, transaction);
+            await waitForBatchedUpdates();
+
+            if (!transaction?.transactionID || !expenseReport.reportID) {
+                throw new Error('Required transaction or report data is missing');
+            }
+
+            rejectMoneyRequest(transaction.transactionID, expenseReport.reportID, comment, manualSubmissionPolicy, TEST_USER_ACCOUNT_ID, TEST_USER_EMAIL, [CONST.BETAS.ALL]);
+            await waitForBatchedUpdates();
+
+            const updatedTransaction = await getOnyxValue(`${ONYXKEYS.COLLECTION.TRANSACTION}${transaction.transactionID}`);
+            expect(updatedTransaction?.reportID).toBe(CONST.REPORT.UNREPORTED_REPORT_ID);
+
+            const selfDMReportActions = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${SELF_DM_REPORT_ID}`);
+            const selfDMMoneyRequestAction = Object.values(selfDMReportActions ?? {}).find((action) => action?.originalMessage?.IOUTransactionID === transaction.transactionID);
+            expect(selfDMMoneyRequestAction?.originalMessage?.type).toBe(CONST.IOU.REPORT_ACTION_TYPE.TRACK);
+
+            const transactionThreadReport = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT}${TRANSACTION_THREAD_REPORT_ID}`);
+            expect(transactionThreadReport?.parentReportID).toBe(SELF_DM_REPORT_ID);
+            expect(transactionThreadReport?.parentReportActionID).toBe(selfDMMoneyRequestAction?.reportActionID);
+            expect(transactionThreadReport?.chatReportID).toBe(SELF_DM_REPORT_ID);
+            expect(transactionThreadReport?.policyID).toBe(CONST.POLICY.ID_FAKE);
+
+            const transactionThreadActions = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${TRANSACTION_THREAD_REPORT_ID}`);
+            const unreportedAction = Object.values(transactionThreadActions ?? {}).find((action) => action?.actionName === CONST.REPORT.ACTIONS.TYPE.UNREPORTED_TRANSACTION);
+            expect(unreportedAction).toBeDefined();
+
+            expect(writeSpy).toHaveBeenCalledWith(
+                WRITE_COMMANDS.REJECT_MONEY_REQUEST,
+                expect.objectContaining({
+                    rejectedToReportID: undefined,
+                    selfDMReportID: SELF_DM_REPORT_ID,
+                    createdIOUReportActionID: selfDMMoneyRequestAction?.reportActionID,
+                    expenseMovedReportActionID: unreportedAction?.reportActionID,
+                }),
+                expect.anything(),
+            );
+            writeSpy.mockRestore();
         });
 
         it('should the createdIOUReportActionID parameter not be undefined when rejecting an expense to an open report', async () => {
@@ -307,6 +417,10 @@ describe('actions/IOU/RejectMoneyRequest', () => {
         const APPROVER_ACCOUNT_ID = 3;
         const CURRENT_USER_DISPLAY_NAME = 'Test User';
         const CURRENT_USER_AVATAR = 'https://example.com/avatar.png';
+        const SELF_DM_REPORT_ID = 'reportRejectSelfDM';
+        const TRANSACTION_ID = 'reportRejectTransaction';
+        const TRANSACTION_THREAD_REPORT_ID = 'reportRejectTransactionThread';
+        const MONEY_REQUEST_REPORT_ACTION_ID = 'reportRejectMoneyRequestAction';
 
         let policy: Policy;
         let expenseReport: Report;
@@ -335,6 +449,114 @@ describe('actions/IOU/RejectMoneyRequest', () => {
         afterEach(async () => {
             await Onyx.clear();
             jest.clearAllMocks();
+        });
+
+        it('should route submitter rejects through REJECT_MONEY_REQUEST when submission frequency is disabled', async () => {
+            const manualSubmissionPolicy = {
+                ...policy,
+                autoReporting: false,
+            };
+            const chatReport: Report = {
+                ...createRandomReport(200, CONST.REPORT.CHAT_TYPE.POLICY_EXPENSE_CHAT),
+                reportID: 'reportRejectPolicyExpenseChat',
+                type: CONST.REPORT.TYPE.CHAT,
+                policyID: manualSubmissionPolicy.id,
+            };
+            const manualSubmissionReport: Report = {
+                ...expenseReport,
+                chatReportID: chatReport.reportID,
+            };
+            const transaction: Transaction = {
+                ...createRandomTransaction(200),
+                transactionID: TRANSACTION_ID,
+                reportID: manualSubmissionReport.reportID,
+                amount: 10000,
+                currency: CONST.CURRENCY.USD,
+            };
+            const selfDMReport: Report = {
+                ...createRandomReport(201, CONST.REPORT.CHAT_TYPE.SELF_DM),
+                reportID: SELF_DM_REPORT_ID,
+                type: CONST.REPORT.TYPE.CHAT,
+                ownerAccountID: SUBMITTER_ACCOUNT_ID,
+                participants: {
+                    [SUBMITTER_ACCOUNT_ID]: {
+                        notificationPreference: CONST.REPORT.NOTIFICATION_PREFERENCE.MUTE,
+                    },
+                },
+            };
+            const moneyRequestAction: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.IOU> = {
+                reportActionID: MONEY_REQUEST_REPORT_ACTION_ID,
+                reportID: manualSubmissionReport.reportID,
+                actionName: CONST.REPORT.ACTIONS.TYPE.IOU,
+                actorAccountID: SUBMITTER_ACCOUNT_ID,
+                childReportID: TRANSACTION_THREAD_REPORT_ID,
+                created: '2026-06-01 00:00:00.000',
+                message: [
+                    {
+                        type: CONST.REPORT.MESSAGE.TYPE.COMMENT,
+                        html: 'Test Merchant',
+                        text: 'Test Merchant',
+                    },
+                ],
+                originalMessage: {
+                    IOUTransactionID: TRANSACTION_ID,
+                    amount: transaction.amount,
+                    currency: transaction.currency,
+                    type: CONST.IOU.REPORT_ACTION_TYPE.CREATE,
+                },
+                pendingAction: null,
+                shouldShow: true,
+            };
+            const transactionThreadReport: Report = {
+                ...createRandomReport(202, undefined),
+                reportID: TRANSACTION_THREAD_REPORT_ID,
+                type: CONST.REPORT.TYPE.CHAT,
+                parentReportID: manualSubmissionReport.reportID,
+                parentReportActionID: moneyRequestAction.reportActionID,
+                chatReportID: chatReport.reportID,
+                policyID: manualSubmissionPolicy.id,
+            };
+
+            await Onyx.set(`${ONYXKEYS.COLLECTION.POLICY}${manualSubmissionPolicy.id}`, manualSubmissionPolicy);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${chatReport.reportID}`, chatReport);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${manualSubmissionReport.reportID}`, manualSubmissionReport);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${SELF_DM_REPORT_ID}`, selfDMReport);
+            await Onyx.set(ONYXKEYS.SELF_DM_REPORT_ID, SELF_DM_REPORT_ID);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${TRANSACTION_THREAD_REPORT_ID}`, transactionThreadReport);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${manualSubmissionReport.reportID}`, {
+                [moneyRequestAction.reportActionID]: moneyRequestAction,
+            });
+            await Onyx.set(`${ONYXKEYS.COLLECTION.TRANSACTION}${TRANSACTION_ID}`, transaction);
+            await waitForBatchedUpdates();
+
+            // eslint-disable-next-line rulesdir/no-multiple-api-calls
+            const writeSpy = jest.spyOn(API, 'write').mockImplementation(jest.fn());
+
+            rejectExpenseReport(
+                manualSubmissionReport,
+                SUBMITTER_ACCOUNT_ID,
+                comment,
+                TEST_USER_ACCOUNT_ID,
+                CURRENT_USER_DISPLAY_NAME,
+                CURRENT_USER_AVATAR,
+                manualSubmissionPolicy,
+                RORY_EMAIL,
+                [CONST.BETAS.ALL],
+            );
+            await waitForBatchedUpdates();
+
+            expect(writeSpy).toHaveBeenCalledTimes(1);
+            expect(writeSpy).toHaveBeenCalledWith(
+                WRITE_COMMANDS.REJECT_MONEY_REQUEST,
+                expect.objectContaining({
+                    transactionID: TRANSACTION_ID,
+                    reportID: manualSubmissionReport.reportID,
+                    rejectedToReportID: undefined,
+                    selfDMReportID: SELF_DM_REPORT_ID,
+                }),
+                expect.anything(),
+            );
+            writeSpy.mockRestore();
         });
 
         it('should call API.write with REJECT_EXPENSE_REPORT command', async () => {

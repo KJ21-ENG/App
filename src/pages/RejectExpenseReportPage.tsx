@@ -17,6 +17,7 @@ import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
 import useThemeStyles from '@hooks/useThemeStyles';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
+import {addIssue92246DebugLog} from '@libs/Issue92246Debug';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackScreenProps} from '@libs/Navigation/PlatformStackNavigation/types';
 import type {MoneyRequestNavigatorParamList} from '@libs/Navigation/types';
@@ -40,6 +41,8 @@ function RejectExpenseReportPage({route}: RejectExpenseReportPageProps) {
 
     const [report] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${getNonEmptyStringOnyxID(reportID)}`);
     const [reportActions] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${getNonEmptyStringOnyxID(reportID)}`);
+    const [policy] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY}${getNonEmptyStringOnyxID(report?.policyID)}`);
+    const [betas] = useOnyx(ONYXKEYS.BETAS);
     const {isDelegateAccessRestricted} = useDelegateNoAccessState();
     const {showDelegateNoAccessModal} = useDelegateNoAccessActions();
     const [selectedTargetAccountID, setSelectedTargetAccountID] = useState<string>('');
@@ -137,15 +140,29 @@ function RejectExpenseReportPage({route}: RejectExpenseReportPageProps) {
         if (!report) {
             return;
         }
-        rejectExpenseReport(
+        const urlToNavigateBack = rejectExpenseReport(
             report,
             targetAccountID,
             values[INPUT_IDS.COMMENT],
             currentUserPersonalDetails?.accountID,
             currentUserPersonalDetails?.displayName,
             currentUserPersonalDetails?.avatar,
+            policy,
+            currentUserPersonalDetails?.login ?? currentUserPersonalDetails?.email ?? '',
+            betas,
         );
-        Navigation.goBack();
+        addIssue92246DebugLog('RejectExpenseReportPage submit completed', {
+            reportID,
+            targetAccountID,
+            submitterAccountID,
+            hasPreviousApprover,
+            selectedTargetAccountID,
+            returnedNavigationTarget: urlToNavigateBack,
+            willCallNavigationGoBack: !urlToNavigateBack,
+            willCallNavigationGoBackWithTarget: !!urlToNavigateBack,
+            routeParams: route.params,
+        });
+        Navigation.goBack(urlToNavigateBack);
     };
 
     return (
