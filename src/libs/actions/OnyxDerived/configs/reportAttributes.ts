@@ -1,6 +1,6 @@
 import type {OnyxCollection, OnyxEntry} from 'react-native-onyx';
 import {getIsOffline} from '@libs/NetworkState';
-import {getLinkedTransactionID} from '@libs/ReportActionsUtils';
+import {getIOUReportIDFromReportActionPreview, getLinkedTransactionID, isOlderReportAction} from '@libs/ReportActionsUtils';
 import {computeReportName} from '@libs/ReportNameUtils';
 import {generateIsEmptyReport, generateReportAttributes, hasVisibleReportFieldViolations, isArchivedReport, isPolicyAdmin, isPolicyExpenseChat, isValidReport} from '@libs/ReportUtils';
 import SidebarUtils from '@libs/SidebarUtils';
@@ -8,7 +8,7 @@ import createOnyxDerivedValueConfig from '@userActions/OnyxDerived/createOnyxDer
 import {hasKeyTriggeredCompute} from '@userActions/OnyxDerived/utils';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
-import type {PersonalDetailsList, Policy, ReportAttributesDerivedValue} from '@src/types/onyx';
+import type {PersonalDetailsList, Policy, ReportAction, ReportAttributesDerivedValue} from '@src/types/onyx';
 
 let previousDisplayNames: Record<string, string | undefined> = {};
 let previousPersonalDetails: OnyxEntry<PersonalDetailsList> | undefined;
@@ -374,7 +374,7 @@ export default createOnyxDerivedValueConfig({
         );
 
         // Propagate errors from IOU reports to their parent chat reports.
-        const chatReportIDsWithErrors = new Set<string>();
+        const chatReportErrorTargets = new Map<string, ReportAction | null>();
         for (const report of Object.values(reports)) {
             if (!report?.reportID) {
                 continue;
@@ -391,12 +391,29 @@ export default createOnyxDerivedValueConfig({
                 report.reportID !== report.chatReportID &&
                 (attributes?.needsParentChatErrorPropagation || attributes?.brickRoadStatus === CONST.BRICK_ROAD_INDICATOR_STATUS.ERROR)
             ) {
-                chatReportIDsWithErrors.add(report.chatReportID);
+                const chatReportActions = reportActions?.[`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${report.chatReportID}`];
+                const parentReportAction = report.parentReportActionID ? chatReportActions?.[report.parentReportActionID] : undefined;
+                const parentPreviewAction =
+                    getIOUReportIDFromReportActionPreview(parentReportAction) === report.reportID
+                        ? parentReportAction
+                        : Object.values(chatReportActions ?? {}).find((action): action is ReportAction => getIOUReportIDFromReportActionPreview(action) === report.reportID);
+                const currentTarget = chatReportErrorTargets.get(report.chatReportID);
+
+                if (!parentPreviewAction) {
+                    if (!chatReportErrorTargets.has(report.chatReportID)) {
+                        chatReportErrorTargets.set(report.chatReportID, null);
+                    }
+                    continue;
+                }
+
+                if (!currentTarget || isOlderReportAction(parentPreviewAction, currentTarget)) {
+                    chatReportErrorTargets.set(report.chatReportID, parentPreviewAction);
+                }
             }
         }
 
         // Apply the error status to the parent chat reports.
-        for (const chatReportID of chatReportIDsWithErrors) {
+        for (const [chatReportID, parentPreviewAction] of chatReportErrorTargets) {
             if (!reportAttributes[chatReportID]) {
                 continue;
             }
@@ -407,6 +424,7 @@ export default createOnyxDerivedValueConfig({
                 ...reportAttributes[chatReportID],
                 brickRoadStatus: CONST.BRICK_ROAD_INDICATOR_STATUS.ERROR,
                 actionBadge: CONST.REPORT.ACTION_BADGE.FIX,
+                actionTargetReportActionID: parentPreviewAction?.reportActionID,
             };
         }
 

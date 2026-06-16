@@ -63,6 +63,7 @@ export default function useReportUnreadMessageScrollTracking({
     useEffect(() => {
         ref.current.reportID = reportID;
         ref.current.previousViewableItems = [];
+        setIsActionBadgeAboveViewport(false);
     }, [reportID]);
 
     useEffect(() => {
@@ -113,6 +114,7 @@ export default function useReportUnreadMessageScrollTracking({
         const viewableIndexes = viewableItems.map((viewableItem) => viewableItem.index).filter((value) => typeof value === 'number');
 
         if (viewableIndexes.length === 0) {
+            setIsActionBadgeAboveViewport(false);
             return;
         }
 

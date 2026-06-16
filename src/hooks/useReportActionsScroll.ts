@@ -308,7 +308,7 @@ function useReportActionsScroll({
     };
 
     const scrollToActionBadgeTarget = () => {
-        if (actionBadgeTargetIndex < 0) {
+        if (actionBadgeTargetIndex < 0 || !isActionBadgeAboveViewport) {
             return;
         }
         reportScrollManager.scrollToIndex(actionBadgeTargetIndex);
