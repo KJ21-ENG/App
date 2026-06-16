@@ -12,6 +12,14 @@ function isDelegateOnlySubmitter(account: OnyxEntry<Account>): boolean {
     return delegateRole === CONST.DELEGATE_ROLE.SUBMITTER;
 }
 
+function shouldShowRequire2FAPage(account: OnyxEntry<Account>, hasCompletedGuidedSetupFlow: boolean | undefined): boolean {
+    return (!!account?.needsTwoFactorAuthSetup && !account?.requiresTwoFactorAuth) || (!!account?.twoFactorAuthSetupInProgress && !hasCompletedGuidedSetupFlow);
+}
+
+function isForced2FAOnboardingSetup(account: OnyxEntry<Account>, hasCompletedGuidedSetupFlow: boolean | undefined): boolean {
+    return !!account?.twoFactorAuthSetupInProgress && hasCompletedGuidedSetupFlow === false;
+}
+
 /**
  * Check if the current user has validateCodeExtendedAccess
  *
@@ -34,4 +42,4 @@ function hasValidateCodeExtendedAccess(account: OnyxEntry<Account>): boolean {
     return false;
 }
 
-export default {isValidateCodeFormSubmitting, isDelegateOnlySubmitter, hasValidateCodeExtendedAccess};
+export default {isValidateCodeFormSubmitting, isDelegateOnlySubmitter, shouldShowRequire2FAPage, isForced2FAOnboardingSetup, hasValidateCodeExtendedAccess};

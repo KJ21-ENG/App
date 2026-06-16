@@ -8,6 +8,13 @@ import ONYXKEYS from '@src/ONYXKEYS';
 import SCREENS from '@src/SCREENS';
 import waitForBatchedUpdates from '../../../utils/waitForBatchedUpdates';
 
+jest.mock('@expensify/react-native-hybrid-app', () => ({
+    __esModule: true,
+    default: {
+        isHybridApp: jest.fn(() => false),
+    },
+}));
+
 describe('OnboardingGuard', () => {
     const mockState: NavigationState = {
         key: 'root',
@@ -382,6 +389,81 @@ describe('OnboardingGuard', () => {
 
             // Then allow navigation (skip onboarding) because the user is an invited workspace member
             expect(result.type).toBe('ALLOW');
+        });
+    });
+
+    describe('required 2FA setup during onboarding', () => {
+        it('should allow navigation to the 2FA setup modal when guided setup is incomplete and 2FA setup is in progress', async () => {
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {
+                hasCompletedGuidedSetupFlow: false,
+            });
+            await Onyx.merge(ONYXKEYS.ACCOUNT, {
+                twoFactorAuthSetupInProgress: true,
+                requiresTwoFactorAuth: true,
+                needsTwoFactorAuthSetup: false,
+            });
+            await waitForBatchedUpdates();
+
+            const navigateToTwoFactorSetupAction: NavigationAction = {
+                type: CONST.NAVIGATION.ACTION_TYPE.NAVIGATE,
+                payload: {name: SCREENS.RIGHT_MODAL.TWO_FACTOR_AUTH},
+            };
+
+            const result = OnboardingGuard.evaluate(mockState, navigateToTwoFactorSetupAction, authenticatedContext);
+
+            expect(result.type).toBe('ALLOW');
+        });
+
+        it('should allow reset from onboarding to a 2FA setup screen when required setup is in progress', async () => {
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {
+                hasCompletedGuidedSetupFlow: false,
+            });
+            await Onyx.merge(ONYXKEYS.ACCOUNT, {
+                twoFactorAuthSetupInProgress: true,
+                requiresTwoFactorAuth: true,
+            });
+            await waitForBatchedUpdates();
+
+            const onboardingState: NavigationState = {
+                key: 'root',
+                index: 0,
+                routeNames: [SCREENS.ONBOARDING.PURPOSE],
+                routes: [{key: 'purpose', name: SCREENS.ONBOARDING.PURPOSE}],
+                stale: false,
+                type: 'root',
+            };
+
+            const resetToTwoFactorSetupAction: NavigationAction = {
+                type: CONST.NAVIGATION_ACTIONS.RESET,
+                payload: {
+                    key: 'root',
+                    index: 0,
+                    routeNames: [SCREENS.RIGHT_MODAL.TWO_FACTOR_AUTH],
+                    routes: [{key: 'two-factor-auth', name: SCREENS.RIGHT_MODAL.TWO_FACTOR_AUTH}],
+                    stale: false,
+                    type: 'root',
+                },
+            };
+
+            const result = OnboardingGuard.evaluate(onboardingState, resetToTwoFactorSetupAction, authenticatedContext);
+
+            expect(result.type).toBe('ALLOW');
+        });
+
+        it('should still redirect unrelated navigation while guided setup is incomplete and required 2FA setup is in progress', async () => {
+            await Onyx.merge(ONYXKEYS.NVP_ONBOARDING, {
+                hasCompletedGuidedSetupFlow: false,
+            });
+            await Onyx.merge(ONYXKEYS.ACCOUNT, {
+                twoFactorAuthSetupInProgress: true,
+                requiresTwoFactorAuth: true,
+            });
+            await waitForBatchedUpdates();
+
+            const result = OnboardingGuard.evaluate(mockState, mockAction, authenticatedContext) as {type: 'REDIRECT'; route: string};
+
+            expect(result.type).toBe('REDIRECT');
+            expect(result.route).toContain('onboarding');
         });
     });
 

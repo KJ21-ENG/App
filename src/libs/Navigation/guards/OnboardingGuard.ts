@@ -8,6 +8,7 @@ import type {ValueOf} from 'type-fest';
 import {setOnboardingErrorMessage} from '@libs/actions/Welcome';
 import Log from '@libs/Log';
 import {isOnboardingFlowName} from '@libs/Navigation/helpers/isNavigatorName';
+import isTwoFactorSetupScreen from '@libs/Navigation/helpers/isTwoFactorSetupScreen';
 import {getOnboardingInitialPath} from '@userActions/Welcome/OnboardingFlow';
 import CONFIG from '@src/CONFIG';
 import CONST from '@src/CONST';
@@ -114,6 +115,51 @@ function getOnboardingRoute(): Route {
     }) as Route;
 }
 
+type NavigationPayload = {
+    name?: string;
+    screen?: string;
+    params?: unknown;
+    state?: NavigationState;
+    routes?: NavigationPayload[];
+};
+
+function hasTwoFactorSetupRoute(value: unknown, depth = 0): boolean {
+    if (!value || typeof value !== 'object' || depth > 6) {
+        return false;
+    }
+
+    const payload = value as NavigationPayload;
+    if (isTwoFactorSetupScreen(payload.name) || isTwoFactorSetupScreen(payload.screen)) {
+        return true;
+    }
+
+    if (payload.state) {
+        const focusedRoute = findFocusedRoute(payload.state);
+        if (isTwoFactorSetupScreen(focusedRoute?.name) || hasTwoFactorSetupRoute(payload.state, depth + 1)) {
+            return true;
+        }
+    }
+
+    if (payload.params && hasTwoFactorSetupRoute(payload.params, depth + 1)) {
+        return true;
+    }
+
+    return !!payload.routes?.some((route) => hasTwoFactorSetupRoute(route, depth + 1));
+}
+
+function isRequiredTwoFactorSetupInProgress(): boolean {
+    return !!account?.needsTwoFactorAuthSetup || !!account?.twoFactorAuthSetupInProgress;
+}
+
+function isFocusedOnTwoFactorSetup(state: NavigationState): boolean {
+    const focusedRoute = findFocusedRoute(state);
+    return isTwoFactorSetupScreen(focusedRoute?.name) || hasTwoFactorSetupRoute(state.routes.at(state.index));
+}
+
+function shouldAllowRequiredTwoFactorSetupNavigation(state: NavigationState, action: NavigationAction): boolean {
+    return isRequiredTwoFactorSetupInProgress() && (isFocusedOnTwoFactorSetup(state) || hasTwoFactorSetupRoute(action.payload));
+}
+
 function shouldPreventReset(state: NavigationState, action: NavigationAction) {
     if (action.type !== CONST.NAVIGATION_ACTIONS.RESET || !action?.payload) {
         return false;
@@ -124,6 +170,10 @@ function shouldPreventReset(state: NavigationState, action: NavigationAction) {
 
     // We want to prevent the user from navigating back to a non-onboarding screen if they are currently on an onboarding screen
     if (isOnboardingFlowName(currentFocusedRoute?.name) && !isOnboardingFlowName(targetFocusedRoute?.name)) {
+        if (isRequiredTwoFactorSetupInProgress() && isTwoFactorSetupScreen(targetFocusedRoute?.name)) {
+            return false;
+        }
+
         setOnboardingErrorMessage('onboarding.purpose.errorBackButton');
         return true;
     }
@@ -196,6 +246,10 @@ const OnboardingGuard: NavigationGuard = {
             isNavigatingWithReplace;
 
         if (shouldSkipOnboarding) {
+            return {type: 'ALLOW'};
+        }
+
+        if (shouldAllowRequiredTwoFactorSetupNavigation(state, action)) {
             return {type: 'ALLOW'};
         }
 

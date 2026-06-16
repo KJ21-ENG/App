@@ -11,6 +11,7 @@ type TwoFactorAuthRouteResult = {
 
 /**
  * Returns the 2FA enabled state and a getter that resolves the correct 2FA route based on account state:
+ * - unfinished 2FA setup → dynamic setup page
  * - 2FA already enabled  → static enabled page
  * - user not validated   → dynamic verify-account page
  * - otherwise            → dynamic setup (copy codes) page
@@ -22,9 +23,10 @@ function useTwoFactorAuthRoute(): TwoFactorAuthRouteResult {
     const [account] = useOnyx(ONYXKEYS.ACCOUNT);
 
     const is2FAEnabled = !!account?.requiresTwoFactorAuth;
+    const is2FASetupInProgress = !!account?.twoFactorAuthSetupInProgress;
 
     const getTwoFactorAuthRoute = (backTo?: Route): Route => {
-        if (is2FAEnabled) {
+        if (is2FAEnabled && !is2FASetupInProgress) {
             return ROUTES.SETTINGS_2FA_ENABLED;
         }
 

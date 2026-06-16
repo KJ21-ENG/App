@@ -2,6 +2,7 @@ import {isSingleNewDotEntrySelector} from '@selectors/HybridApp';
 import {hasCompletedGuidedSetupFlowSelector, tryNewDotOnyxSelector, wasInvitedToNewDotSelector} from '@selectors/Onboarding';
 import {emailSelector} from '@selectors/Session';
 import {useEffect} from 'react';
+import AccountUtils from '@libs/AccountUtils';
 import getCurrentUrl from '@libs/Navigation/currentUrl';
 import Navigation from '@libs/Navigation/Navigation';
 import TransitionTracker from '@libs/Navigation/TransitionTracker';
@@ -43,6 +44,7 @@ function useOnboardingFlowRouter() {
     const [isSingleNewDotEntry, isSingleNewDotEntryMetadata] = useOnyx(ONYXKEYS.HYBRID_APP, {selector: isSingleNewDotEntrySelector});
 
     const isOnboardingCompleted = hasCompletedGuidedSetupFlowSelector(onboardingValues);
+    const shouldPauseOnboardingForRequired2FA = AccountUtils.shouldShowRequire2FAPage(account, isOnboardingCompleted);
 
     useEffect(() => {
         // This should delay opening the onboarding modal so it does not interfere with the ongoing ReportScreen params changes
@@ -90,7 +92,7 @@ function useOnboardingFlowRouter() {
                 // navigate goes through the router where OnboardingGuard would block the navigation.
                 // waitForProtectedRoutes ensures navigation is ready, which is critical during fresh login.
                 // Skip when HybridApp explanation modal is active (OldDot-transitioning users).
-                if (isOnboardingCompleted === false && !(CONFIG.IS_HYBRID_APP && isHybridAppOnboardingCompleted === false)) {
+                if (isOnboardingCompleted === false && !shouldPauseOnboardingForRequired2FA && !(CONFIG.IS_HYBRID_APP && isHybridAppOnboardingCompleted === false)) {
                     Navigation.waitForProtectedRoutes().then(() => {
                         startOnboardingFlow({
                             onboardingValuesParam: onboardingValues ?? undefined,
@@ -125,6 +127,7 @@ function useOnboardingFlowRouter() {
         account?.isFromPublicDomain,
         account?.hasAccessibleDomainPolicies,
         account?.validated,
+        shouldPauseOnboardingForRequired2FA,
         onboardingCompanySize,
         onboardingPurposeSelected,
         onboardingInitialPath,

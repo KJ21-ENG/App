@@ -3,6 +3,13 @@ import useTwoFactorAuthRoute from '@hooks/useTwoFactorAuthRoute';
 import type {Route} from '@src/ROUTES';
 
 const mockUseOnyx = jest.fn();
+jest.mock('@expensify/react-native-hybrid-app', () => ({
+    __esModule: true,
+    default: {
+        isHybridApp: jest.fn(() => false),
+    },
+}));
+
 jest.mock('@hooks/useOnyx', () => ({
     __esModule: true,
     default: (...args: unknown[]) => mockUseOnyx(...args) as unknown,
@@ -55,6 +62,26 @@ describe('useTwoFactorAuthRoute', () => {
         const route = result.current.getTwoFactorAuthRoute('settings/wallet' as Route);
 
         expect(route).toBe('settings/security/two-factor-auth/enabled');
+    });
+
+    it('returns the dynamic setup route when 2FA is enabled but setup is still in progress', () => {
+        mockUseOnyx.mockReturnValue([{requiresTwoFactorAuth: true, twoFactorAuthSetupInProgress: true, validated: true}]);
+
+        const {result} = renderHook(() => useTwoFactorAuthRoute());
+        const route = result.current.getTwoFactorAuthRoute('settings/security' as Route);
+
+        expect(route).toBe('settings/security/two-factor-auth');
+        expect(result.current.is2FAEnabled).toBe(true);
+    });
+
+    it('returns the dynamic verify-account route when 2FA is enabled but setup is still in progress for an unvalidated account', () => {
+        mockUseOnyx.mockReturnValue([{requiresTwoFactorAuth: true, twoFactorAuthSetupInProgress: true, validated: false}]);
+
+        const {result} = renderHook(() => useTwoFactorAuthRoute());
+        const route = result.current.getTwoFactorAuthRoute('settings/security' as Route);
+
+        expect(route).toBe('settings/security/two-factor-auth/verify-account');
+        expect(result.current.is2FAEnabled).toBe(true);
     });
 
     it('passes backTo through to createDynamicRoute for verify-account', () => {

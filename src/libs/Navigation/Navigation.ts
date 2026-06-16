@@ -34,6 +34,7 @@ import getPathFromState from './helpers/getPathFromState';
 import getStateFromPath from './helpers/getStateFromPath';
 import getTopmostReportParams from './helpers/getTopmostReportParams';
 import {isFullScreenName, isOnboardingFlowName, isSplitNavigatorName} from './helpers/isNavigatorName';
+import isTwoFactorSetupScreen from './helpers/isTwoFactorSetupScreen';
 import isReportOpenInRHP from './helpers/isReportOpenInRHP';
 import isReportTopmostSplitNavigator from './helpers/isReportTopmostSplitNavigator';
 import isSideModalNavigator from './helpers/isSideModalNavigator';
@@ -67,17 +68,6 @@ type FocusedScreen = {
 setupHadTabNavigation();
 setupNavigationFocusReturn();
 
-// Screens which are part of the 2FA setup flow - used to determine when to hide the RequireTwoFactorAuthOverlay
-const SET_UP_2FA_SCREENS = new Set<string>([
-    SCREENS.TWO_FACTOR_AUTH.DYNAMIC_ROOT,
-    SCREENS.TWO_FACTOR_AUTH.DYNAMIC_VERIFY,
-    SCREENS.TWO_FACTOR_AUTH.DYNAMIC_VERIFY_ACCOUNT,
-    SCREENS.TWO_FACTOR_AUTH.DYNAMIC_SUCCESS,
-    SCREENS.TWO_FACTOR_AUTH.SUCCESS,
-    SCREENS.TWO_FACTOR_AUTH.DISABLED,
-    SCREENS.TWO_FACTOR_AUTH.DISABLE,
-]);
-
 const MFA_FLOW_SCREENS = new Set<string>(Object.values(SCREENS.MULTIFACTOR_AUTHENTICATION));
 
 let sidePanelNVP: OnyxEntry<SidePanel>;
@@ -89,10 +79,6 @@ Onyx.connectWithoutView({
         sidePanelNVP = value;
     },
 });
-
-function isTwoFactorSetupScreen(screen: string | undefined): boolean {
-    return screen ? SET_UP_2FA_SCREENS.has(screen) : false;
-}
 
 function isMFAFlowScreen(screen: string | undefined): boolean {
     return screen ? MFA_FLOW_SCREENS.has(screen) : false;
