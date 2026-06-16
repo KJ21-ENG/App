@@ -3103,78 +3103,8 @@ describe('ReportActionsUtils', () => {
         });
     });
 
-    describe('isDynamicExternalWorkflowForwardedAction', () => {
-        it('should return true for FORWARDED action if workflow is DYNAMICEXTERNAL', () => {
-            // Given a report action with FORWARDED action type and workflow is DYNAMICEXTERNAL
-            const action: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.FORWARDED> = {
-                ...createRandomReportAction(0),
-                actionName: CONST.REPORT.ACTIONS.TYPE.FORWARDED,
-                created: '2025-11-21',
-                previousMessage: [],
-                message: [],
-                originalMessage: {
-                    workflow: CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL,
-                    expenseReportID: '1',
-                    amount: 1,
-                    currency: CONST.CURRENCY.USD,
-                },
-            };
-
-            // When checking if the action is a DEW forwarded action
-            const result = ReportActionsUtils.isDynamicExternalWorkflowForwardedAction(action);
-
-            // Then it should return true
-            expect(result).toBe(true);
-        });
-
-        it('should return false for FORWARDED action if workflow is not DYNAMICEXTERNAL', () => {
-            // Given a report action with FORWARDED action type and workflow is not DYNAMICEXTERNAL
-            const action: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.FORWARDED> = {
-                ...createRandomReportAction(0),
-                actionName: CONST.REPORT.ACTIONS.TYPE.FORWARDED,
-                created: '2025-11-21',
-                previousMessage: [],
-                message: [],
-                originalMessage: {
-                    workflow: CONST.POLICY.APPROVAL_MODE.BASIC,
-                    expenseReportID: '1',
-                    amount: 1,
-                    currency: CONST.CURRENCY.USD,
-                },
-            };
-
-            // When checking if the action is a DEW forwarded action
-            const result = ReportActionsUtils.isDynamicExternalWorkflowForwardedAction(action);
-
-            // Then it should return false
-            expect(result).toBe(false);
-        });
-
-        it('should return false for non FORWARDED action', () => {
-            // Given a report action with non FORWARDED action type
-            const action: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.APPROVED> = {
-                ...createRandomReportAction(0),
-                actionName: CONST.REPORT.ACTIONS.TYPE.APPROVED,
-                created: '2025-11-21',
-                previousMessage: [],
-                message: [],
-                originalMessage: {
-                    expenseReportID: '1',
-                    amount: 1,
-                    currency: CONST.CURRENCY.USD,
-                },
-            };
-
-            // When checking if the action is a DEW forwarded action
-            const result = ReportActionsUtils.isDynamicExternalWorkflowForwardedAction(action);
-
-            // Then it should return false
-            expect(result).toBe(false);
-        });
-    });
-
     describe('withDEWRoutedActionsArray', () => {
-        it('should add a DEW routed action for each DEW SUBMITTED and FORWARDED action', () => {
+        it('should add a DEW routed action for each DEW SUBMITTED action', () => {
             // Given a report actions array with DEW SUBMITTED and FORWARDED actions
             const reportActions: ReportAction[] = [
                 {actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT, created: '', reportActionID: '1'},
@@ -3189,7 +3119,7 @@ describe('ReportActionsUtils', () => {
                     actionName: CONST.REPORT.ACTIONS.TYPE.FORWARDED,
                     created: '',
                     reportActionID: '4',
-                    originalMessage: {workflow: CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL, to: 'example2@gmail.com'},
+                    originalMessage: {workflow: CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL, to: 'example2@gmail.com', message: 'Approval memo'},
                 },
             ];
 
@@ -3208,20 +3138,20 @@ describe('ReportActionsUtils', () => {
                     actionName: CONST.REPORT.ACTIONS.TYPE.FORWARDED,
                     created: '',
                     reportActionID: '4',
-                    originalMessage: {workflow: CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL, to: 'example2@gmail.com'},
+                    originalMessage: {workflow: CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL, to: 'example2@gmail.com', message: 'Approval memo'},
                 },
-                {actionName: CONST.REPORT.ACTIONS.TYPE.DYNAMIC_EXTERNAL_WORKFLOW_ROUTED, reportActionID: '4DEW', originalMessage: {to: 'example2@gmail.com', message: ''}},
             ];
             const actual = ReportActionsUtils.withDEWRoutedActionsArray(reportActions);
 
-            // Then DYNAMIC_EXTERNAL_WORKFLOW_ROUTED action should be added for each SUBMITTED and FORWARDED actions to the array
+            // Then DYNAMIC_EXTERNAL_WORKFLOW_ROUTED action should be added only for the SUBMITTED action
             for (let i = 0; i < expected.length; i++) {
                 expect(actual.at(i)).toEqual(expect.objectContaining(expected.at(i)));
             }
+            expect(actual).toHaveLength(expected.length);
         });
 
-        it(`should not add a DEW routed action if we don't have DEW SUBMITTED or FORWARDED action`, () => {
-            // Given a report actions array with no DEW SUBMITTED or FORWARDED actions
+        it(`should not add a DEW routed action if we don't have a DEW SUBMITTED action`, () => {
+            // Given a report actions array with no DEW SUBMITTED action
             const reportActions: ReportAction[] = [
                 {actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT, created: '', reportActionID: '1'},
                 {actionName: CONST.REPORT.ACTIONS.TYPE.SUBMITTED, created: '', reportActionID: '2'},
@@ -3244,7 +3174,7 @@ describe('ReportActionsUtils', () => {
     });
 
     describe('withDEWRoutedActionsObject', () => {
-        it('should add a DEW routed action for each DEW SUBMITTED and FORWARDED action', () => {
+        it('should add a DEW routed action for each DEW SUBMITTED action', () => {
             // Given a report actions collection with DEW SUBMITTED and FORWARDED actions
             const firstAction = {actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT, created: '', reportActionID: '1'};
             const secondAction = {
@@ -3258,7 +3188,7 @@ describe('ReportActionsUtils', () => {
                 actionName: CONST.REPORT.ACTIONS.TYPE.FORWARDED,
                 created: '',
                 reportActionID: '4',
-                originalMessage: {workflow: CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL, to: 'example2@gmail.com'},
+                originalMessage: {workflow: CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL, to: 'example2@gmail.com', message: 'Approval memo'},
             };
             const reportActions: ReportActions = {
                 [firstAction.reportActionID]: firstAction,
@@ -3273,27 +3203,22 @@ describe('ReportActionsUtils', () => {
                 reportActionID: '2DEW',
                 originalMessage: {to: 'example@gmail.com', message: ''},
             } as ReportAction;
-            const fourthDEWAction = {
-                actionName: CONST.REPORT.ACTIONS.TYPE.DYNAMIC_EXTERNAL_WORKFLOW_ROUTED,
-                reportActionID: '4DEW',
-                originalMessage: {to: 'example2@gmail.com', message: ''},
-            } as ReportAction;
             const expected: ReportActions = {
                 [firstAction.reportActionID]: firstAction,
                 [secondAction.reportActionID]: secondAction,
                 [secondDEWAction.reportActionID]: secondDEWAction,
                 [thirdAction.reportActionID]: thirdAction,
                 [fourthAction.reportActionID]: fourthAction,
-                [fourthDEWAction.reportActionID]: fourthDEWAction,
             };
             const actual = ReportActionsUtils.withDEWRoutedActionsObject(reportActions);
 
-            // Then DYNAMIC_EXTERNAL_WORKFLOW_ROUTED action should be added for each SUBMITTED and FORWARDED actions to the collection
+            // Then DYNAMIC_EXTERNAL_WORKFLOW_ROUTED action should be added only for the SUBMITTED action
             expect(actual).toMatchObject(expected);
+            expect(Object.keys(actual ?? {})).toHaveLength(Object.keys(expected).length);
         });
 
-        it(`should not add a DEW routed action if we don't have DEW SUBMITTED or FORWARDED action`, () => {
-            // Given a report actions collection with no DEW SUBMITTED or FORWARDED actions
+        it(`should not add a DEW routed action if we don't have a DEW SUBMITTED action`, () => {
+            // Given a report actions collection with no DEW SUBMITTED action
             const firstAction = {actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT, created: '', reportActionID: '1'};
             const secondAction = {actionName: CONST.REPORT.ACTIONS.TYPE.SUBMITTED, created: '', reportActionID: '2'};
             const thirdAction = {actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT, created: '', reportActionID: '3'};
@@ -3384,14 +3309,15 @@ describe('ReportActionsUtils', () => {
             expect(ReportActionsUtils.getForwardedReportActionMessage(action, translateLocal)).toBe(translateLocal('iou.forwarded', memo));
         });
 
-        it('should suppress the memo for a DEW forwarded action with a routed action', () => {
+        it('should include the memo for a DEW forwarded action', () => {
+            const memo = 'Testing approval memo';
             const action = buildForwardedAction({
-                message: 'Testing approval memo',
+                message: memo,
                 to: 'approver@example.com',
                 workflow: CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL,
             });
 
-            expect(ReportActionsUtils.getForwardedReportActionMessage(action, translateLocal)).toBe(translateLocal('iou.forwarded'));
+            expect(ReportActionsUtils.getForwardedReportActionMessage(action, translateLocal)).toBe(translateLocal('iou.forwarded', memo));
         });
     });
 

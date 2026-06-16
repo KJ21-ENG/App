@@ -319,11 +319,7 @@ function isForwardedAction(reportAction: OnyxInputOrEntry<ReportAction>): report
 }
 
 function getForwardedReportActionMessage(reportAction: OnyxEntry<ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.FORWARDED>>, translate: LocalizedTranslate): string {
-    const originalMessage = getOriginalMessage(reportAction);
-    if (originalMessage?.workflow === CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL && originalMessage?.to) {
-        return translate('iou.forwarded');
-    }
-    return translate('iou.forwarded', originalMessage?.message);
+    return translate('iou.forwarded', getOriginalMessage(reportAction)?.message);
 }
 
 function isDynamicExternalWorkflowSubmitFailedAction(reportAction: OnyxInputOrEntry<ReportAction>): reportAction is ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.DEW_SUBMIT_FAILED> {
@@ -394,10 +390,6 @@ function getMostRecentActiveDEWApproveFailedAction(reportActions: OnyxEntry<Repo
 
 function hasPendingDEWApprove(reportMetadata: OnyxEntry<ReportMetadata>, isDEWPolicy: boolean): boolean {
     return isDEWPolicy && reportMetadata?.pendingExpenseAction === CONST.EXPENSE_PENDING_ACTION.APPROVE;
-}
-
-function isDynamicExternalWorkflowForwardedAction(reportAction: OnyxInputOrEntry<ReportAction>): reportAction is ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.FORWARDED> {
-    return isActionOfType(reportAction, CONST.REPORT.ACTIONS.TYPE.FORWARDED) && getOriginalMessage(reportAction)?.workflow === CONST.POLICY.APPROVAL_MODE.DYNAMICEXTERNAL;
 }
 
 function isModifiedExpenseAction(reportAction: OnyxInputOrEntry<ReportAction>): reportAction is ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.MODIFIED_EXPENSE> {
@@ -1524,7 +1516,7 @@ function getFilteredReportActionsForReportView(actions: ReportAction[]) {
 }
 
 function getDynamicExternalWorkflowRoutedAction(
-    reportAction: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.SUBMITTED> | ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.FORWARDED>,
+    reportAction: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.SUBMITTED>,
 ): ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.DYNAMIC_EXTERNAL_WORKFLOW_ROUTED> {
     const originalMessage = getOriginalMessage(reportAction);
     return {
@@ -1542,7 +1534,7 @@ function getDynamicExternalWorkflowRoutedAction(
 
 function withDEWRoutedActionsArray(reportActions: ReportAction[]): ReportAction[] {
     return reportActions.flatMap((reportAction) => {
-        if ((isDynamicExternalWorkflowSubmitAction(reportAction) || isDynamicExternalWorkflowForwardedAction(reportAction)) && getOriginalMessage(reportAction)?.to) {
+        if (isDynamicExternalWorkflowSubmitAction(reportAction) && getOriginalMessage(reportAction)?.to) {
             return [reportAction, getDynamicExternalWorkflowRoutedAction(reportAction)];
         }
         return reportAction;
@@ -1554,7 +1546,7 @@ function withDEWRoutedActionsObject(reportActions: OnyxEntry<ReportActions>): On
         const [reportActionID, reportAction] = value;
         acc[reportActionID] = reportAction;
 
-        if ((isDynamicExternalWorkflowSubmitAction(reportAction) || isDynamicExternalWorkflowForwardedAction(reportAction)) && getOriginalMessage(reportAction)?.to) {
+        if (isDynamicExternalWorkflowSubmitAction(reportAction) && getOriginalMessage(reportAction)?.to) {
             const dynamicExternalWorkflowRoutedAction = getDynamicExternalWorkflowRoutedAction(reportAction);
             acc[dynamicExternalWorkflowRoutedAction.reportActionID] = dynamicExternalWorkflowRoutedAction;
         }
@@ -4761,7 +4753,6 @@ export {
     isDynamicExternalWorkflowSubmitAction,
     isMarkAsClosedAction,
     isForwardedAction,
-    isDynamicExternalWorkflowForwardedAction,
     isUnapprovedAction,
     isDynamicExternalWorkflowSubmitFailedAction,
     getMostRecentActiveDEWSubmitFailedAction,
