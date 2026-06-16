@@ -17,7 +17,6 @@ import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
 import useThemeStyles from '@hooks/useThemeStyles';
 import getNonEmptyStringOnyxID from '@libs/getNonEmptyStringOnyxID';
-import {addIssue92246DebugLog} from '@libs/Issue92246Debug';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackScreenProps} from '@libs/Navigation/PlatformStackNavigation/types';
 import type {MoneyRequestNavigatorParamList} from '@libs/Navigation/types';
@@ -151,17 +150,6 @@ function RejectExpenseReportPage({route}: RejectExpenseReportPageProps) {
             currentUserPersonalDetails?.login ?? currentUserPersonalDetails?.email ?? '',
             betas,
         );
-        addIssue92246DebugLog('RejectExpenseReportPage submit completed', {
-            reportID,
-            targetAccountID,
-            submitterAccountID,
-            hasPreviousApprover,
-            selectedTargetAccountID,
-            returnedNavigationTarget: urlToNavigateBack,
-            willCallNavigationGoBack: !urlToNavigateBack,
-            willCallNavigationGoBackWithTarget: !!urlToNavigateBack,
-            routeParams: route.params,
-        });
         Navigation.goBack(urlToNavigateBack);
     };
 
