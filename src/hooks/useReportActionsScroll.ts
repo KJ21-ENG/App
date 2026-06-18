@@ -58,8 +58,8 @@ type UseReportActionsScrollParams = {
     /** Stable key that changes when a streamed concierge draft becomes visible, used to trigger autoscroll */
     draftAutoScrollKey: string;
 
-    /** The index of the action badge target in the rendered actions list (-1 if none) */
-    actionBadgeTargetIndex: number;
+    /** The indexes of the action badge targets in the rendered actions list */
+    actionBadgeTargetIndexes: number[];
 
     /** Full sorted report actions for collapsing stale pagination after a live-tail jump */
     sortedAllReportActionsForPagination: OnyxTypes.ReportAction[];
@@ -122,7 +122,7 @@ function useReportActionsScroll({
     unreadMarkerReportActionIndex,
     hasNewerActions,
     draftAutoScrollKey,
-    actionBadgeTargetIndex,
+    actionBadgeTargetIndexes,
     sortedAllReportActionsForPagination,
     treatAsNoPaginationAnchor,
     setTreatAsNoPaginationAnchor,
@@ -161,19 +161,25 @@ function useReportActionsScroll({
     const shouldFocusToTopOnMount = shouldBeAlignedToTop && !initialScrollKey;
     const [shouldAutoscrollToBottom, setShouldAutoscrollToBottom] = useState(shouldFocusToTopOnMount);
 
-    const {isFloatingMessageCounterVisible, setIsFloatingMessageCounterVisible, isActionBadgeAboveViewport, trackVerticalScrolling, onViewableItemsChanged} =
-        useReportUnreadMessageScrollTracking({
-            reportID,
-            currentVerticalScrollingOffsetRef: scrollOffsetRef,
-            onUnreadActionVisible: completeSkippedMarkAsRead,
-            hasNewerActions,
-            unreadMarkerReportActionIndex,
-            isInverted: true,
-            onTrackScrolling: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-            },
-            actionBadgeTargetIndex,
-        });
+    const {
+        isFloatingMessageCounterVisible,
+        setIsFloatingMessageCounterVisible,
+        isActionBadgeAboveViewport,
+        actionBadgeTargetIndex,
+        trackVerticalScrolling,
+        onViewableItemsChanged,
+    } = useReportUnreadMessageScrollTracking({
+        reportID,
+        currentVerticalScrollingOffsetRef: scrollOffsetRef,
+        onUnreadActionVisible: completeSkippedMarkAsRead,
+        hasNewerActions,
+        unreadMarkerReportActionIndex,
+        isInverted: true,
+        onTrackScrolling: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+        },
+        actionBadgeTargetIndexes,
+    });
 
     const {isScrollToBottomEnabled, setIsScrollToBottomEnabled, completeLiveTailPruneAfterScrollToBottom} = useReportActionsNewActionLiveTail({
         reportID,

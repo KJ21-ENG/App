@@ -38,6 +38,10 @@ type ReportAttributes = {
      */
     actionTargetReportActionID?: string;
     /**
+     * All parent-visible reportActionIDs that the action badge can refer to on the report page.
+     */
+    actionTargetReportActionIDs?: string[];
+    /**
      * The errors of the report.
      */
     reportErrors: Errors;

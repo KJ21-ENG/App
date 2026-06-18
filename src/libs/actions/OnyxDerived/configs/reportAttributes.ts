@@ -374,7 +374,8 @@ export default createOnyxDerivedValueConfig({
         );
 
         // Propagate errors from IOU reports to their parent chat reports.
-        const chatReportErrorTargets = new Map<string, ReportAction | null>();
+        const chatReportIDsWithErrors = new Set<string>();
+        const chatReportErrorTargets = new Map<string, ReportAction[]>();
         for (const report of Object.values(reports)) {
             if (!report?.reportID) {
                 continue;
@@ -397,26 +398,31 @@ export default createOnyxDerivedValueConfig({
                     getIOUReportIDFromReportActionPreview(parentReportAction) === report.reportID
                         ? parentReportAction
                         : Object.values(chatReportActions ?? {}).find((action): action is ReportAction => getIOUReportIDFromReportActionPreview(action) === report.reportID);
-                const currentTarget = chatReportErrorTargets.get(report.chatReportID);
+                chatReportIDsWithErrors.add(report.chatReportID);
 
                 if (!parentPreviewAction) {
-                    if (!chatReportErrorTargets.has(report.chatReportID)) {
-                        chatReportErrorTargets.set(report.chatReportID, null);
-                    }
                     continue;
                 }
 
-                if (!currentTarget || isOlderReportAction(parentPreviewAction, currentTarget)) {
-                    chatReportErrorTargets.set(report.chatReportID, parentPreviewAction);
-                }
+                chatReportErrorTargets.set(report.chatReportID, [...(chatReportErrorTargets.get(report.chatReportID) ?? []), parentPreviewAction]);
             }
         }
 
         // Apply the error status to the parent chat reports.
-        for (const [chatReportID, parentPreviewAction] of chatReportErrorTargets) {
+        for (const chatReportID of chatReportIDsWithErrors) {
             if (!reportAttributes[chatReportID]) {
                 continue;
             }
+
+            const parentPreviewActions = [...(chatReportErrorTargets.get(chatReportID) ?? [])].sort((a, b) => {
+                if (isOlderReportAction(a, b)) {
+                    return -1;
+                }
+                if (isOlderReportAction(b, a)) {
+                    return 1;
+                }
+                return 0;
+            });
 
             // Clone the entry before mutating — it may be a reference carried over from
             // currentValue.reports that wasn't recomputed in this incremental run.
@@ -424,7 +430,8 @@ export default createOnyxDerivedValueConfig({
                 ...reportAttributes[chatReportID],
                 brickRoadStatus: CONST.BRICK_ROAD_INDICATOR_STATUS.ERROR,
                 actionBadge: CONST.REPORT.ACTION_BADGE.FIX,
-                actionTargetReportActionID: parentPreviewAction?.reportActionID,
+                actionTargetReportActionID: parentPreviewActions.at(0)?.reportActionID,
+                actionTargetReportActionIDs: parentPreviewActions.map((action) => action.reportActionID),
             };
         }
 

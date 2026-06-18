@@ -181,6 +181,7 @@ function ReportActionsList({
             return {
                 actionBadge: attrs.actionBadge,
                 actionTargetReportActionID: attrs.actionTargetReportActionID,
+                actionTargetReportActionIDs: attrs.actionTargetReportActionIDs,
                 brickRoadStatus: attrs.brickRoadStatus,
             };
         },
@@ -264,14 +265,13 @@ function ReportActionsList({
         clearDraft();
     }, [clearDraft, draftReportAction, isSyntheticDraftVisible]);
 
-    // Find the index of the action badge target in the rendered actions list (which is what the FlatList uses as data)
-    const actionBadgeTargetIndex = useMemo(() => {
-        const targetID = reportAttributes?.actionTargetReportActionID;
-        if (!targetID) {
-            return -1;
-        }
-        return renderedVisibleReportActions.findIndex((action) => action.reportActionID === targetID);
-    }, [reportAttributes?.actionTargetReportActionID, renderedVisibleReportActions]);
+    // Find the indexes of the action badge targets in the rendered actions list (which is what the FlatList uses as data).
+    const actionBadgeTargetIndexes = useMemo(() => {
+        const targetIDs = reportAttributes?.actionTargetReportActionIDs ?? (reportAttributes?.actionTargetReportActionID ? [reportAttributes.actionTargetReportActionID] : []);
+        return targetIDs
+            .map((targetID) => renderedVisibleReportActions.findIndex((action) => action.reportActionID === targetID))
+            .filter((index) => index !== -1);
+    }, [reportAttributes?.actionTargetReportActionID, reportAttributes?.actionTargetReportActionIDs, renderedVisibleReportActions]);
 
     const {
         listRef,
@@ -298,7 +298,7 @@ function ReportActionsList({
         unreadMarkerReportActionIndex,
         hasNewerActions,
         draftAutoScrollKey,
-        actionBadgeTargetIndex,
+        actionBadgeTargetIndexes,
         sortedAllReportActionsForPagination,
         treatAsNoPaginationAnchor,
         setTreatAsNoPaginationAnchor,

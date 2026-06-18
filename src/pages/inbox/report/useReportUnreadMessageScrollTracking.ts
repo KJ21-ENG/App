@@ -26,8 +26,8 @@ type Args = {
     /** Callback to call on every scroll event */
     onTrackScrolling: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 
-    /** The index of the action badge target report action in the sorted visible actions list (-1 if none) */
-    actionBadgeTargetIndex?: number;
+    /** The indexes of the action badge target report actions in the sorted visible actions list */
+    actionBadgeTargetIndexes?: number[];
 };
 
 export default function useReportUnreadMessageScrollTracking({
@@ -38,10 +38,11 @@ export default function useReportUnreadMessageScrollTracking({
     onTrackScrolling,
     unreadMarkerReportActionIndex,
     isInverted,
-    actionBadgeTargetIndex = -1,
+    actionBadgeTargetIndexes = [],
 }: Args) {
     const [isFloatingMessageCounterVisible, setIsFloatingMessageCounterVisible] = useState(false);
     const [isActionBadgeAboveViewport, setIsActionBadgeAboveViewport] = useState(false);
+    const [actionBadgeTargetIndex, setActionBadgeTargetIndex] = useState(-1);
     const isFocused = useIsFocused();
     const ref = useRef<{
         previousViewableItems: ViewToken[];
@@ -49,14 +50,14 @@ export default function useReportUnreadMessageScrollTracking({
         unreadMarkerReportActionIndex: number;
         isFocused: boolean;
         onUnreadActionVisible: () => void;
-        actionBadgeTargetIndex: number;
+        actionBadgeTargetIndexes: number[];
     }>({
         reportID,
         unreadMarkerReportActionIndex,
         previousViewableItems: [],
         isFocused: true,
         onUnreadActionVisible,
-        actionBadgeTargetIndex,
+        actionBadgeTargetIndexes,
     });
     // We want to save the updated value on ref to use it in onViewableItemsChanged
     // because FlatList requires the callback to be stable and we cannot add a dependency on the useCallback.
@@ -64,6 +65,7 @@ export default function useReportUnreadMessageScrollTracking({
         ref.current.reportID = reportID;
         ref.current.previousViewableItems = [];
         setIsActionBadgeAboveViewport(false);
+        setActionBadgeTargetIndex(-1);
     }, [reportID]);
 
     useEffect(() => {
@@ -115,6 +117,7 @@ export default function useReportUnreadMessageScrollTracking({
 
         if (viewableIndexes.length === 0) {
             setIsActionBadgeAboveViewport(false);
+            setActionBadgeTargetIndex(-1);
             return;
         }
 
@@ -138,15 +141,19 @@ export default function useReportUnreadMessageScrollTracking({
             ref.current.onUnreadActionVisible();
         }
 
-        // Track whether the action badge target is above the viewport (i.e., not visible and at a higher index in the inverted list)
-        const badgeTargetIndex = ref.current.actionBadgeTargetIndex;
-        if (badgeTargetIndex !== -1) {
-            // In an inverted list, higher indexes are "above" (older messages). The target is above the viewport
-            // when its index is greater than the max visible index.
-            const isAbove = isInverted ? badgeTargetIndex > maxIndex : badgeTargetIndex < minIndex;
-            setIsActionBadgeAboveViewport(isAbove);
-        } else {
+        // Track whether any action badge target is visible, or whether the nearest target is above the viewport.
+        const badgeTargetIndexes = ref.current.actionBadgeTargetIndexes;
+        const isAnyBadgeTargetVisible = badgeTargetIndexes.some((index) => index >= minIndex && index <= maxIndex);
+        const badgeTargetIndexesAboveViewport = isInverted
+            ? badgeTargetIndexes.filter((index) => index > maxIndex)
+            : badgeTargetIndexes.filter((index) => index < minIndex);
+        if (isAnyBadgeTargetVisible || badgeTargetIndexesAboveViewport.length === 0) {
             setIsActionBadgeAboveViewport(false);
+            setActionBadgeTargetIndex(-1);
+        } else {
+            const nearestBadgeTargetIndex = isInverted ? Math.min(...badgeTargetIndexesAboveViewport) : Math.max(...badgeTargetIndexesAboveViewport);
+            setIsActionBadgeAboveViewport(true);
+            setActionBadgeTargetIndex(nearestBadgeTargetIndex);
         }
 
         // FlatList requires a stable onViewableItemsChanged callback for optimal performance.
@@ -164,16 +171,17 @@ export default function useReportUnreadMessageScrollTracking({
         }
     }, [onViewableItemsChanged, unreadMarkerReportActionIndex]);
 
-    // When actionBadgeTargetIndex changes, recalculate visibility
+    // When actionBadgeTargetIndexes changes, recalculate visibility
     useEffect(() => {
-        ref.current.actionBadgeTargetIndex = actionBadgeTargetIndex;
+        ref.current.actionBadgeTargetIndexes = actionBadgeTargetIndexes;
         onViewableItemsChanged({viewableItems: ref.current.previousViewableItems, changed: []});
-    }, [onViewableItemsChanged, actionBadgeTargetIndex]);
+    }, [onViewableItemsChanged, actionBadgeTargetIndexes]);
 
     return {
         isFloatingMessageCounterVisible,
         setIsFloatingMessageCounterVisible,
         isActionBadgeAboveViewport,
+        actionBadgeTargetIndex,
         trackVerticalScrolling,
         onViewableItemsChanged,
     };
