@@ -8,7 +8,7 @@ import useImportSpreadsheetConfirmModal from '@hooks/useImportSpreadsheetConfirm
 import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
 import usePolicy from '@hooks/usePolicy';
-import {getCSVFeedType} from '@libs/CardUtils';
+import {getCSVFeedType, isCSVUploadFeed} from '@libs/CardUtils';
 import {findDuplicate, generateColumnNames} from '@libs/importSpreadsheetUtils';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackScreenProps} from '@libs/Navigation/PlatformStackNavigation/types';
@@ -16,7 +16,7 @@ import {goBackFromInvalidPolicy} from '@libs/PolicyUtils';
 import type {WorkspaceSplitNavigatorParamList} from '@navigation/types';
 import NotFoundPage from '@pages/ErrorPage/NotFoundPage';
 import AccessOrNotFoundWrapper from '@pages/workspace/AccessOrNotFoundWrapper';
-import {importCSVCompanyCards, openPolicyCompanyCardsFeed} from '@userActions/CompanyCards';
+import {importCSVCompanyCards, refreshImportedCompanyCardsFeed} from '@userActions/CompanyCards';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
@@ -27,6 +27,10 @@ import {isEmptyObject} from '@src/types/utils/EmptyObject';
 import isLoadingOnyxValue from '@src/types/utils/isLoadingOnyxValue';
 
 type CompanyCardsImportedPageProps = PlatformStackScreenProps<WorkspaceSplitNavigatorParamList, typeof SCREENS.WORKSPACE.COMPANY_CARDS_IMPORTED>;
+
+function isImportedCompanyCardFeed(feed: string): feed is CompanyCardFeedWithNumber {
+    return isCSVUploadFeed(feed);
+}
 
 function CompanyCardsImportedPage({route}: CompanyCardsImportedPageProps) {
     const {translate} = useLocalize();
@@ -105,8 +109,8 @@ function CompanyCardsImportedPage({route}: CompanyCardsImportedPageProps) {
     const closeImportPageAndModal = (shouldRefreshImportedFeed = false) => {
         setIsClosing(true);
         setIsImportingTransactions(false);
-        if (shouldRefreshImportedFeed) {
-            openPolicyCompanyCardsFeed(workspaceAccountID, policyID, layoutType as CompanyCardFeedWithNumber, translate);
+        if (shouldRefreshImportedFeed && isImportedCompanyCardFeed(layoutType)) {
+            refreshImportedCompanyCardsFeed(workspaceAccountID, policyID, layoutType, translate);
         }
         Navigation.goBack(ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(policyID));
     };

@@ -26,7 +26,7 @@ import * as ReportUtils from '@libs/ReportUtils';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
-import type {Card, CardFeeds, CurrencyList, Policy} from '@src/types/onyx';
+import type {Card, CardFeeds, CurrencyList, Policy, WorkspaceCardsList} from '@src/types/onyx';
 import type {AssignCard, AssignCardData} from '@src/types/onyx/AssignCard';
 import type {ExpensifyCardDetails} from '@src/types/onyx/Card';
 import type {
@@ -72,6 +72,9 @@ type OptimisticCompanyCardCSVTransaction = Pick<Transaction, 'transactionID' | '
     reportID: '0';
     pendingAction: typeof CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD;
 };
+
+const IMPORTED_COMPANY_CARDS_FEED_REFRESH_DELAYS = [3000, 10000, 20000];
+const WORKSPACE_CARDS_LIST_READ_TIMEOUT = 500;
 
 function getColumnIndex(columnMappings: string[], columnName: string): number {
     return columnMappings.findIndex((column) => column === columnName);
@@ -1018,6 +1021,58 @@ function openPolicyCompanyCardsFeed(domainAccountID: number, policyID: string, f
     API.read(READ_COMMANDS.OPEN_POLICY_COMPANY_CARDS_FEED, parameters, {optimisticData, successData, failureData});
 }
 
+function getWorkspaceCardsList(domainAccountID: number, feed: CompanyCardFeedWithNumber): Promise<OnyxEntry<WorkspaceCardsList>> {
+    const key = `${ONYXKEYS.COLLECTION.WORKSPACE_CARDS_LIST}${domainAccountID}_${feed}`;
+
+    return new Promise((resolve) => {
+        let connection: ReturnType<typeof Onyx.connectWithoutView> | undefined;
+        let didResolve = false;
+
+        const resolveOnce = (cardsList: OnyxEntry<WorkspaceCardsList>) => {
+            if (didResolve) {
+                return;
+            }
+
+            didResolve = true;
+            if (connection) {
+                Onyx.disconnect(connection);
+            }
+            resolve(cardsList);
+        };
+
+        connection = Onyx.connectWithoutView({
+            key,
+            callback: (cardsList) => {
+                setTimeout(() => resolveOnce(cardsList), 0);
+            },
+        });
+
+        setTimeout(() => resolveOnce(undefined), WORKSPACE_CARDS_LIST_READ_TIMEOUT);
+    });
+}
+
+function hasCardsToAssign(cardsList: OnyxEntry<WorkspaceCardsList>) {
+    return Object.keys(cardsList?.cardList ?? {}).length > 0;
+}
+
+function refreshImportedCompanyCardsFeed(domainAccountID: number, policyID: string, feed: CompanyCardFeedWithNumber, translate: LocaleContextProps['translate']) {
+    openPolicyCompanyCardsFeed(domainAccountID, policyID, feed, translate);
+
+    for (const delay of IMPORTED_COMPANY_CARDS_FEED_REFRESH_DELAYS) {
+        setTimeout(() => {
+            getWorkspaceCardsList(domainAccountID, feed)
+                .then((cardsList) => {
+                    if (hasCardsToAssign(cardsList)) {
+                        return;
+                    }
+
+                    openPolicyCompanyCardsFeed(domainAccountID, policyID, feed, translate);
+                })
+                .catch(() => undefined);
+        }, delay);
+    }
+}
+
 function openPolicyAddCardFeedPage(policyID: string | undefined) {
     if (!policyID) {
         return;
@@ -1297,6 +1352,7 @@ export {
     setWorkspaceCompanyCardTransactionLiability,
     openPolicyCompanyCardsPage,
     openPolicyCompanyCardsFeed,
+    refreshImportedCompanyCardsFeed,
     addNewCompanyCardsFeed,
     assignWorkspaceCompanyCard,
     unassignWorkspaceCompanyCard,
