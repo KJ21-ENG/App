@@ -16,11 +16,12 @@ import {goBackFromInvalidPolicy} from '@libs/PolicyUtils';
 import type {WorkspaceSplitNavigatorParamList} from '@navigation/types';
 import NotFoundPage from '@pages/ErrorPage/NotFoundPage';
 import AccessOrNotFoundWrapper from '@pages/workspace/AccessOrNotFoundWrapper';
-import {importCSVCompanyCards} from '@userActions/CompanyCards';
+import {importCSVCompanyCards, openPolicyCompanyCardsFeed} from '@userActions/CompanyCards';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
 import type SCREENS from '@src/SCREENS';
+import type {CompanyCardFeedWithNumber} from '@src/types/onyx/CardFeeds';
 import type {Errors} from '@src/types/onyx/OnyxCommon';
 import {isEmptyObject} from '@src/types/utils/EmptyObject';
 import isLoadingOnyxValue from '@src/types/utils/isLoadingOnyxValue';
@@ -101,9 +102,12 @@ function CompanyCardsImportedPage({route}: CompanyCardsImportedPageProps) {
 
     const validationErrors = validate();
 
-    const closeImportPageAndModal = () => {
+    const closeImportPageAndModal = (shouldRefreshImportedFeed = false) => {
         setIsClosing(true);
         setIsImportingTransactions(false);
+        if (shouldRefreshImportedFeed) {
+            openPolicyCompanyCardsFeed(workspaceAccountID, policyID, layoutType as CompanyCardFeedWithNumber, translate);
+        }
         Navigation.goBack(ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(policyID));
     };
 
@@ -152,7 +156,8 @@ function CompanyCardsImportedPage({route}: CompanyCardsImportedPageProps) {
             setIsImportingTransactions(false);
             return;
         }
-        closeImportPageAndModal();
+        const shouldRefreshImportedFeed = importFinalModal.promptKey === 'spreadsheet.importCompanyCardTransactionsSuccessfulDescription';
+        closeImportPageAndModal(shouldRefreshImportedFeed);
     };
 
     if (!spreadsheet && isLoadingOnyxValue(spreadsheetMetadata)) {
