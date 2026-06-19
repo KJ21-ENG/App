@@ -464,6 +464,43 @@ describe('canSubmitReport', () => {
         expect(canSubmitReport(expenseReport, fakePolicy, [transactionWithViolation, transactionWithoutViolation], violations, false, '', currentUserAccountID)).toBe(true);
     });
 
+    test('Return false if report only has held transactions', async () => {
+        await Onyx.merge(ONYXKEYS.SESSION, {accountID: currentUserAccountID});
+        const fakePolicy: Policy = {
+            ...createRandomPolicy(6),
+            ownerAccountID: currentUserAccountID,
+            areRulesEnabled: true,
+            preventSelfApproval: false,
+            autoReportingFrequency: 'immediate',
+            harvesting: {
+                enabled: false,
+            },
+        };
+        const expenseReport: Report = {
+            ...createRandomReport(6, undefined),
+            type: CONST.REPORT.TYPE.EXPENSE,
+            managerID: currentUserAccountID,
+            ownerAccountID: currentUserAccountID,
+            policyID: fakePolicy.id,
+            stateNum: CONST.REPORT.STATE_NUM.OPEN,
+            statusNum: CONST.REPORT.STATUS_NUM.OPEN,
+        };
+
+        const transaction: Transaction = {
+            ...createRandomTransaction(1),
+            category: '',
+            tag: '',
+            created: testDate,
+            reportID: expenseReport?.reportID,
+            comment: {
+                hold: 'hold',
+            },
+        };
+
+        await Onyx.merge(`${ONYXKEYS.COLLECTION.TRANSACTION}${transaction.transactionID}`, transaction);
+        expect(canSubmitReport(expenseReport, fakePolicy, [transaction], undefined, false, '', currentUserAccountID)).toBe(false);
+    });
+
     test('Return true if report can be submitted after being reopened', async () => {
         await Onyx.merge(ONYXKEYS.SESSION, {accountID: currentUserAccountID});
         const fakePolicy: Policy = {

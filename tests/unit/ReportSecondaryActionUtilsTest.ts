@@ -457,7 +457,7 @@ describe('getSecondaryAction', () => {
         expect(result.includes(CONST.REPORT.SECONDARY_ACTIONS.SUBMIT)).toBe(false);
     });
 
-    it('include SUBMIT option if the report is retracted', async () => {
+    it('does not include SUBMIT option if the retracted report only has held transactions', async () => {
         const report = {
             reportID: REPORT_ID,
             type: CONST.REPORT.TYPE.EXPENSE,
@@ -498,6 +498,62 @@ describe('getSecondaryAction', () => {
             report,
             chatReport,
             reportTransactions: [transaction],
+            originalTransaction: {} as Transaction,
+            violations: {},
+            bankAccountList: {},
+            policy,
+            isProduction: false,
+        });
+        expect(result.includes(CONST.REPORT.SECONDARY_ACTIONS.SUBMIT)).toBe(false);
+    });
+
+    it('includes SUBMIT option if the retracted report has at least one unheld transaction and secondary submit is otherwise allowed', async () => {
+        const report = {
+            reportID: REPORT_ID,
+            type: CONST.REPORT.TYPE.EXPENSE,
+            stateNum: CONST.REPORT.STATE_NUM.OPEN,
+            statusNum: CONST.REPORT.STATUS_NUM.OPEN,
+            total: 20,
+            ownerAccountID: EMPLOYEE_ACCOUNT_ID,
+            hasReportBeenReopened: true,
+        } as unknown as Report;
+        const policy = {
+            autoReportingFrequency: CONST.POLICY.AUTO_REPORTING_FREQUENCIES.MANUAL,
+            harvesting: {
+                enabled: true,
+            },
+            role: CONST.POLICY.ROLE.USER,
+            type: CONST.POLICY.TYPE.CORPORATE,
+        } as unknown as Policy;
+
+        const heldTransaction = {
+            transactionID: 'HELD_TRANSACTION_ID',
+            amount: 10,
+            merchant: 'Merchant',
+            date: '2025-01-01',
+            comment: {
+                hold: 'hold',
+            },
+        } as unknown as Transaction;
+        const unheldTransaction = {
+            transactionID: 'UNHELD_TRANSACTION_ID',
+            amount: 10,
+            merchant: 'Merchant',
+            date: '2025-01-01',
+        } as unknown as Transaction;
+
+        await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`, report);
+
+        jest.spyOn(ReportActionsUtils, 'getOneTransactionThreadReportID').mockReturnValue('12345');
+        jest.spyOn(ReportUtils, 'isHoldCreator').mockReturnValue(true);
+
+        const result = getSecondaryReportActions({
+            currentUserLogin: EMPLOYEE_EMAIL,
+            currentUserAccountID: EMPLOYEE_ACCOUNT_ID,
+            submitterLogin: '',
+            report,
+            chatReport,
+            reportTransactions: [heldTransaction, unheldTransaction],
             originalTransaction: {} as Transaction,
             violations: {},
             bankAccountList: {},

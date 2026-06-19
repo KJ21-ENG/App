@@ -44,6 +44,7 @@ import {
     getReportOrDraftReport,
     getReportTransactions,
     hasHeldExpenses as hasHeldExpensesReportUtils,
+    hasOnlyHeldExpenses,
     hasOnlyNonReimbursableTransactions,
     hasOutstandingChildRequest,
     isArchivedReport,
@@ -270,10 +271,12 @@ function canSubmitReport(
     const hasAnySubmissionBlockingViolations = transactions.some((transaction) =>
         hasSubmissionBlockingViolations(transaction, allViolations, currentUserEmailParam, currentUserAccountID, report, policy),
     );
+    const hasAllHeldExpenses = hasOnlyHeldExpenses(transactions);
 
     return (
         isOpenExpenseReport &&
         (report?.ownerAccountID === currentUserAccountID || report?.managerID === currentUserAccountID || isAdmin) &&
+        !hasAllHeldExpenses &&
         !hasScanFailTransactions &&
         !hasAllPendingRTERViolations &&
         hasTransactionWithoutRTERViolation &&

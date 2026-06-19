@@ -18,6 +18,7 @@ import {
     getParentReport,
     getReportTransactions,
     hasExportError as hasExportErrorUtil,
+    hasOnlyHeldExpenses,
     hasOnlyNonReimbursableTransactions,
     isClosedReport,
     isCurrentUserSubmitter,
@@ -50,6 +51,10 @@ function canSubmit(
     const isOpen = isOpenReport(report);
 
     const isAnyReceiptBeingScanned = transactions?.some((transaction) => isScanning(transaction));
+
+    if (hasOnlyHeldExpenses(transactions ?? [])) {
+        return false;
+    }
 
     if (hasSmartScanFailedWithMissingFields(transactions ?? [], report)) {
         return false;
