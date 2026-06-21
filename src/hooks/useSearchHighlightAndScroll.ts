@@ -139,7 +139,7 @@ function useSearchHighlightAndScroll({
             // Trigger the search
             TransitionTracker.runAfterTransitions({
                 callback: () => {
-                    search({queryJSON, searchKey, offset, shouldCalculateTotals, isLoading: !!searchResults?.search?.isLoading});
+                    search({queryJSON, searchKey, offset, shouldCalculateTotals, isLoading: !!searchResults?.search?.isLoading, shouldPreserveDataOnFailure: true});
                 },
             });
 

@@ -553,6 +553,7 @@ function getOnyxLoadingData(
     isOffline?: boolean,
     isSearchAPI = false,
     shouldCalculateTotals?: boolean,
+    shouldPreserveDataOnFailure = false,
 ): OnyxData<typeof ONYXKEYS.COLLECTION.SNAPSHOT> {
     const shouldClearTotals = isSearchAPI && shouldCalculateTotals === false && offset === 0;
     const optimisticData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.SNAPSHOT>> = [
@@ -567,13 +568,17 @@ function getOnyxLoadingData(
                 },
             },
         },
-        {
-            onyxMethod: Onyx.METHOD.MERGE,
-            key: `${ONYXKEYS.COLLECTION.SNAPSHOT}${hash}`,
-            value: {
-                errors: null,
-            },
-        },
+        ...(!shouldPreserveDataOnFailure
+            ? [
+                  {
+                      onyxMethod: Onyx.METHOD.MERGE,
+                      key: `${ONYXKEYS.COLLECTION.SNAPSHOT}${hash}`,
+                      value: {
+                          errors: null,
+                      },
+                  },
+              ]
+            : []),
     ];
 
     const finallyData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.SNAPSHOT>> = [
@@ -593,13 +598,13 @@ function getOnyxLoadingData(
             onyxMethod: Onyx.METHOD.MERGE,
             key: `${ONYXKEYS.COLLECTION.SNAPSHOT}${hash}`,
             value: {
-                ...(isOffline ? {} : {data: null}),
+                ...(isOffline || shouldPreserveDataOnFailure ? {} : {data: null}),
                 search: {
                     status: queryJSON?.status,
                     type: queryJSON?.type,
                     ...(isSearchAPI && {isLoading: false}),
                 },
-                errors: getMicroSecondOnyxErrorWithTranslationKey('common.genericErrorMessage'),
+                ...(!shouldPreserveDataOnFailure ? {errors: getMicroSecondOnyxErrorWithTranslationKey('common.genericErrorMessage')} : {}),
             },
         },
     ];
@@ -773,6 +778,7 @@ function search({
     isLoading,
     shouldUpdateLastSearchParams = false,
     skipWaitForWrites = false,
+    shouldPreserveDataOnFailure = false,
 }: {
     queryJSON: Readonly<SearchQueryJSON>;
     searchKey: SearchKey | undefined;
@@ -790,6 +796,11 @@ function search({
      * optimistic write data.
      */
     skipWaitForWrites?: boolean;
+    /**
+     * Use for background refreshes that should not replace valid existing Search
+     * results with a blocking full-page error if the refresh fails.
+     */
+    shouldPreserveDataOnFailure?: boolean;
 }) {
     if (isLoading || shouldPreventSearchAPI) {
         return;
@@ -801,7 +812,7 @@ function search({
     }
     inFlightSearchRequests.add(dedupeKey);
 
-    const {optimisticData, finallyData, failureData} = getOnyxLoadingData(queryJSON.hash, queryJSON, offset, isOffline, true, shouldCalculateTotals);
+    const {optimisticData, finallyData, failureData} = getOnyxLoadingData(queryJSON.hash, queryJSON, offset, isOffline, true, shouldCalculateTotals, shouldPreserveDataOnFailure);
     const {flatFilters, limit, ...queryJSONWithoutFlatFilters} = queryJSON;
     const query = {
         ...queryJSONWithoutFlatFilters,

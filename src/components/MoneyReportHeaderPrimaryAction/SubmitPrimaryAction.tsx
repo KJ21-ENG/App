@@ -143,6 +143,7 @@ function SubmitPrimaryActionContent({reportID}: SubmitPrimaryActionProps) {
                     queryJSON: currentSearchQueryJSON,
                     isOffline,
                     isLoading: !!currentSearchResults?.search?.isLoading,
+                    shouldPreserveDataOnFailure: true,
                 });
             }
         });
