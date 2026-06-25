@@ -131,7 +131,9 @@ function WorkspaceCompanyCardsTable({
     const isLoadingFeed =
         !hasCards && ((!feedName && isInitiallyLoadingFeeds) || !isPolicyLoaded || (!isNoFeed && isLoadingOnyxValue(lastSelectedFeedMetadata)) || !!selectedFeedStatus?.isLoading);
     const isLoadingCards = !hasCards ? isLoadingOnyxValue(cardListMetadata) : false;
-    const isLoadingPage = !isOffline && !hasCards && (isLoadingFeed || isLoadingOnyxValue(personalDetailsMetadata) || areWorkspaceCardFeedsLoading);
+    // Once the no-feed state has resolved, keep showing it while page-level feed data refreshes in the background.
+    const shouldShowWorkspaceCardFeedsLoading = !isNoFeed && areWorkspaceCardFeedsLoading;
+    const isLoadingPage = !isOffline && !hasCards && (isLoadingFeed || isLoadingOnyxValue(personalDetailsMetadata) || shouldShowWorkspaceCardFeedsLoading);
 
     const isLoading = isLoadingPage || isLoadingFeed;
 
