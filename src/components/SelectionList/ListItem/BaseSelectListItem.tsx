@@ -39,6 +39,7 @@ function BaseSelectListItem<TItem extends ListItem>({
     const indentsLength = (item.text?.length ?? 0) - (fullTitle?.length ?? 0);
     const paddingLeft = Math.floor(indentsLength / CONST.INDENTS.length) * styles.ml3.marginLeft;
     const alternateTextMaxWidth = variables.sideBarWidth - styles.ph5.paddingHorizontal * 2 - styles.ml3.marginLeft - variables.iconSizeNormal;
+    const shouldUseMutedText = !!item.isDisabled;
 
     return (
         <SelectableListItem
@@ -74,7 +75,7 @@ function BaseSelectListItem<TItem extends ListItem>({
                             styles.sidebarLinkTextBold,
                             isMultilineSupported ? styles.preWrap : styles.pre,
                             item.alternateText ? styles.mb1 : null,
-                            isDisabled && styles.colorMuted,
+                            shouldUseMutedText && styles.colorMuted,
                             isMultilineSupported ? {paddingLeft} : null,
                             titleStyles,
                         ]}
@@ -88,6 +89,7 @@ function BaseSelectListItem<TItem extends ListItem>({
                             style={[
                                 styles.textLabelSupporting,
                                 styles.lh16,
+                                shouldUseMutedText && styles.colorMuted,
                                 isAlternateTextMultilineSupported ? styles.preWrap : styles.pre,
                                 isAlternateTextMultilineSupported ? {maxWidth: alternateTextMaxWidth} : null,
                             ]}
