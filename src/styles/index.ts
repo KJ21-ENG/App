@@ -6133,13 +6133,14 @@ const staticStyles = (theme: ThemeColors) =>
             justifyContent: 'center',
             alignItems: 'center',
         },
-        // Single-line code blocks keep the copy button tight to the corner.
+        codeBlockWithCopyButtonGutter: {
+            paddingRight: 48,
+        },
         codeBlockCopyButtonWrapper: {
             position: 'absolute',
             top: 4,
             right: 4,
         },
-        // Multi-line code blocks get extra breathing room around the copy button.
         codeBlockCopyButtonWrapperMultiline: {
             position: 'absolute',
             top: 8,

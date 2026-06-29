@@ -30,7 +30,7 @@ type PreRendererProps = CustomRendererProps<TBlock> & {
     renderLength: number;
 };
 
-function PreRenderer({TDefaultRenderer, onPressIn, onPressOut, onLongPress, ...defaultRendererProps}: PreRendererProps) {
+function PreRenderer({TDefaultRenderer, onPressIn, onPressOut, onLongPress, style, ...defaultRendererProps}: PreRendererProps) {
     const styles = useThemeStyles();
     const StyleUtils = useStyleUtils();
     const {translate} = useLocalize();
@@ -42,7 +42,6 @@ function PreRenderer({TDefaultRenderer, onPressIn, onPressOut, onLongPress, ...d
     const isInsideTaskTitle = HTMLEngineUtils.isChildOfTaskTitle(defaultRendererProps.tnode);
     const fontSize = StyleUtils.getCodeFontSize(false, isInsideTaskTitle);
     const codeText = HTMLEngineUtils.getCodeBlockText(defaultRendererProps.tnode);
-    // Multi-line code blocks get extra breathing room around the copy button, while single-line blocks keep it tight to the corner.
     const isMultilineCodeBlock = codeText.trim().includes('\n');
 
     if (isChildOfTaskTitle) {
@@ -78,7 +77,10 @@ function PreRenderer({TDefaultRenderer, onPressIn, onPressOut, onLongPress, ...d
                         >
                             <View>
                                 <Text style={{fontSize}}>
-                                    <TDefaultRenderer {...defaultRendererProps} />
+                                    <TDefaultRenderer
+                                        {...defaultRendererProps}
+                                        style={isHovered && !!codeText ? [style, styles.codeBlockWithCopyButtonGutter] : style}
+                                    />
                                 </Text>
                             </View>
                         </PressableWithoutFeedback>
