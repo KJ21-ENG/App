@@ -353,6 +353,14 @@ function FormProvider({
         [errors, formID],
     );
 
+    const touchInputAndValidate = useCallback(
+        (inputID: keyof Form, values: Partial<FormOnyxValues> = {}) => {
+            setTouchedInput(inputID);
+            onValidate({...inputValues, ...values} as FormOnyxValues, !hasServerError);
+        },
+        [hasServerError, inputValues, onValidate, setTouchedInput],
+    );
+
     const scrollToEnd = useCallback(() => {
         formWrapperRef.current?.scrollToEnd();
     }, []);
@@ -361,6 +369,7 @@ function FormProvider({
         resetForm,
         resetErrors,
         resetFormFieldError,
+        touchInputAndValidate,
         submit,
         scrollToEnd,
     }));

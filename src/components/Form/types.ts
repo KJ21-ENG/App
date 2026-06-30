@@ -189,6 +189,7 @@ type FormRef<TFormID extends OnyxFormKey = OnyxFormKey> = {
     resetForm: (optionalValue: FormOnyxValues<TFormID>) => void;
     resetErrors: () => void;
     resetFormFieldError: (fieldID: keyof Form) => void;
+    touchInputAndValidate: (fieldID: keyof Form, values?: Partial<FormOnyxValues<TFormID>>) => void;
     submit: () => void;
     scrollToEnd: () => void;
 };

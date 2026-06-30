@@ -5,7 +5,7 @@ import type {OnyxEntry} from 'react-native-onyx';
 import FullPageNotFoundView from '@components/BlockingViews/FullPageNotFoundView';
 import FormProvider from '@components/Form/FormProvider';
 import InputWrapperWithRef from '@components/Form/InputWrapper';
-import type {FormOnyxValues} from '@components/Form/types';
+import type {FormOnyxValues, FormRef} from '@components/Form/types';
 import HeaderWithBackButton from '@components/HeaderWithBackButton';
 import {ModalActions} from '@components/Modal/Global/ModalContext';
 import type {AnimatedTextInputRef} from '@components/RNTextInput';
@@ -85,6 +85,7 @@ function IOURequestStepSubrate({
     const {translate} = useLocalize();
     const expensifyIcons = useMemoizedLazyExpensifyIcons(['Trashcan']);
     const {showConfirmModal} = useConfirmModal();
+    const formRef = useRef<FormRef>(null);
     const textInputRef = useRef<AnimatedTextInputRef>(null);
     const parsedIndex = parseInt(pageIndex, 10);
     const selectedDestination = transaction?.comment?.customUnit?.customUnitRateID;
@@ -95,6 +96,8 @@ function IOURequestStepSubrate({
     const filledSubrateCount = allSubrates.length;
     const [subrateValue, setSubrateValue] = useState(currentSubrate?.id);
     const [quantityValue, setQuantityValue] = useState(() => (currentSubrate?.quantity ? String(currentSubrate.quantity) : undefined));
+    const subrateInputID = `subrate${pageIndex}`;
+    const quantityInputID = `quantity${pageIndex}`;
 
     const onChangeQuantity = useCallback((newValue: string) => {
         // replace all characters that are not spaces or digits
@@ -219,6 +222,7 @@ function IOURequestStepSubrate({
                     ]}
                 />
                 <FormProvider
+                    ref={formRef}
                     style={[styles.flexGrow1, styles.mh5]}
                     formID={ONYXKEYS.FORMS.MONEY_REQUEST_SUBRATE_FORM}
                     enabledWhenOffline
@@ -232,13 +236,23 @@ function IOURequestStepSubrate({
                     <View style={[styles.mhn5]}>
                         <InputWrapperWithRef
                             InputComponent={ValuePicker}
-                            inputID={`subrate${pageIndex}`}
+                            inputID={subrateInputID}
                             label={translate('common.subrate')}
                             value={subrateValue}
                             defaultValue={currentSubrate?.id}
                             items={validOptions}
                             onValueChange={(value) => {
-                                setSubrateValue(value as string);
+                                const newSubrateValue = value as string;
+                                const shouldValidateEmptyQuantity = !!subrateValue && subrateValue !== newSubrateValue && !quantityValue;
+
+                                setSubrateValue(newSubrateValue);
+
+                                if (shouldValidateEmptyQuantity) {
+                                    formRef.current?.touchInputAndValidate(quantityInputID, {
+                                        [subrateInputID]: newSubrateValue,
+                                        [quantityInputID]: quantityValue ?? '',
+                                    });
+                                }
 
                                 // Focus the Quantity input after the ValuePicker modal closes.
                                 // TransitionTracker's callback fires synchronously inside Reanimated's animation
@@ -256,7 +270,7 @@ function IOURequestStepSubrate({
                     </View>
                     <InputWrapperWithRef
                         InputComponent={TextInput}
-                        inputID={`quantity${pageIndex}`}
+                        inputID={quantityInputID}
                         ref={textInputRef}
                         containerStyles={[styles.mt4]}
                         label={translate('iou.quantity')}
