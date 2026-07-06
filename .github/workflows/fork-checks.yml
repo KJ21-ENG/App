@@ -1,0 +1,212 @@
+# Personal validation workflow for the KJ21-ENG/App fork.
+#
+# This file lives ONLY on the fork's default branch (main). It must never be
+# committed to a feature branch and never appear in a PR to Expensify/App.
+# Deploy/update it with:
+#   python3 ~/.codex/skills/expensify-app-targeted-checks/scripts/fork_checks.py setup
+#
+# It is dispatch-only (never triggers on push/PR). The dispatch ref is always
+# `main` (where this file lives); the branch/commit under test is passed as an
+# input and checked out explicitly. All tooling (setupNode composite action,
+# lint.sh, tsconfig, jest config) comes from the checked-out branch tree, so
+# results match what upstream CI would produce for that commit.
+name: Fork checks
+run-name: 'fork-checks: ${{ inputs.branch }} @ ${{ inputs.sha }} [${{ inputs.checks }}] tag=${{ inputs.tag }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Fork branch to validate
+        required: true
+        type: string
+      sha:
+        description: Exact commit to validate (empty = branch tip at checkout time)
+        required: false
+        default: ''
+        type: string
+      checks:
+        description: 'Comma-separated subset of: prettier,lint,typecheck,react-compiler,jest'
+        required: false
+        default: 'prettier,lint,typecheck,react-compiler'
+        type: string
+      jest_args:
+        description: Arguments passed to jest (test paths, -t patterns, --runInBand). Empty = jest job no-ops.
+        required: false
+        default: ''
+        type: string
+      rc_files:
+        description: Space-separated .ts/.tsx files for the React Compiler check. Empty = job no-ops.
+        required: false
+        default: ''
+        type: string
+      format_files:
+        description: Space-separated files for prettier --check. Empty = job no-ops.
+        required: false
+        default: ''
+        type: string
+      tag:
+        description: Opaque dispatch tag used by tooling to identify this run
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+# Re-dispatching the same branch with the same check set cancels the stale run.
+# Different branches (or different check sets) run side by side.
+concurrency:
+  group: fork-checks-${{ inputs.branch }}-${{ inputs.checks }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+
+jobs:
+  typecheck:
+    name: TypeScript (tsc, CI merge gate)
+    if: contains(inputs.checks, 'typecheck')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Type check with TypeScript
+        run: npm run typecheck
+
+  lint:
+    name: ESLint (full repo, CI merge gate)
+    if: contains(inputs.checks, 'lint')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Normalize package-lock for cache key
+        run: jq 'del(.version, .packages[""].version)' package-lock.json > normalized-package-lock.json
+
+      - name: Restore ESLint cache
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules/.cache/eslint
+          key: ${{ runner.os }}-eslint-${{ hashFiles('eslint.config.mjs', 'config/eslint/**', 'normalized-package-lock.json') }}-${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          restore-keys: |
+            ${{ runner.os }}-eslint-${{ hashFiles('eslint.config.mjs', 'config/eslint/**', 'normalized-package-lock.json') }}-
+            ${{ runner.os }}-eslint-
+
+      # ESLint's cache doesn't track cross-file TypeScript dependencies, which can
+      # cause stale errors. Mirror upstream CI: on failure, clear cache and retry.
+      - name: Lint JavaScript and TypeScript with ESLint
+        run: |
+          if ! npm run lint; then
+            echo "Lint failed, clearing cache and retrying..."
+            rm -rf node_modules/.cache/eslint
+            npm run lint
+          fi
+
+      - name: Save ESLint cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: node_modules/.cache/eslint
+          key: ${{ runner.os }}-eslint-${{ hashFiles('eslint.config.mjs', 'config/eslint/**', 'normalized-package-lock.json') }}-${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+
+  prettier:
+    name: Prettier (changed files)
+    if: contains(inputs.checks, 'prettier')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Prettier check
+        env:
+          FORMAT_FILES: ${{ inputs.format_files }}
+        run: |
+          if [ -z "$FORMAT_FILES" ]; then
+            echo "::notice::No format_files provided; nothing to check."
+            exit 0
+          fi
+          if [ ! -e node_modules/.bin/prettier ]; then
+            echo "::notice::prettier is not a dependency of this branch (upstream removed the prettier gate); skipping."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          npx --no-install prettier --check $FORMAT_FILES
+
+  react-compiler:
+    name: React Compiler compliance (changed files)
+    if: contains(inputs.checks, 'react-compiler')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: React Compiler compliance check
+        env:
+          RC_FILES: ${{ inputs.rc_files }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$RC_FILES" ]; then
+            echo "::notice::No rc_files provided; nothing to check."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          npm run react-compiler-compliance-check check $RC_FILES
+
+  jest:
+    name: Jest (targeted)
+    if: contains(inputs.checks, 'jest')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Cache Jest cache
+        uses: actions/cache@v4
+        with:
+          path: .jest-cache
+          key: ${{ runner.os }}-jest-fork-${{ hashFiles('package-lock.json', 'patches/**', 'babel.config.js') }}
+          restore-keys: ${{ runner.os }}-jest-fork-
+
+      - name: Jest tests
+        env:
+          JEST_ARGS: ${{ inputs.jest_args }}
+        run: |
+          if [ -z "$JEST_ARGS" ]; then
+            echo "::notice::No jest_args provided; nothing to run."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          npm test -- --silent $JEST_ARGS
