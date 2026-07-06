@@ -11,7 +11,7 @@
 # lint.sh, tsconfig, jest config) comes from the checked-out branch tree, so
 # results match what upstream CI would produce for that commit.
 name: Fork checks
-run-name: 'fork-checks: ${{ inputs.branch }} @ ${{ inputs.sha }} [${{ inputs.checks }}] tag=${{ inputs.tag }}'
+run-name: "fork-checks: ${{ inputs.branch }} @ ${{ inputs.sha }} [${{ inputs.checks }}] tag=${{ inputs.tag }}"
 
 on:
   workflow_dispatch:
@@ -23,32 +23,32 @@ on:
       sha:
         description: Exact commit to validate (empty = branch tip at checkout time)
         required: false
-        default: ''
+        default: ""
         type: string
       checks:
-        description: 'Comma-separated subset of: prettier,lint,typecheck,react-compiler,jest'
+        description: "Comma-separated subset of: prettier,lint,typecheck,react-compiler,jest"
         required: false
-        default: 'prettier,lint,typecheck,react-compiler'
+        default: "prettier,lint,typecheck,react-compiler"
         type: string
       jest_args:
         description: Arguments passed to jest (test paths, -t patterns, --runInBand). Empty = jest job no-ops.
         required: false
-        default: ''
+        default: ""
         type: string
       rc_files:
         description: Space-separated .ts/.tsx files for the React Compiler check. Empty = job no-ops.
         required: false
-        default: ''
+        default: ""
         type: string
       format_files:
         description: Space-separated files for prettier --check. Empty = job no-ops.
         required: false
-        default: ''
+        default: ""
         type: string
       tag:
         description: Opaque dispatch tag used by tooling to identify this run
         required: false
-        default: ''
+        default: ""
         type: string
 
 permissions:
@@ -61,7 +61,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CI: 'true'
+  CI: "true"
 
 jobs:
   typecheck:
@@ -71,7 +71,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
 
@@ -88,7 +88,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
 
@@ -131,7 +131,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
 
@@ -146,8 +146,8 @@ jobs:
             echo "::notice::No format_files provided; nothing to check."
             exit 0
           fi
-          if [ ! -e node_modules/.bin/prettier ]; then
-            echo "::notice::prettier is not a dependency of this branch (upstream removed the prettier gate); skipping."
+          if ! node -e "const p=require('./package.json'); process.exit((p.devDependencies||{}).prettier||(p.dependencies||{}).prettier?0:1)"; then
+            echo "::notice::prettier is not a declared dependency of this branch (upstream removed the prettier gate); skipping."
             exit 0
           fi
           # shellcheck disable=SC2086
@@ -160,7 +160,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
 
@@ -186,7 +186,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
 
