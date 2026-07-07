@@ -125,8 +125,8 @@ jobs:
           key: ${{ runner.os }}-eslint-${{ hashFiles('eslint.config.mjs', 'config/eslint/**', 'normalized-package-lock.json') }}-${{ inputs.sha != '' && inputs.sha || inputs.branch }}
 
   prettier:
-    name: Prettier (changed files)
-    if: contains(inputs.checks, 'prettier')
+    name: Format check (oxfmt / prettier)
+    if: contains(inputs.checks, 'format') || contains(inputs.checks, 'prettier')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -138,20 +138,30 @@ jobs:
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
 
-      - name: Prettier check
+      # Auto-detects the branch's formatter era and mirrors that era's CI gate:
+      # oxfmt via `npm run fmt` + diff check (current, mirrors upstream oxfmt.yml),
+      # prettier --check on changed files (older branches), or clean skip.
+      - name: Format check
         env:
           FORMAT_FILES: ${{ inputs.format_files }}
         run: |
-          if [ -z "$FORMAT_FILES" ]; then
-            echo "::notice::No format_files provided; nothing to check."
+          if node -e "process.exit(require('./package.json').scripts.fmt ? 0 : 1)"; then
+            npm run fmt
+            if ! git diff --name-only --exit-code; then
+              echo 'Error: Oxfmt diff detected! Run `npm run fmt` locally and commit the changes.'
+              exit 1
+            fi
+          elif node -e "const p=require('./package.json'); process.exit((p.devDependencies||{}).prettier||(p.dependencies||{}).prettier?0:1)"; then
+            if [ -z "$FORMAT_FILES" ]; then
+              echo "::notice::prettier-era branch and no format_files provided; nothing to check."
+              exit 0
+            fi
+            # shellcheck disable=SC2086
+            npx --no-install prettier --check $FORMAT_FILES
+          else
+            echo "::notice::No fmt/prettier tooling on this branch; skipping."
             exit 0
           fi
-          if ! node -e "const p=require('./package.json'); process.exit((p.devDependencies||{}).prettier||(p.dependencies||{}).prettier?0:1)"; then
-            echo "::notice::prettier is not a declared dependency of this branch (upstream removed the prettier gate); skipping."
-            exit 0
-          fi
-          # shellcheck disable=SC2086
-          npx --no-install prettier --check $FORMAT_FILES
 
   react-compiler:
     name: React Compiler compliance (changed files)
