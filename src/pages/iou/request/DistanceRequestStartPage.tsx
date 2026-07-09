@@ -134,6 +134,7 @@ function DistanceRequestStartPage({
                         tabBar={TabSelector}
                         onTabBarFocusTrapContainerElementChanged={setTabBarContainerElement}
                         onActiveTabFocusTrapContainerElementChanged={setActiveTabContainerElement}
+                        backBehavior="none"
                         lazyLoadEnabled
                     >
                         <TopTab.Screen name={CONST.TAB_REQUEST.DISTANCE_MAP}>

@@ -21,7 +21,7 @@ import type ChildrenProps from '@src/types/utils/ChildrenProps';
 import isLoadingOnyxValue from '@src/types/utils/isLoadingOnyxValue';
 
 import type {MaterialTopTabNavigationEventMap} from '@react-navigation/material-top-tabs';
-import type {EventArg, EventMapCore, NavigationProp, NavigationState, ParamListBase, ScreenListeners} from '@react-navigation/native';
+import type {EventArg, EventMapCore, NavigationProp, NavigationState, ParamListBase, ScreenListeners, TabRouterOptions} from '@react-navigation/native';
 
 import {createMaterialTopTabNavigator} from '@react-navigation/material-top-tabs';
 import {TabActions, useRoute} from '@react-navigation/native';
@@ -30,7 +30,7 @@ import {StyleSheet, View} from 'react-native';
 
 import type {RegisterTabSwitchGuard, TabSwitchGuard} from './TabSwitchGuardContext';
 
-import {backBehavior, defaultScreenOptions} from './OnyxTabNavigatorConfig';
+import {backBehavior as defaultBackBehavior, defaultScreenOptions} from './OnyxTabNavigatorConfig';
 import TabSwitchGuardContext from './TabSwitchGuardContext';
 
 type OnyxTabNavigatorProps<TTabName extends string = SelectedTabRequest> = ChildrenProps & {
@@ -71,6 +71,9 @@ type OnyxTabNavigatorProps<TTabName extends string = SelectedTabRequest> = Child
 
     /** Whether tabs should have equal width */
     equalWidth?: boolean;
+
+    /** Back behavior for the tab navigator's router. Defaults to the platform-shared value. */
+    backBehavior?: TabRouterOptions['backBehavior'];
 };
 
 const TopTab = createMaterialTopTabNavigator<ParamListBase, string>();
@@ -113,6 +116,7 @@ function OnyxTabNavigator<TTabName extends string = SelectedTabRequest>({
     lazyLoadEnabled = false,
     onTabSelect,
     equalWidth = false,
+    backBehavior = defaultBackBehavior,
     ...rest
 }: OnyxTabNavigatorProps<TTabName>) {
     const styles = useThemeStyles();
