@@ -53,6 +53,8 @@ type SavedSearchMenuItemBuilderParams = {
     itemStyle: SavedSearchMenuItem['style'];
     tooltipWrapperStyle: SavedSearchMenuItem['tooltipWrapperStyle'];
     isCopied: boolean;
+    resetNonce: number;
+    onOverflowMenuHide: () => void;
 };
 
 function buildSavedSearchMenuItem({
@@ -68,12 +70,17 @@ function buildSavedSearchMenuItem({
     itemStyle,
     tooltipWrapperStyle,
     isCopied,
+    resetNonce,
+    onOverflowMenuHide,
 }: SavedSearchMenuItemBuilderParams): SavedSearchMenuItem {
     const isItemFocused = Number(key) === hash;
     const baseMenuItem: SavedSearchMenuItem = createBaseSavedSearchMenuItem(item, key, index, title, isItemFocused);
 
     return {
         ...baseMenuItem,
+        // Suffix the render key with a per-row reset nonce so the wide saved-search row remounts (and clears its stale
+        // hover highlight) when its overflow popover is removed. Selection stays route-derived from the original hash.
+        key: `${key}-${resetNonce}`,
         role: CONST.ROLE.TAB,
         sentryLabel: CONST.SENTRY_LABEL.SEARCH.SAVED_SEARCH_MENU_ITEM,
         onPress: () => {
@@ -88,6 +95,7 @@ function buildSavedSearchMenuItem({
                 shouldRenderTooltip={index === 0 && shouldShowSavedSearchTooltip}
                 renderTooltipContent={renderSavedSearchTooltip}
                 isCopied={isCopied}
+                onOverflowMenuHide={onOverflowMenuHide}
             />
         ),
         style: itemStyle,
@@ -130,6 +138,13 @@ function SavedSearchList({hash, areAllSectionsExpanded}: SavedSearchListProps) {
 
     const expensifyIcons = useMemoizedLazyExpensifyIcons(['Bookmark', 'Pencil', 'Trashcan', 'LinkCopy', 'Checkmark']);
     const {copiedHash, handleShare} = useShareSavedSearch();
+
+    // Per-saved-search render-key nonce. Bumping it remounts only the affected wide row so its stale hover highlight is
+    // cleared when the overflow popover is removed (Share copied timeout, Rename, Delete) while the pointer stays over it.
+    const [rowResetNonces, setRowResetNonces] = React.useState<Record<string, number>>({});
+    const resetRowHighlight = React.useCallback((savedSearchKey: string) => {
+        setRowResetNonces((previousNonces) => ({...previousNonces, [savedSearchKey]: (previousNonces[savedSearchKey] ?? 0) + 1}));
+    }, []);
 
     const taxRates = getAllTaxRates(allPolicies);
     const cardsForSavedSearchDisplay = mergeCardListWithWorkspaceFeeds(workspaceCardList ?? CONST.EMPTY_OBJECT, cardList);
@@ -174,6 +189,8 @@ function SavedSearchList({hash, areAllSectionsExpanded}: SavedSearchListProps) {
                       itemStyle,
                       tooltipWrapperStyle,
                       isCopied: copiedHash === Number(key),
+                      resetNonce: rowResetNonces[key] ?? 0,
+                      onOverflowMenuHide: () => resetRowHighlight(key),
                   }),
               )
               .sort((a, b) => localeCompare(a.title ?? '', b.title ?? ''))
