@@ -135,6 +135,10 @@ function DistanceRequestStartPage({
                         onTabBarFocusTrapContainerElementChanged={setTabBarContainerElement}
                         onActiveTabFocusTrapContainerElementChanged={setActiveTabContainerElement}
                         lazyLoadEnabled
+                        // The tabs share this page's ScreenWrapper, whose KeyboardAvoidingView shortens the layout while
+                        // the odometer keyboard is up. Wait for the keyboard to hide before switching so the target tab
+                        // (e.g. the Map) can't mount into the shortened layout and end up cropped.
+                        shouldDismissKeyboardBeforeTabSwitch
                     >
                         <TopTab.Screen name={CONST.TAB_REQUEST.DISTANCE_MAP}>
                             {() => (
