@@ -14,7 +14,16 @@ type MouseEvents = 'onMouseEnter' | 'onMouseLeave' | 'onMouseMove';
 
 type OnMouseEvents = Record<MouseEvents, (e: React.MouseEvent) => void>;
 
-function ActiveHoverable({onHoverIn, onHoverOut, shouldHandleScroll, isFocused = true, shouldFreezeCapture, children, ref}: ActiveHoverableProps) {
+function ActiveHoverable({
+    onHoverIn,
+    onHoverOut,
+    shouldHandleScroll,
+    isFocused = true,
+    shouldFreezeCapture,
+    shouldSubscribeToNativeMouseEvents = false,
+    children,
+    ref,
+}: ActiveHoverableProps) {
     const [isHovered, setIsHovered] = useState(false);
     const elementRef = useRef<HTMLElement | null>(null);
     const isScrollingRef = useRef(false);
@@ -102,20 +111,44 @@ function ActiveHoverable({onHoverIn, onHoverOut, shouldHandleScroll, isFocused =
         [shouldFreezeCapture, updateIsHovered],
     );
 
+    useEffect(() => {
+        const element = elementRef.current;
+        if (!shouldSubscribeToNativeMouseEvents || !element) {
+            return;
+        }
+
+        // Native mouseenter/mouseleave fire only when the pointer actually crosses this element's DOM boundary,
+        // unlike the React synthetic events, which propagate through the React tree and are also triggered by
+        // portalled content (e.g. popovers) rendered outside this element in the DOM.
+        const onNativeMouseEnter = handleMouseEvents('enter');
+        const onNativeMouseLeave = handleMouseEvents('leave');
+        element.addEventListener('mouseenter', onNativeMouseEnter);
+        element.addEventListener('mouseleave', onNativeMouseLeave);
+
+        return () => {
+            element.removeEventListener('mouseenter', onNativeMouseEnter);
+            element.removeEventListener('mouseleave', onNativeMouseLeave);
+        };
+    }, [shouldSubscribeToNativeMouseEvents, handleMouseEvents]);
+
     const child = useMemo(() => getReturnValue(children, isHovered), [children, isHovered]);
 
     const {onMouseEnter, onMouseLeave} = child.props as OnMouseEvents;
 
     return cloneElement(child, {
         ref: mergeRefs(elementRef, ref, child.props.ref),
-        onMouseEnter: (e: React.MouseEvent) => {
-            handleMouseEvents('enter')();
-            onMouseEnter?.(e);
-        },
-        onMouseLeave: (e: React.MouseEvent) => {
-            handleMouseEvents('leave')();
-            onMouseLeave?.(e);
-        },
+        ...(shouldSubscribeToNativeMouseEvents
+            ? {}
+            : {
+                  onMouseEnter: (e: React.MouseEvent) => {
+                      handleMouseEvents('enter')();
+                      onMouseEnter?.(e);
+                  },
+                  onMouseLeave: (e: React.MouseEvent) => {
+                      handleMouseEvents('leave')();
+                      onMouseLeave?.(e);
+                  },
+              }),
     } as React.HTMLAttributes<HTMLElement>);
 }
 

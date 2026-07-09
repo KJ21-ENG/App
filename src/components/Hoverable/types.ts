@@ -29,6 +29,14 @@ type HoverableProps = {
     /** Decides whether to freeze the capture of the hover event */
     shouldFreezeCapture?: boolean;
 
+    /**
+     * Whether to track hover via the native mouseenter/mouseleave events on the underlying DOM element instead of the
+     * React synthetic events. Native events fire only when the pointer actually crosses the element's DOM boundary,
+     * so the hover state is unaffected by portalled content (e.g. popovers) whose synthetic mouse events propagate
+     * through the React tree.
+     */
+    shouldSubscribeToNativeMouseEvents?: boolean;
+
     /** Reference to the outer element */
     ref?: Ref<HTMLElement>;
 };

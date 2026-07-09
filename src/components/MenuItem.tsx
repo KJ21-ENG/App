@@ -451,6 +451,9 @@ type MenuItemBaseProps = ForwardedFSClassProps &
         /** Whether the screen containing the item is focused */
         isFocused?: boolean;
 
+        /** Whether the hover state should be tracked via native mouse events instead of React synthetic ones (see Hoverable) */
+        shouldSubscribeToNativeMouseEvents?: boolean;
+
         /** Additional styles for the root wrapper View */
         rootWrapperStyle?: StyleProp<ViewStyle>;
 
@@ -616,6 +619,7 @@ function MenuItem({
     forwardedFSClass,
     ref,
     isFocused,
+    shouldSubscribeToNativeMouseEvents,
     sentryLabel,
     rootWrapperStyle,
     role = CONST.ROLE.BUTTON,
@@ -866,7 +870,10 @@ function MenuItem({
                 shouldHideOnScroll={shouldHideOnScroll}
             >
                 <View>
-                    <Hoverable isFocused={isFocused}>
+                    <Hoverable
+                        isFocused={isFocused}
+                        shouldSubscribeToNativeMouseEvents={shouldSubscribeToNativeMouseEvents}
+                    >
                         {(isHovered) => (
                             <PressableWithSecondaryInteraction
                                 onPress={shouldCheckActionAllowedOnPress ? callFunctionIfActionIsAllowed(onPressAction, isAnonymousAction) : onPressAction}

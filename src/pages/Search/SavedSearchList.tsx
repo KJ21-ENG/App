@@ -76,6 +76,10 @@ function buildSavedSearchMenuItem({
         ...baseMenuItem,
         role: CONST.ROLE.TAB,
         sentryLabel: CONST.SENTRY_LABEL.SEARCH.SAVED_SEARCH_MENU_ITEM,
+        // The row's three-dot popover is portalled outside the row's DOM subtree, so the row's synthetic mouse events
+        // fire while hovering the popover and no leave event is delivered when it unmounts, leaving a stale hover
+        // highlight. Native mouse events track the real pointer position instead.
+        shouldSubscribeToNativeMouseEvents: true,
         onPress: () => {
             setSearchContext(false);
             Navigation.navigate(ROUTES.SEARCH_ROOT.getRoute({query: item?.query ?? '', name: item?.name}));
