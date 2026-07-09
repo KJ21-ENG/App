@@ -76,7 +76,10 @@ function useDiscardChangesConfirmation({
         });
     };
 
-    usePreventRemove(true, ({data}: {data: {action: NavigationAction}}) => {
+    // Only prevent removal when there are genuinely unsaved changes to confirm. An unconditional `true` here kept
+    // react-native-screens' `preventNativeDismiss` on permanently, so on iOS the interactive swipe-back was cancelled
+    // natively and re-dispatched through JS — briefly sliding the screen back in before it dismissed (issue #94904).
+    usePreventRemove(hasUnsavedChanges(), ({data}: {data: {action: NavigationAction}}) => {
         // The action delivered here carries react-navigation's visited-routes marker, so re-dispatching it skips this screen's prevention
         if (isReplayingBlockedNavigation.current || !hasUnsavedChanges()) {
             navigationRef.current?.dispatch(data.action);
