@@ -177,9 +177,11 @@ function SubmitDetailsPage({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reportOrAccountID, policy, personalPolicy, report, parentReport, currentDate, currentUserPersonalDetails, hasOnlyPersonalPolicies]);
 
-    const sharedFileSource = currentAttachment?.content ?? fileUri;
-    const sharedFileName = getFileName(currentAttachment?.content ?? '') || fileName;
-    const sharedFileType = currentAttachment?.mimeType ?? fileType;
+    // Use the branch-aware values computed above: when the share needs validation (e.g. HEIC), these resolve to the
+    // converted JPEG from VALIDATED_FILE_OBJECT; otherwise they fall back to the raw attachment. Mirrors ShareDetailsPage.
+    const sharedFileSource = fileUri;
+    const sharedFileName = fileName;
+    const sharedFileType = fileType;
 
     // Seed the draft so isScanRequest() returns true (enables compact mode + receipt rendering).
     useEffect(() => {
@@ -389,7 +391,8 @@ function SubmitDetailsPage({
 
     // Separate helper so the permission-modal callbacks don't re-enter onConfirm (deadlocked when OS permission was pre-granted).
     const performUpload = (locationPermissionGranted: boolean) => {
-        if (formHasBeenSubmitted.current || !currentAttachment) {
+        // Block submit until the async HEIC/image validation has landed, so a fast confirm can't upload the raw file.
+        if (formHasBeenSubmitted.current || !currentAttachment || (shouldUsePreValidatedFile && !validFilesToUpload)) {
             setIsConfirming(false);
             return;
         }
