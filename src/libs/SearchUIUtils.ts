@@ -95,6 +95,7 @@ import type {ValueOf} from 'type-fest';
 /* eslint-disable max-lines */
 // TODO: Remove this disable once SearchUIUtils is refactored (see dedicated refactor issue)
 import {addDays, format, parse, subDays} from 'date-fns';
+import {Str} from 'expensify-common';
 
 import type {TransactionPreviewData} from './actions/Search';
 import type {CardFeedForDisplay} from './CardFeedUtils';
@@ -2960,6 +2961,10 @@ function getReportSections({
 
                 if (isIOUReport) {
                     reportIDToTransactions[reportKey].reportName = getIOUReportName(translate, convertToDisplayString, data, reportIDToTransactions[reportKey]);
+                }
+
+                if (reportIDToTransactions[reportKey].reportName) {
+                    reportIDToTransactions[reportKey].reportName = Str.htmlDecode(reportIDToTransactions[reportKey].reportName ?? '');
                 }
             }
         } else if (isTransactionEntry(key)) {

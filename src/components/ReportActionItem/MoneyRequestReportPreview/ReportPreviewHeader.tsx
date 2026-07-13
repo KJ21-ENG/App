@@ -22,6 +22,7 @@ import type {ReportAttributesDerivedValue} from '@src/types/onyx';
 import type {OnyxEntry} from 'react-native-onyx';
 
 import {reportNameSelector} from '@selectors/ReportAttributes';
+import {Str} from 'expensify-common';
 import React, {useCallback, useMemo} from 'react';
 import {View} from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -47,7 +48,7 @@ function ReportPreviewHeader() {
 
     const selectReportName = useCallback((attributes: OnyxEntry<ReportAttributesDerivedValue>) => reportNameSelector(attributes, iouReportID), [iouReportID]);
     const [derivedReportName] = useOnyx(ONYXKEYS.DERIVED.REPORT_ATTRIBUTES, {selector: selectReportName});
-    const reportName = derivedReportName ?? iouReport?.reportName ?? '';
+    const reportName = Str.htmlDecode(derivedReportName ?? iouReport?.reportName ?? '');
 
     /*
      Show subtitle if at least one of the expenses is not being smart scanned, and either:
@@ -102,7 +103,7 @@ function ReportPreviewHeader() {
                                 style={[styles.headerText]}
                                 testID="MoneyRequestReportPreview-reportName"
                             >
-                                {reportName || action.childReportName}
+                                {reportName || Str.htmlDecode(action.childReportName ?? '')}
                             </Text>
                         </Animated.View>
                     </View>
