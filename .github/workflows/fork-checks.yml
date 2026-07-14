@@ -11,7 +11,7 @@
 # lint.sh, tsconfig, jest config) comes from the checked-out branch tree, so
 # results match what upstream CI would produce for that commit.
 name: Fork checks
-run-name: "fork-checks: ${{ inputs.branch }} @ ${{ inputs.sha }} [${{ inputs.checks }}] tag=${{ inputs.tag }}"
+run-name: 'fork-checks: ${{ inputs.branch }} @ ${{ inputs.sha }} [${{ inputs.checks }}] tag=${{ inputs.tag }}'
 
 on:
   workflow_dispatch:
@@ -23,32 +23,37 @@ on:
       sha:
         description: Exact commit to validate (empty = branch tip at checkout time)
         required: false
-        default: ""
+        default: ''
         type: string
       checks:
-        description: "Comma-separated subset of: prettier,lint,typecheck,react-compiler,jest"
+        description: 'Comma-separated subset of: prettier,lint,typecheck,react-compiler,jest'
         required: false
-        default: "prettier,lint,typecheck,react-compiler"
+        default: 'prettier,lint,typecheck,react-compiler'
         type: string
       jest_args:
         description: Arguments passed to jest (test paths, -t patterns, --runInBand). Empty = jest job no-ops.
         required: false
-        default: ""
+        default: ''
         type: string
       rc_files:
         description: Space-separated .ts/.tsx files for the React Compiler check. Empty = job no-ops.
         required: false
-        default: ""
+        default: ''
         type: string
       format_files:
         description: Space-separated files for prettier --check. Empty = job no-ops.
         required: false
-        default: ""
+        default: ''
         type: string
       tag:
         description: Opaque dispatch tag used by tooling to identify this run
         required: false
-        default: ""
+        default: ''
+        type: string
+      merge_base:
+        description: Merge-base with upstream main; keys the ESLint cache per upstream sync instead of per commit. Empty = fall back to sha/branch.
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -61,7 +66,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CI: "true"
+  CI: 'true'
 
 jobs:
   typecheck:
@@ -98,31 +103,43 @@ jobs:
       - name: Normalize package-lock for cache key
         run: jq 'del(.version, .packages[""].version)' package-lock.json > normalized-package-lock.json
 
+      # Keyed by merge-base with upstream main: one cache entry per upstream sync
+      # instead of per commit, so entries stop churning out of the 10GB LRU limit.
       - name: Restore ESLint cache
+        id: restore-eslint
         uses: actions/cache/restore@v4
         with:
           path: node_modules/.cache/eslint
-          key: ${{ runner.os }}-eslint-${{ hashFiles('eslint.config.mjs', 'config/eslint/**', 'normalized-package-lock.json') }}-${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          key: ${{ runner.os }}-eslint-${{ hashFiles('eslint.config.mjs', 'config/eslint/**', 'normalized-package-lock.json') }}-${{ inputs.merge_base != '' && inputs.merge_base || (inputs.sha != '' && inputs.sha || inputs.branch) }}
           restore-keys: |
             ${{ runner.os }}-eslint-${{ hashFiles('eslint.config.mjs', 'config/eslint/**', 'normalized-package-lock.json') }}-
             ${{ runner.os }}-eslint-
 
       # ESLint's cache doesn't track cross-file TypeScript dependencies, which can
-      # cause stale errors. Mirror upstream CI: on failure, clear cache and retry.
+      # cause stale errors. Mirror upstream CI's clear-cache-and-retry, but only
+      # when a cache was actually restored — a failure on a cold cache is
+      # deterministic, and retrying it just doubles a ~45-minute run.
       - name: Lint JavaScript and TypeScript with ESLint
+        env:
+          RESTORED_ESLINT_CACHE: ${{ steps.restore-eslint.outputs.cache-matched-key }}
         run: |
           if ! npm run lint; then
-            echo "Lint failed, clearing cache and retrying..."
-            rm -rf node_modules/.cache/eslint
-            npm run lint
+            if [ -n "$RESTORED_ESLINT_CACHE" ]; then
+              echo "Lint failed with a restored cache; clearing cache and retrying..."
+              rm -rf node_modules/.cache/eslint
+              npm run lint
+            else
+              echo "Lint failed on a cold cache; the result is deterministic, not retrying."
+              exit 1
+            fi
           fi
 
       - name: Save ESLint cache
         uses: actions/cache/save@v4
-        if: always()
+        if: success() && steps.restore-eslint.outputs.cache-hit != 'true'
         with:
           path: node_modules/.cache/eslint
-          key: ${{ runner.os }}-eslint-${{ hashFiles('eslint.config.mjs', 'config/eslint/**', 'normalized-package-lock.json') }}-${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          key: ${{ steps.restore-eslint.outputs.cache-primary-key }}
 
   prettier:
     name: Format check (oxfmt / prettier)
