@@ -177,7 +177,7 @@ jobs:
             exit 0
           fi
           read -ra FILES <<< "$LINT_FILES"
-          ./scripts/lint.sh "${FILES[@]}"
+          npm run lint -- "${FILES[@]}"
 
   prettier:
     name: Format check (targeted/full)
