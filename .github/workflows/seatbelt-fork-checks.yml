@@ -81,7 +81,7 @@ jobs:
           test "$actual" = "$expected"
 
       - name: Fetch the exact comparison base when required
-        if: matrix.check == 'react-compiler'
+        if: matrix.check == 'lint' || matrix.check == 'react-compiler'
         shell: bash
         run: |
           set -euo pipefail

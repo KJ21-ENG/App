@@ -27,7 +27,7 @@ const SAFE_PATH = /^[A-Za-z0-9._/@+-]+$/u;
 
 const CHECKS = {
   typecheck: { label: "Full typecheck", command: ["npm", "run", "typecheck"] },
-  lint: { label: "Full lint", command: ["npm", "run", "lint"] },
+  lint: { label: "Exact changed-file lint", command: ["./scripts/lint.sh"] },
   format: { label: "Formatting policy", command: ["npm", "run", "fmt"] },
   "react-compiler": { label: "Changed-file React Compiler compliance", command: ["npm", "run", "react-compiler-compliance-check", "--", "check"] },
   jest: { label: "Validated targeted Jest", command: ["npm", "run", "test", "--", "--runInBand"] }
@@ -132,10 +132,22 @@ function safeEnvironment(repoPath) {
   return environment;
 }
 
-function changedFiles(repoPath, baseSha, headSha) {
-  const result = spawnSync("git", ["-C", repoPath, "diff", "--name-only", `${baseSha}..${headSha}`], { encoding: "utf8", timeout: 30_000, maxBuffer: 256 * 1024 });
-  if (result.error || result.status !== 0) fail(`could not inspect exact base-to-head diff: ${boundedText(result.stderr || result.error)}`);
-  return String(result.stdout ?? "").split("\n").map((item) => item.trim()).filter(Boolean);
+function changedFiles(repoPath, baseSha, headSha, options = {}) {
+  const diffArgs = ["-C", repoPath, "diff", "--diff-filter=AMR", "--name-only", "-z"];
+  diffArgs.push(`${baseSha}..${headSha}`);
+  if (options.pathspecs?.length) diffArgs.push("--", ...options.pathspecs);
+  const result = spawnSync("git", diffArgs, { encoding: "buffer", timeout: 30_000, maxBuffer: 256 * 1024 });
+  if (result.error || result.status !== 0) {
+    const diagnostic = result.stderr?.length ? result.stderr : result.error;
+    fail(`could not inspect exact base-to-head diff: ${boundedText(diagnostic)}`);
+  }
+  return result.stdout.toString("utf8").split("\0").filter(Boolean);
+}
+
+const LINTABLE_PATHS = ["*.js", "*.jsx", "*.ts", "*.tsx", "*.mjs", "*.cjs"];
+
+function lintableFiles(repoPath, baseSha, headSha) {
+  return changedFiles(repoPath, baseSha, headSha, { pathspecs: LINTABLE_PATHS });
 }
 
 function appendDiagnostic(previous, chunk) {
@@ -184,8 +196,14 @@ async function runCheck(id, payload, repoPath, changed) {
     if (!configured.allowNotApplicable) return { id, label: spec.label, outcome: "failed", reason: "No validated target test list but policy did not allow not-applicable.", startedAt, completedAt: new Date().toISOString(), exitCode: null, diagnostics: "" };
     return { id, label: spec.label, outcome: "allowed_not_applicable", reason: configured.reason, startedAt, completedAt: new Date().toISOString(), exitCode: 0, diagnostics: "" };
   }
+  if (id === "lint" && changed.length === 0) {
+    const diagnostic = "No lintable AMR files changed in the exact base-to-tested diff; lint passed without invoking ESLint.";
+    return { id, label: spec.label, outcome: "passed", reason: null, startedAt, completedAt: new Date().toISOString(), exitCode: 0, diagnostics: boundedText(diagnostic) };
+  }
   const args = id === "jest"
     ? [...spec.command, ...payload.targetJestFiles]
+    : id === "lint"
+      ? [...spec.command, ...changed.map((file) => `./${file}`)]
     : id === "react-compiler"
       ? [...spec.command, ...changed.filter((file) => /\.(?:tsx?)$/u.test(file))]
       : spec.command;
@@ -262,9 +280,13 @@ async function main() {
   }
   validateIdentity(payload, repoPath);
   const requestedChecks = selectedCheck ? payload.checks.filter((check) => check.id === selectedCheck) : payload.checks;
-  const shouldInspectChanges = !selectedCheck || selectedCheck === "react-compiler";
-  const changed = shouldInspectChanges ? changedFiles(repoPath, payload.base_sha, payload.tested_head_sha) : [];
-  const rawChecks = await Promise.all(requestedChecks.map((check) => runCheck(check.id, payload, repoPath, changed)));
+  const changed = !selectedCheck || selectedCheck === "react-compiler"
+    ? changedFiles(repoPath, payload.base_sha, payload.tested_head_sha)
+    : [];
+  const lintChanged = !selectedCheck || selectedCheck === "lint"
+    ? lintableFiles(repoPath, payload.base_sha, payload.tested_head_sha)
+    : [];
+  const rawChecks = await Promise.all(requestedChecks.map((check) => runCheck(check.id, payload, repoPath, check.id === "lint" ? lintChanged : changed)));
   const checks = rawChecks.map((check) => ({
     ...check,
     identity: check.id,
