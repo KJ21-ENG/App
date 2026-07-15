@@ -11,7 +11,7 @@
 # lint.sh, tsconfig, jest config) comes from the checked-out branch tree, so
 # results match what upstream CI would produce for that commit.
 name: Fork checks
-run-name: 'fork-checks: ${{ inputs.branch }} @ ${{ inputs.sha }} [${{ inputs.checks }}] tag=${{ inputs.tag }}'
+run-name: 'fork-checks: ${{ inputs.branch }} @ ${{ inputs.sha }} [${{ inputs.checks }}] profile=${{ inputs.profile }} tag=${{ inputs.tag }}'
 
 on:
   workflow_dispatch:
@@ -25,10 +25,18 @@ on:
         required: false
         default: ''
         type: string
-      checks:
-        description: 'Comma-separated subset of: prettier,lint,typecheck,react-compiler,jest'
+      profile:
+        description: Validation profile metadata (targeted pilot default, or explicit full gate)
         required: false
-        default: 'prettier,lint,typecheck,react-compiler'
+        default: targeted
+        type: choice
+        options:
+          - targeted
+          - full
+      checks:
+        description: 'Exact comma-separated check tokens supplied by fork_checks.py'
+        required: false
+        default: 'format-targeted,lint-targeted,react-compiler'
         type: string
       jest_args:
         description: Arguments passed to jest (test paths, -t patterns, --runInBand). Empty = jest job no-ops.
@@ -41,7 +49,12 @@ on:
         default: ''
         type: string
       format_files:
-        description: Space-separated files for prettier --check. Empty = job no-ops.
+        description: Space-separated files for targeted oxfmt/prettier. Empty = targeted job no-ops.
+        required: false
+        default: ''
+        type: string
+      lint_files:
+        description: Space-separated JS/TS files for targeted ESLint. Empty = targeted job no-ops.
         required: false
         default: ''
         type: string
@@ -62,7 +75,7 @@ permissions:
 # Re-dispatching the same branch with the same check set cancels the stale run.
 # Different branches (or different check sets) run side by side.
 concurrency:
-  group: fork-checks-${{ inputs.branch }}-${{ inputs.checks }}
+  group: fork-checks-${{ inputs.branch }}-${{ inputs.profile }}-${{ inputs.checks }}
   cancel-in-progress: true
 
 env:
@@ -71,7 +84,7 @@ env:
 jobs:
   typecheck:
     name: TypeScript (tsc, CI merge gate)
-    if: contains(inputs.checks, 'typecheck')
+    if: contains(format(',{0},', inputs.checks), ',typecheck-full,')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -88,7 +101,7 @@ jobs:
 
   lint:
     name: ESLint (full repo, CI merge gate)
-    if: contains(inputs.checks, 'lint')
+    if: contains(format(',{0},', inputs.checks), ',lint-full,')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -141,9 +154,34 @@ jobs:
           path: node_modules/.cache/eslint
           key: ${{ steps.restore-eslint.outputs.cache-primary-key }}
 
+  lint-targeted:
+    name: ESLint (changed files, targeted pilot)
+    if: contains(format(',{0},', inputs.checks), ',lint-targeted,')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Lint changed JavaScript and TypeScript files
+        env:
+          LINT_FILES: ${{ inputs.lint_files }}
+        run: |
+          if [ -z "$LINT_FILES" ]; then
+            echo "::notice::No lint_files provided; nothing to check."
+            exit 0
+          fi
+          read -ra FILES <<< "$LINT_FILES"
+          ./scripts/lint.sh "${FILES[@]}"
+
   prettier:
-    name: Format check (oxfmt / prettier)
-    if: contains(inputs.checks, 'format') || contains(inputs.checks, 'prettier')
+    name: Format check (targeted/full)
+    if: contains(format(',{0},', inputs.checks), ',format-targeted,') || contains(format(',{0},', inputs.checks), ',format-full,')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -161,20 +199,38 @@ jobs:
       - name: Format check
         env:
           FORMAT_FILES: ${{ inputs.format_files }}
+          CHECKS: ${{ inputs.checks }}
         run: |
+          MODE=targeted
+          if [[ ",$CHECKS," == *",format-full,"* ]]; then
+            MODE=full
+          fi
           if node -e "process.exit(require('./package.json').scripts.fmt ? 0 : 1)"; then
-            npm run fmt
-            if ! git diff --name-only --exit-code; then
-              echo 'Error: Oxfmt diff detected! Run `npm run fmt` locally and commit the changes.'
-              exit 1
+            if [ "$MODE" = full ]; then
+              npm run fmt
+              if ! git diff --name-only --exit-code; then
+                echo 'Error: Oxfmt diff detected! Run `npm run fmt` locally and commit the changes.'
+                exit 1
+              fi
+            else
+              if [ -z "$FORMAT_FILES" ]; then
+                echo "::notice::No format_files provided; nothing to check."
+                exit 0
+              fi
+              read -ra FILES <<< "$FORMAT_FILES"
+              npx --no-install oxfmt --check "${FILES[@]}"
             fi
           elif node -e "const p=require('./package.json'); process.exit((p.devDependencies||{}).prettier||(p.dependencies||{}).prettier?0:1)"; then
-            if [ -z "$FORMAT_FILES" ]; then
-              echo "::notice::prettier-era branch and no format_files provided; nothing to check."
-              exit 0
+            if [ "$MODE" = full ]; then
+              npx --no-install prettier --check .
+            else
+              if [ -z "$FORMAT_FILES" ]; then
+                echo "::notice::prettier-era branch and no format_files provided; nothing to check."
+                exit 0
+              fi
+              read -ra FILES <<< "$FORMAT_FILES"
+              npx --no-install prettier --check "${FILES[@]}"
             fi
-            # shellcheck disable=SC2086
-            npx --no-install prettier --check $FORMAT_FILES
           else
             echo "::notice::No fmt/prettier tooling on this branch; skipping."
             exit 0
@@ -182,7 +238,7 @@ jobs:
 
   react-compiler:
     name: React Compiler compliance (changed files)
-    if: contains(inputs.checks, 'react-compiler')
+    if: contains(format(',{0},', inputs.checks), ',react-compiler,')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -208,7 +264,7 @@ jobs:
 
   jest:
     name: Jest (targeted)
-    if: contains(inputs.checks, 'jest')
+    if: contains(format(',{0},', inputs.checks), ',jest,')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
