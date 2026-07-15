@@ -193,9 +193,8 @@ jobs:
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
 
-      # Auto-detects the branch's formatter era and mirrors that era's CI gate:
-      # oxfmt via `npm run fmt` + diff check (current, mirrors upstream oxfmt.yml),
-      # prettier --check on changed files (older branches), or clean skip.
+      # Auto-detects the branch's formatter era. The targeted pilot checks only
+      # changed files; the explicit full profile mirrors the branch-wide gate.
       - name: Format check
         env:
           FORMAT_FILES: ${{ inputs.format_files }}
