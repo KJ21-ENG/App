@@ -76,6 +76,28 @@ jobs:
           actual="$(git -C "$GITHUB_WORKSPACE/tested-head" rev-parse HEAD)"
           test "$actual" = "$expected"
 
+      - name: Set up the exact tested Node version
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version-file: tested-head/.nvmrc
+          cache: npm
+          cache-dependency-path: tested-head/package-lock.json
+
+      - name: Install exact tested dependencies without credentials
+        shell: bash
+        working-directory: tested-head
+        env:
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+          NODE_AUTH_TOKEN: ""
+          NPM_TOKEN: ""
+          NPM_CONFIG_USERCONFIG: /dev/null
+          HOME: ${{ runner.temp }}/seatbelt-fork-install-home
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME"
+          npm ci
+
       - name: Run the complete required manifest
         id: manifest
         continue-on-error: true
