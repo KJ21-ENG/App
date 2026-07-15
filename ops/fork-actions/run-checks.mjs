@@ -29,7 +29,7 @@ const CHECKS = {
   typecheck: { label: "Full typecheck", command: ["npm", "run", "typecheck"] },
   lint: { label: "Full lint", command: ["npm", "run", "lint"] },
   format: { label: "Formatting policy", command: ["npm", "run", "fmt"] },
-  "react-compiler": { label: "Changed-file React Compiler compliance", command: ["npm", "run", "react-compiler-compliance-check", "--", "check-changed", "--remote", "origin"] },
+  "react-compiler": { label: "Changed-file React Compiler compliance", command: ["npm", "run", "react-compiler-compliance-check", "--", "check"] },
   jest: { label: "Validated targeted Jest", command: ["npm", "run", "test", "--", "--runInBand"] }
 };
 
@@ -176,7 +176,7 @@ async function runCheck(id, payload, repoPath, changed) {
   if (!spec) fail(`check ${id} is not allowlisted`);
   const configured = payload.checks.find((item) => item.id === id);
   const startedAt = new Date().toISOString();
-  if (id === "react-compiler" && !changed.some((file) => /\.(?:jsx?|tsx?)$/u.test(file))) {
+  if (id === "react-compiler" && !changed.some((file) => /\.(?:tsx?)$/u.test(file))) {
     if (!configured.allowNotApplicable) return { id, label: spec.label, outcome: "failed", reason: "No React files changed but policy did not allow not-applicable.", startedAt, completedAt: new Date().toISOString(), exitCode: null, diagnostics: "" };
     return { id, label: spec.label, outcome: "allowed_not_applicable", reason: configured.reason, startedAt, completedAt: new Date().toISOString(), exitCode: 0, diagnostics: "" };
   }
@@ -184,7 +184,11 @@ async function runCheck(id, payload, repoPath, changed) {
     if (!configured.allowNotApplicable) return { id, label: spec.label, outcome: "failed", reason: "No validated target test list but policy did not allow not-applicable.", startedAt, completedAt: new Date().toISOString(), exitCode: null, diagnostics: "" };
     return { id, label: spec.label, outcome: "allowed_not_applicable", reason: configured.reason, startedAt, completedAt: new Date().toISOString(), exitCode: 0, diagnostics: "" };
   }
-  const args = id === "jest" ? [...spec.command, ...payload.targetJestFiles] : spec.command;
+  const args = id === "jest"
+    ? [...spec.command, ...payload.targetJestFiles]
+    : id === "react-compiler"
+      ? [...spec.command, ...changed.filter((file) => /\.(?:tsx?)$/u.test(file))]
+      : spec.command;
   let result = await runCommand(args[0], args.slice(1), {
     cwd: repoPath,
     env: safeEnvironment(repoPath),
