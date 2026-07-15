@@ -1,0 +1,104 @@
+name: Seatbelt Fork CI
+run-name: ${{ fromJSON(inputs.request).dispatch_tag }}
+
+# This file is installed on the trusted fork default branch by a separately
+# approved setup action. It is intentionally dispatch-only: feature branches
+# and upstream pull requests never execute this workflow automatically.
+on:
+  workflow_dispatch:
+    inputs:
+      request:
+        description: "Server-generated bounded JSON identity and allowlisted check request"
+        required: true
+        type: string
+
+# The runner token is used only by checkout and artifact plumbing. Tested code
+# receives no token, repository secret, environment secret, or raw shell input.
+permissions:
+  contents: read
+
+concurrency:
+  # Dispatches are never cancelled implicitly. The server names a successor
+  # before it may intentionally cancel an older attempt.
+  group: seatbelt-fork-${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Seatbelt Fork CI manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      REQUEST_JSON: ${{ inputs.request }}
+      TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      TRUSTED_WORKFLOW_REF: ${{ github.ref }}
+    steps:
+      - name: Check out the trusted workflow definition
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.ref }}
+          path: trusted-workflow
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Write bounded request envelope
+        id: request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${#REQUEST_JSON}" -le 32768
+          printf '%s' "$REQUEST_JSON" > "$RUNNER_TEMP/seatbelt-fork-request.json"
+          node --input-type=module <<'NODE'
+          import {readFileSync, appendFileSync} from 'node:fs';
+          const value = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/seatbelt-fork-request.json', 'utf8'));
+          if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('request must be an object');
+          if (!Number.isInteger(value.schema_version) || value.schema_version !== 1) throw new Error('unsupported request schema');
+          if (typeof value.tested_head_sha !== 'string' || !/^[a-fA-F0-9]{40}$/.test(value.tested_head_sha)) throw new Error('tested_head_sha must be a full SHA');
+          if (typeof value.base_sha !== 'string' || !/^[a-fA-F0-9]{40}$/.test(value.base_sha)) throw new Error('base_sha must be a full SHA');
+          if (typeof value.dispatch_tag !== 'string' || !/^[A-Za-z0-9._:-]{16,160}$/.test(value.dispatch_tag)) throw new Error('dispatch_tag is malformed');
+          appendFileSync(process.env.GITHUB_OUTPUT, `tested_sha=${value.tested_head_sha}\n`);
+          NODE
+
+      - name: Check out the exact requested tested head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ steps.request.outputs.tested_sha }}
+          path: tested-head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Assert exact tested HEAD before any check
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(node --input-type=module -e 'import {readFileSync} from "node:fs"; const value = JSON.parse(readFileSync(process.env.RUNNER_TEMP + "/seatbelt-fork-request.json", "utf8")); process.stdout.write(value.tested_head_sha);')"
+          actual="$(git -C "$GITHUB_WORKSPACE/tested-head" rev-parse HEAD)"
+          test "$actual" = "$expected"
+
+      - name: Run the complete required manifest
+        id: manifest
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          node trusted-workflow/ops/fork-actions/run-checks.mjs \
+            --input "$RUNNER_TEMP/seatbelt-fork-request.json" \
+            --repo "$GITHUB_WORKSPACE/tested-head" \
+            --output "$RUNNER_TEMP/seatbelt-fork-result.json"
+
+      - name: Apply the final required-check gate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node trusted-workflow/ops/fork-actions/final-summary.mjs "$RUNNER_TEMP/seatbelt-fork-result.json"
+
+      - name: Upload bounded result manifest
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: seatbelt-fork-result-${{ github.run_id }}
+          path: ${{ runner.temp }}/seatbelt-fork-result.json
+          if-no-files-found: error
+          retention-days: 7
