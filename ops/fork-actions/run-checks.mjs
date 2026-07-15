@@ -9,7 +9,7 @@
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
 
 import { requiredCheckManifestHash } from "./manifest-hash.mjs";
@@ -28,7 +28,7 @@ const SAFE_PATH = /^[A-Za-z0-9._/@+-]+$/u;
 const CHECKS = {
   typecheck: { label: "Full typecheck", command: ["npm", "run", "typecheck"] },
   lint: { label: "Full lint", command: ["npm", "run", "lint"] },
-  format: { label: "Formatting policy", command: ["npx", "--no-install", "oxfmt", "--check", "."] },
+  format: { label: "Formatting policy", command: ["./node_modules/.bin/oxfmt", "--check", "."] },
   "react-compiler": { label: "Changed-file React Compiler compliance", command: ["npm", "run", "react-compiler-compliance-check", "--", "check-changed", "--remote", "origin"] },
   jest: { label: "Validated targeted Jest", command: ["npm", "run", "test", "--", "--runInBand"] }
 };
@@ -62,9 +62,10 @@ function boundedText(value, max = MAX_DIAGNOSTIC_BYTES) {
 
 function parseArgs(argv) {
   const values = new Map();
+  const allowed = new Set(["--input", "--repo", "--output", "--check"]);
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index];
-    if (!key.startsWith("--") || index + 1 >= argv.length || values.has(key)) fail("expected unique --input, --repo, and --output arguments");
+    if (!allowed.has(key) || index + 1 >= argv.length || values.has(key)) fail("expected unique --input, --repo, --output, and optional --check arguments");
     values.set(key, argv[index + 1]);
     index += 1;
   }
@@ -137,7 +138,40 @@ function changedFiles(repoPath, baseSha, headSha) {
   return String(result.stdout ?? "").split("\n").map((item) => item.trim()).filter(Boolean);
 }
 
-function runCheck(id, payload, repoPath, changed) {
+function appendDiagnostic(previous, chunk) {
+  return boundedText(`${previous}${String(chunk)}`);
+}
+
+function runCommand(command, args, options) {
+  return new Promise((resolve) => {
+    let diagnostics = "";
+    let settled = false;
+    const child = spawn(command, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const capture = (stream, destination) => {
+      stream.on("data", (chunk) => {
+        diagnostics = appendDiagnostic(diagnostics, chunk);
+        if (!destination.write(chunk)) {
+          stream.pause();
+          destination.once("drain", () => stream.resume());
+        }
+      });
+    };
+    capture(child.stdout, process.stdout);
+    capture(child.stderr, process.stderr);
+    const timeout = setTimeout(() => child.kill("SIGTERM"), 2 * 60 * 60 * 1000);
+    const finish = (status, error = null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) diagnostics = appendDiagnostic(diagnostics, `\n${error.message}`);
+      resolve({ status, diagnostics });
+    };
+    child.once("error", (error) => finish(null, error));
+    child.once("close", (status) => finish(status));
+  });
+}
+
+async function runCheck(id, payload, repoPath, changed) {
   const spec = CHECKS[id];
   if (!spec) fail(`check ${id} is not allowlisted`);
   const configured = payload.checks.find((item) => item.id === id);
@@ -151,15 +185,11 @@ function runCheck(id, payload, repoPath, changed) {
     return { id, label: spec.label, outcome: "allowed_not_applicable", reason: configured.reason, startedAt, completedAt: new Date().toISOString(), exitCode: 0, diagnostics: "" };
   }
   const args = id === "jest" ? [...spec.command, ...payload.targetJestFiles] : spec.command;
-  const result = spawnSync(args[0], args.slice(1), {
+  const result = await runCommand(args[0], args.slice(1), {
     cwd: repoPath,
     env: safeEnvironment(repoPath),
-    encoding: "utf8",
-    timeout: 2 * 60 * 60 * 1000,
-    maxBuffer: MAX_DIAGNOSTIC_BYTES * 2,
     windowsHide: true
   });
-  const diagnostics = boundedText([result.stdout, result.stderr, result.error?.message].filter(Boolean).join("\n"));
   return {
     id,
     label: spec.label,
@@ -168,7 +198,7 @@ function runCheck(id, payload, repoPath, changed) {
     startedAt,
     completedAt: new Date().toISOString(),
     exitCode: typeof result.status === "number" ? result.status : null,
-    diagnostics
+    diagnostics: boundedText(result.diagnostics)
   };
 }
 
@@ -196,26 +226,29 @@ function writeManifest(outputPath, manifest) {
   writeFileSync(outputPath, body, { encoding: "utf8", mode: 0o600 });
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const inputPath = path.resolve(args.get("--input"));
   const repoPath = path.resolve(args.get("--repo"));
   const outputPath = path.resolve(args.get("--output"));
   const payload = readPayload(inputPath);
+  const selectedCheck = args.get("--check");
+  if (selectedCheck && !payload.checks.some((check) => check.id === selectedCheck)) fail("selected check is not present in required_checks");
   const computedManifestHash = requiredCheckManifestHash(payload.checks);
   if (computedManifestHash !== payload.required_manifest_hash.toLowerCase()) {
     fail("required_manifest_hash does not match the canonical required_checks policy");
   }
   validateIdentity(payload, repoPath);
   const changed = changedFiles(repoPath, payload.base_sha, payload.tested_head_sha);
-  const rawChecks = payload.checks.map((check) => runCheck(check.id, payload, repoPath, changed));
+  const requestedChecks = selectedCheck ? payload.checks.filter((check) => check.id === selectedCheck) : payload.checks;
+  const rawChecks = await Promise.all(requestedChecks.map((check) => runCheck(check.id, payload, repoPath, changed)));
   const checks = rawChecks.map((check) => ({
     ...check,
     identity: check.id,
     name: check.label,
     allowedNotApplicableReason: check.outcome === "allowed_not_applicable" ? check.reason : null
   }));
-  const allAcceptable = checks.length === payload.checks.length && checks.every((check) => check.outcome === "passed" || check.outcome === "allowed_not_applicable");
+  const allAcceptable = checks.length === requestedChecks.length && checks.every((check) => check.outcome === "passed" || check.outcome === "allowed_not_applicable");
   const manifest = {
     schema_version: SCHEMA_VERSION,
     schemaVersion: SCHEMA_VERSION,
@@ -249,8 +282,9 @@ function main() {
     manifestHash: payload.required_manifest_hash,
     requiredChecks: checks,
     checks,
-    required_progress: "complete",
+    required_progress: selectedCheck ? "pending" : "complete",
     manifest_valid: allAcceptable,
+    partial_manifest: Boolean(selectedCheck),
     diagnostic_artifact_references: [],
     generated_at: new Date().toISOString(),
     manifest_digest: createHash("sha256").update(JSON.stringify({ ...payload, checks })).digest("hex")
@@ -260,7 +294,7 @@ function main() {
 }
 
 try {
-  main();
+  await main();
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`${message}\n`);

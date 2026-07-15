@@ -25,7 +25,11 @@ concurrency:
 
 jobs:
   checks:
-    name: Seatbelt Fork CI manifest
+    name: ${{ matrix.check }}
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [typecheck, lint, format, react-compiler, jest]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -36,7 +40,7 @@ jobs:
       - name: Check out the trusted workflow definition
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.workflow_sha }}
           path: trusted-workflow
           fetch-depth: 1
           persist-credentials: false
@@ -98,7 +102,7 @@ jobs:
           mkdir -p "$HOME"
           npm ci
 
-      - name: Run the complete required manifest
+      - name: Run one required check
         id: manifest
         continue-on-error: true
         shell: bash
@@ -107,6 +111,62 @@ jobs:
           node trusted-workflow/ops/fork-actions/run-checks.mjs \
             --input "$RUNNER_TEMP/seatbelt-fork-request.json" \
             --repo "$GITHUB_WORKSPACE/tested-head" \
+            --output "$RUNNER_TEMP/seatbelt-fork-check-${{ matrix.check }}.json" \
+            --check "${{ matrix.check }}"
+
+      - name: Upload bounded per-check result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: seatbelt-fork-check-${{ matrix.check }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/seatbelt-fork-check-${{ matrix.check }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+  summary:
+    name: Required-check summary
+    if: always()
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REQUEST_JSON: ${{ inputs.request }}
+      TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      TRUSTED_WORKFLOW_REF: ${{ github.ref }}
+    steps:
+      - name: Check out the immutable trusted workflow definition
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted-workflow
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Write bounded request envelope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${#REQUEST_JSON}" -le 32768
+          printf '%s' "$REQUEST_JSON" > "$RUNNER_TEMP/seatbelt-fork-request.json"
+          mkdir -p "$RUNNER_TEMP/seatbelt-fork-results"
+
+      - name: Download all per-check results
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v4.3.0
+        with:
+          pattern: seatbelt-fork-check-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/seatbelt-fork-results
+          merge-multiple: true
+
+      - name: Merge parallel results
+        id: merge
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          node trusted-workflow/ops/fork-actions/merge-results.mjs \
+            --input "$RUNNER_TEMP/seatbelt-fork-request.json" \
+            --results "$RUNNER_TEMP/seatbelt-fork-results" \
             --output "$RUNNER_TEMP/seatbelt-fork-result.json"
 
       - name: Apply the final required-check gate
