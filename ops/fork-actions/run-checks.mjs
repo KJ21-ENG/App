@@ -8,7 +8,7 @@
  * environment and never receives GITHUB_TOKEN or repository secrets.
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
 
@@ -28,7 +28,7 @@ const SAFE_PATH = /^[A-Za-z0-9._/@+-]+$/u;
 const CHECKS = {
   typecheck: { label: "Full typecheck", command: ["npm", "run", "typecheck"] },
   lint: { label: "Full lint", command: ["npm", "run", "lint"] },
-  format: { label: "Formatting policy", command: ["./node_modules/.bin/oxfmt", "--check", "."] },
+  format: { label: "Formatting policy", command: ["npm", "run", "fmt"] },
   "react-compiler": { label: "Changed-file React Compiler compliance", command: ["npm", "run", "react-compiler-compliance-check", "--", "check-changed", "--remote", "origin"] },
   jest: { label: "Validated targeted Jest", command: ["npm", "run", "test", "--", "--runInBand"] }
 };
@@ -185,11 +185,29 @@ async function runCheck(id, payload, repoPath, changed) {
     return { id, label: spec.label, outcome: "allowed_not_applicable", reason: configured.reason, startedAt, completedAt: new Date().toISOString(), exitCode: 0, diagnostics: "" };
   }
   const args = id === "jest" ? [...spec.command, ...payload.targetJestFiles] : spec.command;
-  const result = await runCommand(args[0], args.slice(1), {
+  let result = await runCommand(args[0], args.slice(1), {
     cwd: repoPath,
     env: safeEnvironment(repoPath),
     windowsHide: true
   });
+  if (id === "lint" && result.status !== 0) {
+    process.stdout.write("Lint failed; clearing the ESLint cache and retrying once, matching upstream CI.\n");
+    rmSync(path.join(repoPath, "node_modules", ".cache", "eslint"), { recursive: true, force: true });
+    const retry = await runCommand(args[0], args.slice(1), {
+      cwd: repoPath,
+      env: safeEnvironment(repoPath),
+      windowsHide: true
+    });
+    result = { status: retry.status, diagnostics: appendDiagnostic(result.diagnostics, `\n[retry after ESLint cache clear]\n${retry.diagnostics}`) };
+  }
+  if (id === "format" && result.status === 0) {
+    const diff = await runCommand("git", ["diff", "--name-only", "--exit-code"], {
+      cwd: repoPath,
+      env: safeEnvironment(repoPath),
+      windowsHide: true
+    });
+    result = { status: diff.status, diagnostics: appendDiagnostic(result.diagnostics, `\n[post-format git diff]\n${diff.diagnostics}`) };
+  }
   return {
     id,
     label: spec.label,
@@ -239,8 +257,9 @@ async function main() {
     fail("required_manifest_hash does not match the canonical required_checks policy");
   }
   validateIdentity(payload, repoPath);
-  const changed = changedFiles(repoPath, payload.base_sha, payload.tested_head_sha);
   const requestedChecks = selectedCheck ? payload.checks.filter((check) => check.id === selectedCheck) : payload.checks;
+  const shouldInspectChanges = !selectedCheck || selectedCheck === "react-compiler";
+  const changed = shouldInspectChanges ? changedFiles(repoPath, payload.base_sha, payload.tested_head_sha) : [];
   const rawChecks = await Promise.all(requestedChecks.map((check) => runCheck(check.id, payload, repoPath, changed)));
   const checks = rawChecks.map((check) => ({
     ...check,

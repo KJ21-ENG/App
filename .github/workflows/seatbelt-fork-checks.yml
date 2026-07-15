@@ -69,7 +69,7 @@ jobs:
           repository: ${{ github.repository }}
           ref: ${{ steps.request.outputs.tested_sha }}
           path: tested-head
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
 
       - name: Assert exact tested HEAD before any check
@@ -80,14 +80,36 @@ jobs:
           actual="$(git -C "$GITHUB_WORKSPACE/tested-head" rev-parse HEAD)"
           test "$actual" = "$expected"
 
+      - name: Fetch the exact comparison base when required
+        if: matrix.check == 'react-compiler'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(node --input-type=module -e 'import {readFileSync} from "node:fs"; const value = JSON.parse(readFileSync(process.env.RUNNER_TEMP + "/seatbelt-fork-request.json", "utf8")); process.stdout.write(value.base_sha);')"
+          git -C "$GITHUB_WORKSPACE/tested-head" fetch --no-tags --depth=1 origin "$base"
+          git -C "$GITHUB_WORKSPACE/tested-head" cat-file -e "$base^{commit}"
+
+      - name: Normalize the lockfile for the npm cache
+        shell: bash
+        working-directory: tested-head
+        run: jq 'del(.version, .packages[""].version)' package-lock.json > normalized-package-lock.json
+
       - name: Set up the exact tested Node version
         uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version-file: tested-head/.nvmrc
           cache: npm
-          cache-dependency-path: tested-head/package-lock.json
+          cache-dependency-path: tested-head/normalized-package-lock.json
+
+      - name: Restore exact tested node_modules
+        id: cache-node-modules
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          path: tested-head/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('tested-head/package-lock.json', 'tested-head/patches/**') }}
 
       - name: Install exact tested dependencies without credentials
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         shell: bash
         working-directory: tested-head
         env:
@@ -102,6 +124,17 @@ jobs:
           mkdir -p "$HOME"
           npm ci
 
+      - name: Restore the production-style ESLint cache
+        id: restore-eslint
+        if: matrix.check == 'lint'
+        uses: actions/cache/restore@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          path: tested-head/node_modules/.cache/eslint
+          key: ${{ runner.os }}-eslint-${{ hashFiles('tested-head/eslint.config.mjs', 'tested-head/config/eslint/**', 'tested-head/normalized-package-lock.json') }}-${{ fromJSON(inputs.request).base_sha }}
+          restore-keys: |
+            ${{ runner.os }}-eslint-${{ hashFiles('tested-head/eslint.config.mjs', 'tested-head/config/eslint/**', 'tested-head/normalized-package-lock.json') }}-
+            ${{ runner.os }}-eslint-
+
       - name: Run one required check
         id: manifest
         continue-on-error: true
@@ -113,6 +146,13 @@ jobs:
             --repo "$GITHUB_WORKSPACE/tested-head" \
             --output "$RUNNER_TEMP/seatbelt-fork-check-${{ matrix.check }}.json" \
             --check "${{ matrix.check }}"
+
+      - name: Save successful ESLint cache evidence
+        if: matrix.check == 'lint' && steps.manifest.outcome == 'success' && steps.restore-eslint.outputs.cache-hit != 'true'
+        uses: actions/cache/save@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          path: tested-head/node_modules/.cache/eslint
+          key: ${{ steps.restore-eslint.outputs.cache-primary-key }}
 
       - name: Upload bounded per-check result
         if: always()
