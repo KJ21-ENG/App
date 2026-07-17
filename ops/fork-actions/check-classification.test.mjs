@@ -13,6 +13,7 @@ test("normal nonzero check exits are target-code failures", () => {
 
 test("startup, command, and timeout failures are infrastructure", () => {
   assert.equal(classifyCommandFailure({ status: 127 }), "infrastructure");
+  assert.equal(classifyCommandFailure({ status: 137 }), "infrastructure");
   assert.equal(classifyCommandFailure({ status: null, spawnErrorCode: "ENOENT" }), "infrastructure");
   assert.equal(classifyCommandFailure({ status: null, timedOut: true }), "infrastructure");
 });

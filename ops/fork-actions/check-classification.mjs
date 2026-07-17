@@ -1,4 +1,4 @@
-const INFRASTRUCTURE_EXIT_CODES = new Set([126, 127]);
+const INFRASTRUCTURE_EXIT_CODES = new Set([126, 127, 134, 137]);
 
 export function classifyCommandFailure({status, timedOut = false, spawnErrorCode = null} = {}) {
   if (timedOut || status === null || status === undefined || spawnErrorCode !== null || INFRASTRUCTURE_EXIT_CODES.has(status)) {
