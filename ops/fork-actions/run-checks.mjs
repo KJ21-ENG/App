@@ -12,6 +12,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
 
+import { failureEvidenceForCheck } from "./check-classification.mjs";
 import { requiredCheckManifestHash } from "./manifest-hash.mjs";
 
 const SCHEMA_VERSION = 1;
@@ -129,6 +130,7 @@ function safeEnvironment(repoPath) {
   const environment = { CI: "true", GITHUB_ACTIONS: "true", GITHUB_WORKSPACE: repoPath, NPM_CONFIG_USERCONFIG: "/dev/null" };
   if (isolatedHome) environment.HOME = isolatedHome;
   for (const name of allowed) if (typeof process.env[name] === "string") environment[name] = process.env[name];
+  environment.PATH = `${path.join(repoPath, "node_modules", ".bin")}${path.delimiter}${environment.PATH ?? ""}`;
   return environment;
 }
 
@@ -170,13 +172,17 @@ function runCommand(command, args, options) {
     };
     capture(child.stdout, process.stdout);
     capture(child.stderr, process.stderr);
-    const timeout = setTimeout(() => child.kill("SIGTERM"), 2 * 60 * 60 * 1000);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, 2 * 60 * 60 * 1000);
     const finish = (status, error = null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       if (error) diagnostics = appendDiagnostic(diagnostics, `\n${error.message}`);
-      resolve({ status, diagnostics });
+      resolve({ status, diagnostics, timedOut, spawnErrorCode: error?.code ?? null });
     };
     child.once("error", (error) => finish(null, error));
     child.once("close", (status) => finish(status));
@@ -189,11 +195,11 @@ async function runCheck(id, payload, repoPath, changed) {
   const configured = payload.checks.find((item) => item.id === id);
   const startedAt = new Date().toISOString();
   if (id === "react-compiler" && !changed.some((file) => /\.(?:tsx?)$/u.test(file))) {
-    if (!configured.allowNotApplicable) return { id, label: spec.label, outcome: "failed", reason: "No React files changed but policy did not allow not-applicable.", startedAt, completedAt: new Date().toISOString(), exitCode: null, diagnostics: "" };
+    if (!configured.allowNotApplicable) return { id, label: spec.label, outcome: "failed", reason: "The allowlisted check command failed.", startedAt, completedAt: new Date().toISOString(), exitCode: null, diagnostics: "No React files changed but policy did not allow not-applicable.", failureClassification: "infrastructure", failureEvidence: [{ message: "React Compiler policy did not permit an empty changed-file set." }] };
     return { id, label: spec.label, outcome: "allowed_not_applicable", reason: configured.reason, startedAt, completedAt: new Date().toISOString(), exitCode: 0, diagnostics: "" };
   }
   if (id === "jest" && payload.targetJestFiles.length === 0) {
-    if (!configured.allowNotApplicable) return { id, label: spec.label, outcome: "failed", reason: "No validated target test list but policy did not allow not-applicable.", startedAt, completedAt: new Date().toISOString(), exitCode: null, diagnostics: "" };
+    if (!configured.allowNotApplicable) return { id, label: spec.label, outcome: "failed", reason: "The allowlisted check command failed.", startedAt, completedAt: new Date().toISOString(), exitCode: null, diagnostics: "No validated target test list but policy did not allow not-applicable.", failureClassification: "infrastructure", failureEvidence: [{ message: "Jest policy required a validated target list." }] };
     return { id, label: spec.label, outcome: "allowed_not_applicable", reason: configured.reason, startedAt, completedAt: new Date().toISOString(), exitCode: 0, diagnostics: "" };
   }
   if (id === "lint" && changed.length === 0) {
@@ -220,7 +226,7 @@ async function runCheck(id, payload, repoPath, changed) {
       env: safeEnvironment(repoPath),
       windowsHide: true
     });
-    result = { status: retry.status, diagnostics: appendDiagnostic(result.diagnostics, `\n[retry after ESLint cache clear]\n${retry.diagnostics}`) };
+    result = { ...retry, diagnostics: appendDiagnostic(result.diagnostics, `\n[retry after ESLint cache clear]\n${retry.diagnostics}`) };
   }
   if (id === "format" && result.status === 0) {
     const diff = await runCommand("git", ["diff", "--name-only", "--exit-code"], {
@@ -228,8 +234,9 @@ async function runCheck(id, payload, repoPath, changed) {
       env: safeEnvironment(repoPath),
       windowsHide: true
     });
-    result = { status: diff.status, diagnostics: appendDiagnostic(result.diagnostics, `\n[post-format git diff]\n${diff.diagnostics}`) };
+    result = { ...diff, diagnostics: appendDiagnostic(result.diagnostics, `\n[post-format git diff]\n${diff.diagnostics}`) };
   }
+  const failure = result.status === 0 ? {} : failureEvidenceForCheck(id, result);
   return {
     id,
     label: spec.label,
@@ -238,7 +245,8 @@ async function runCheck(id, payload, repoPath, changed) {
     startedAt,
     completedAt: new Date().toISOString(),
     exitCode: typeof result.status === "number" ? result.status : null,
-    diagnostics: boundedText(result.diagnostics)
+    diagnostics: boundedText(result.diagnostics),
+    ...failure
   };
 }
 

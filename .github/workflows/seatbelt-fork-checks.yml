@@ -124,6 +124,15 @@ jobs:
           mkdir -p "$HOME"
           npm ci
 
+      - name: Prove cached Bun readiness for lint
+        if: matrix.check == 'lint'
+        shell: bash
+        working-directory: tested-head
+        run: |
+          set -euo pipefail
+          test -x node_modules/.bin/bun
+          node_modules/.bin/bun --version
+
       - name: Restore the production-style ESLint cache
         id: restore-eslint
         if: matrix.check == 'lint'

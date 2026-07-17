@@ -78,6 +78,10 @@ function validatePartial(partial, identity, requiredChecks) {
   if (check === null || typeof check !== "object" || !requiredChecks.has(check.id)) fail("partial manifest contains an unknown check");
   if (check.identity !== check.id || check.name !== check.label) fail("partial check identity aliases disagree");
   if (!new Set(["passed", "failed", "allowed_not_applicable"]).has(check.outcome)) fail("partial check outcome is malformed");
+  if (check.outcome === "failed") {
+    if (!new Set(["code", "infrastructure"]).has(check.failureClassification)) fail("failed partial check lacks an explicit classification");
+    if (!Array.isArray(check.failureEvidence) || check.failureEvidence.length < 1 || check.failureEvidence.length > 32) fail("failed partial check lacks bounded evidence");
+  } else if (check.failureClassification !== undefined || check.failureEvidence !== undefined) fail("successful partial check carries failure evidence");
   const policy = requiredChecks.get(check.id);
   if (check.outcome === "allowed_not_applicable" && (!policy.allowNotApplicable || check.allowedNotApplicableReason !== policy.reason)) fail("partial check violates the not-applicable policy");
   if (partial.manifest_valid !== ACCEPTABLE_OUTCOMES.has(check.outcome)) fail("partial manifest validity disagrees with its check outcome");
@@ -96,7 +100,9 @@ function syntheticFailure(id, reason) {
     startedAt: null,
     completedAt: new Date().toISOString(),
     exitCode: null,
-    diagnostics: ""
+    diagnostics: "",
+    failureClassification: "infrastructure",
+    failureEvidence: [{ message: reason }]
   };
 }
 
