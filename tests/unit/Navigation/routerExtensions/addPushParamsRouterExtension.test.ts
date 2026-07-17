@@ -1,6 +1,6 @@
 import addPushParamsRouterExtension, {resolveCursorForReset} from '@libs/Navigation/AppNavigator/routerExtensions/addPushParamsRouterExtension';
 import type {CustomHistoryEntry, PushParamsRouterAction} from '@libs/Navigation/AppNavigator/routerExtensions/types';
-import type {PlatformStackRouterOptions} from '@libs/Navigation/PlatformStackNavigation/types';
+import type {PlatformStackNavigationState, PlatformStackRouterOptions} from '@libs/Navigation/PlatformStackNavigation/types';
 import {cancelPendingFocusRestore, notifyPushParamsBackward, notifyPushParamsForward} from '@libs/NavigationFocusReturn';
 
 import CONST from '@src/CONST';
@@ -17,6 +17,7 @@ jest.mock('@libs/NavigationFocusReturn', () => ({
     notifyPushParamsForward: jest.fn(),
 }));
 
+type RouterState = PlatformStackNavigationState<ParamListBase>;
 type TestState = StackNavigationState<ParamListBase> & {history?: CustomHistoryEntry[]};
 type TestRoute = NavigationRoute<ParamListBase, string>;
 
@@ -102,6 +103,10 @@ function isRouteEntry(entry: unknown): entry is TestRoute {
     return typeof entry.key === 'string' && hasValidRouteFields(entry) && hasValidState;
 }
 
+function getCustomHistory(history: RouterState['history']): CustomHistoryEntry[] | undefined {
+    return history?.filter((entry): entry is CustomHistoryEntry => typeof entry === 'string' || isRouteEntry(entry));
+}
+
 function expectRouteEntry(entry: unknown): asserts entry is TestRoute {
     expect(isRouteEntry(entry)).toBe(true);
     if (!isRouteEntry(entry)) {
@@ -109,14 +114,26 @@ function expectRouteEntry(entry: unknown): asserts entry is TestRoute {
     }
 }
 
-function expectTestState(state: TestState | null): asserts state is TestState {
-    expect(state).not.toBeNull();
-    if (state === null) {
+function isTestState(value: unknown): value is TestState {
+    if (!isRecord(value)) {
+        return false;
+    }
+    const hasValidPreloadedRoutes = Array.isArray(value.preloadedRoutes) && value.preloadedRoutes.every(isFullNavigationRoute);
+    if (!isFullNavigationState(value)) {
+        return false;
+    }
+    const hasValidHistory = value.history === undefined || (Array.isArray(value.history) && value.history.every((entry) => typeof entry === 'string' || isRouteEntry(entry)));
+    return value.type === 'stack' && hasValidPreloadedRoutes && hasValidHistory;
+}
+
+function expectTestState(state: unknown): asserts state is TestState {
+    expect(isTestState(state)).toBe(true);
+    if (!isTestState(state)) {
         throw new Error('Expected a navigation state');
     }
 }
 
-function getTestStateForAction(router: Router<TestState, PushParamsRouterAction>, state: TestState, action: PushParamsRouterAction): TestState {
+function getTestStateForAction(router: Router<RouterState, PushParamsRouterAction>, state: TestState, action: PushParamsRouterAction): TestState {
     const nextState = router.getStateForAction(state, action, CONFIG_OPTIONS);
     expectTestState(nextState);
     return nextState;
@@ -127,9 +144,12 @@ function getRouteEntry(entry: unknown): TestRoute {
     return entry;
 }
 
-function getStringParam(route: TestRoute | undefined, name: string): string {
+function getStringParam(route: unknown, name: string): string {
     expect(route).toBeDefined();
-    const params = route?.params;
+    if (!isRecord(route)) {
+        throw new Error('Expected a navigation route');
+    }
+    const params = route.params;
     if (!isRecord(params)) {
         throw new Error('Expected route parameters');
     }
@@ -141,17 +161,17 @@ function getStringParam(route: TestRoute | undefined, name: string): string {
     return value;
 }
 
-function createMockRouterFactory(actionHandler?: (state: TestState, action: PushParamsRouterAction) => TestState | null) {
+function createMockRouterFactory(actionHandler?: (state: RouterState, action: PushParamsRouterAction) => RouterState | null) {
     const mockRouterFactory = jest.fn((routerOptions: PlatformStackRouterOptions) => {
-        const baseRouter: Router<TestState, PushParamsRouterAction> = {
+        const baseRouter: Router<RouterState, PushParamsRouterAction> = {
             type: 'stack',
 
-            getInitialState(configOptions: RouterConfigOptions): TestState {
+            getInitialState(configOptions: RouterConfigOptions): RouterState {
                 const route = makeRoute(configOptions.routeNames.at(0) ?? routerOptions.initialRouteName ?? 'Screen', 'initial-key-0');
                 return makeState([route]);
             },
 
-            getRehydratedState(partialState: PartialState<TestState>): TestState {
+            getRehydratedState(partialState: PartialState<RouterState>): RouterState {
                 const routes = partialState.routes.map((r) =>
                     createMock<TestRoute>({
                         key: r.key ?? `${r.name}-rehydrated`,
@@ -166,15 +186,15 @@ function createMockRouterFactory(actionHandler?: (state: TestState, action: Push
                 });
             },
 
-            getStateForRouteNamesChange(state: TestState): TestState {
+            getStateForRouteNamesChange(state: RouterState): RouterState {
                 return state;
             },
 
-            getStateForRouteFocus(state: TestState): TestState {
+            getStateForRouteFocus(state: RouterState): RouterState {
                 return state;
             },
 
-            getStateForAction(state: TestState, action: PushParamsRouterAction): TestState | null {
+            getStateForAction(state: RouterState, action: PushParamsRouterAction): RouterState | null {
                 if (actionHandler) {
                     return actionHandler(state, action);
                 }
@@ -189,7 +209,7 @@ function createMockRouterFactory(actionHandler?: (state: TestState, action: Push
                         ...focused,
                         params: {...focused.params, ...action.payload.params},
                     });
-                    return makeState(routes, {history: state.history});
+                    return makeState(routes, {history: getCustomHistory(state.history)});
                 }
 
                 if (action.type === 'GO_BACK' || action.type === 'POP') {
@@ -210,7 +230,10 @@ function createMockRouterFactory(actionHandler?: (state: TestState, action: Push
                     if (!payload?.routes) {
                         return state;
                     }
-                    const routes = payload.routes.map((r) => makeRoute(String(r.name), String(r.key ?? `${r.name}-reset`), r.params));
+                    const routes = payload.routes.map((r) => {
+                        const key = 'key' in r && typeof r.key === 'string' ? r.key : `${r.name}-reset`;
+                        return makeRoute(String(r.name), key, r.params);
+                    });
                     return makeState(routes, {index: payload.index ?? routes.length - 1});
                 }
 
@@ -319,7 +342,7 @@ describe('addPushParamsRouterExtension', () => {
         expect(newState?.routes).toHaveLength(1);
         expect(newState?.routes.at(0)?.key).toBe('a-1');
 
-        const routeHistory = (newState?.history ?? []).filter((e): e is NavigationRoute<ParamListBase, string> => typeof e !== 'string');
+        const routeHistory = (newState?.history ?? []).filter(isRouteEntry);
         expect(routeHistory.some((e) => e.key === 'a-1')).toBe(true);
         expect(routeHistory.every((e) => e.key !== 'b-1')).toBe(true);
     });
@@ -416,7 +439,7 @@ describe('addPushParamsRouterExtension', () => {
         expect(newState).not.toBeNull();
         expect(newState?.routes).toHaveLength(1);
 
-        const routeHistory = (newState?.history ?? []).filter((e): e is NavigationRoute<ParamListBase, string> => typeof e !== 'string');
+        const routeHistory = (newState?.history ?? []).filter(isRouteEntry);
         expect(routeHistory.every((e) => e.key === 'a-1')).toBe(true);
         expect(routeHistory).toHaveLength(2);
     });
@@ -840,7 +863,7 @@ describe('addPushParamsRouterExtension', () => {
                     ...focused,
                     params: {...focused.params, ...action.payload.params},
                 });
-                return makeState(routes, {history: state.history, index: state.index});
+                return makeState(routes, {history: getCustomHistory(state.history), index: state.index});
             }
             return state;
         });
@@ -872,7 +895,7 @@ describe('addPushParamsRouterExtension', () => {
                     ...focused,
                     params: {...focused.params, ...action.payload.params},
                 });
-                return makeState(routes, {history: state.history, index: state.index});
+                return makeState(routes, {history: getCustomHistory(state.history), index: state.index});
             }
             return state;
         });
@@ -904,7 +927,7 @@ describe('addPushParamsRouterExtension', () => {
                     ...focused,
                     params: {...focused.params, ...action.payload.params},
                 });
-                return makeState(routes, {history: state.history, index: state.index});
+                return makeState(routes, {history: getCustomHistory(state.history), index: state.index});
             }
             return state;
         });
