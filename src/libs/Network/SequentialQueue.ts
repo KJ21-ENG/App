@@ -15,6 +15,7 @@ import {
 import {flushQueue, isEmpty} from '@libs/actions/QueuedOnyxUpdates';
 import {isClientTheLeader} from '@libs/ActiveClientManager';
 import {WRITE_COMMANDS} from '@libs/API/types';
+import {recordIssue93611DebugEvent} from '@libs/Issue93611DebugLogger';
 import Log from '@libs/Log';
 import {getIsOffline as isOfflineNetwork} from '@libs/NetworkState';
 import {processWithMiddleware} from '@libs/Request';
@@ -47,6 +48,42 @@ type RequestError = Error & {
     message?: string;
     status?: string;
 };
+
+type Issue93611AddCommentData = {
+    reportID?: string;
+    reportActionID?: string;
+    clientCreatedTime?: string;
+    idempotencyKey?: string;
+};
+
+function summarizeIssue93611OnyxUpdates<TKey extends OnyxKey>(updates: Array<OnyxUpdate<TKey>> | undefined) {
+    return updates?.map((update) => {
+        const key = String(update.key);
+        return {
+            key,
+            onyxMethod: update.onyxMethod,
+            value: key.startsWith(ONYXKEYS.COLLECTION.REPORT_ACTIONS) ? update.value : undefined,
+        };
+    });
+}
+
+function recordIssue93611AddCommentQueueEvent<TKey extends OnyxKey>(category: string, message: string, request: OnyxRequest<TKey>, extraDetails: Record<string, unknown> = {}) {
+    if (request.command !== WRITE_COMMANDS.ADD_COMMENT) {
+        return;
+    }
+
+    const data = (request.data ?? {}) as Issue93611AddCommentData;
+    recordIssue93611DebugEvent(category, message, {
+        command: request.command,
+        reportID: data.reportID ?? null,
+        reportActionID: data.reportActionID ?? null,
+        clientCreatedTime: data.clientCreatedTime ?? null,
+        idempotencyKey: data.idempotencyKey ?? null,
+        successData: summarizeIssue93611OnyxUpdates(request.successData),
+        finallyData: summarizeIssue93611OnyxUpdates(request.finallyData),
+        ...extraDetails,
+    });
+}
 
 let resolveIsReadyPromise: (() => void) | undefined;
 let isReadyPromise: Promise<void> = Promise.resolve();
@@ -150,8 +187,18 @@ function process(): Promise<void> {
     }
 
     if (isOfflineNetwork()) {
-        Log.info('[SequentialQueue] Unable to process. We are offline.');
-        return Promise.resolve();
+        const hasQueuedOnyxUpdates = !isEmpty();
+        Log.info('[SequentialQueue] Unable to process requests. We are offline.', false, {hasQueuedOnyxUpdates});
+        if (!hasQueuedOnyxUpdates) {
+            return Promise.resolve();
+        }
+
+        recordIssue93611DebugEvent('queue.offlineFlush.start', 'Flushing completed request updates before waiting for reconnect');
+        return (
+            flushOnyxUpdatesQueue()?.then(() => {
+                recordIssue93611DebugEvent('queue.offlineFlush.complete', 'Completed request updates were applied while offline');
+            }) ?? Promise.resolve()
+        );
     }
 
     const persistedRequests = getAllPersistedRequests();
@@ -179,6 +226,12 @@ function process(): Promise<void> {
         isRollback: requestToProcess.isRollback ?? false,
         persistWhenOngoing: requestToProcess.persistWhenOngoing ?? false,
     });
+    recordIssue93611AddCommentQueueEvent('queue.process.start', 'SequentialQueue started processing AddComment', requestToProcess, {
+        persistedRequestsLength: persistedRequests.length,
+        hadOngoingRequest: !!ongoingRequest,
+        isRollback: requestToProcess.isRollback ?? false,
+        isClientLeader: isClientTheLeader(),
+    });
 
     // Set the current request to a promise awaiting its processing so that getCurrentRequest can be used to take some action after the current request has processed.
     currentRequestPromise = processWithMiddleware(requestToProcess, true)
@@ -187,6 +240,11 @@ function process(): Promise<void> {
                 command: requestToProcess.command,
                 shouldPauseQueue: response?.shouldPauseQueue ?? false,
                 hasQueueFlushedData: !!requestToProcess.queueFlushedData,
+            });
+            recordIssue93611AddCommentQueueEvent('queue.process.success', 'AddComment middleware resolved successfully', requestToProcess, {
+                jsonCode: response?.jsonCode ?? null,
+                shouldPauseQueue: response?.shouldPauseQueue ?? false,
+                responseOnyxDataCount: response?.onyxData?.length ?? 0,
             });
 
             // A response might indicate that the queue should be paused. This happens when a gap in onyx updates is detected between the client and the server and
@@ -220,6 +278,12 @@ function process(): Promise<void> {
         .catch((error: RequestError) => {
             Log.info('[SequentialQueue] Request failed with error', false, {
                 command: requestToProcess.command,
+                errorName: error.name ?? 'unknown',
+                errorMessage: error.message ?? 'unknown',
+                errorStatus: error.status ?? 'unknown',
+                shouldFailAllRequests,
+            });
+            recordIssue93611AddCommentQueueEvent('queue.process.error', 'AddComment processing rejected', requestToProcess, {
                 errorName: error.name ?? 'unknown',
                 errorMessage: error.message ?? 'unknown',
                 errorStatus: error.status ?? 'unknown',
@@ -496,10 +560,30 @@ function isPaused(): boolean {
 }
 
 // Flush the queue when the persisted requests are initialized
-onPersistedRequestsInitialization(flush);
+onPersistedRequestsInitialization(() => {
+    const persistedRequests = getAllPersistedRequests();
+    for (const request of persistedRequests) {
+        recordIssue93611AddCommentQueueEvent('queue.initialized', 'Persisted AddComment restored in this tab', request, {
+            queueLength: persistedRequests.length,
+            isOffline: isOfflineNetwork(),
+            isClientLeader: isClientTheLeader(),
+        });
+    }
+    flush();
+});
 
 // Flush the queue when another tab enqueues new requests
-onPersistedRequestsCrossTabMerge(flush);
+onPersistedRequestsCrossTabMerge(() => {
+    const persistedRequests = getAllPersistedRequests();
+    for (const request of persistedRequests) {
+        recordIssue93611AddCommentQueueEvent('queue.crossTabMerge', 'AddComment observed after a cross-tab queue merge', request, {
+            queueLength: persistedRequests.length,
+            isOffline: isOfflineNetwork(),
+            isClientLeader: isClientTheLeader(),
+        });
+    }
+    flush();
+});
 
 async function handleConflictActions<TKey extends OnyxKey>(conflictAction: ConflictData, newRequest: OnyxRequest<TKey>): Promise<void> {
     Log.info('[SequentialQueue] handleConflictActions', false, {
@@ -558,6 +642,12 @@ async function push<TKey extends OnyxKey>(newRequest: OnyxRequest<TKey>): Promis
         isOffline: isOfflineNetwork(),
         isSequentialQueueRunning,
     });
+    recordIssue93611AddCommentQueueEvent('queue.push', 'SequentialQueue received AddComment', newRequest, {
+        currentQueueLength: currentRequests.length,
+        isOffline: isOfflineNetwork(),
+        isSequentialQueueRunning,
+        isClientLeader: isClientTheLeader(),
+    });
 
     if (RECEIPT_BEARING_COMMANDS.has(newRequest.command)) {
         const data = (newRequest.data ?? {}) as {
@@ -597,6 +687,10 @@ async function push<TKey extends OnyxKey>(newRequest: OnyxRequest<TKey>): Promis
             queueLength: getAllPersistedRequests().length,
         });
         await persistencePromise;
+        recordIssue93611AddCommentQueueEvent('queue.persisted', 'AddComment persisted while offline', newRequest, {
+            queueLength: getAllPersistedRequests().length,
+            isOffline: true,
+        });
         return;
     }
 
@@ -608,6 +702,10 @@ async function push<TKey extends OnyxKey>(newRequest: OnyxRequest<TKey>): Promis
     // a process kill in that window would lose the request on next launch.
     try {
         await persistencePromise;
+        recordIssue93611AddCommentQueueEvent('queue.persisted', 'AddComment persistence completed before flush', newRequest, {
+            queueLength: getAllPersistedRequests().length,
+            isOffline: isOfflineNetwork(),
+        });
     } catch {
         // Backstop: persistence alerts+swallows on failure, so this shouldn't reject. If it ever does,
         // flush anyway (the request is already in the in-memory queue) rather than stranding isReadyPromise.

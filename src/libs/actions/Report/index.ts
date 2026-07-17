@@ -66,6 +66,7 @@ import fileDownload from '@libs/fileDownload';
 import {getExportFileName} from '@libs/fileDownload/FileUtils';
 import getIsNarrowLayout from '@libs/getIsNarrowLayout';
 import HttpUtils from '@libs/HttpUtils';
+import {recordIssue93611DebugEvent} from '@libs/Issue93611DebugLogger';
 import Log from '@libs/Log';
 import {isEmailPublicDomain} from '@libs/LoginUtils';
 import {getMovedReportID} from '@libs/ModifiedExpenseMessage';
@@ -1121,6 +1122,22 @@ function addActions({
             value: {[currentUserAccountID]: {timezone}},
         });
         DateUtils.setTimezoneUpdated();
+    }
+
+    if (commandName === WRITE_COMMANDS.ADD_COMMENT) {
+        recordIssue93611DebugEvent('addComment.enqueue', 'Prepared optimistic AddComment request', {
+            reportID,
+            reportActionID: resolvedReportActionID ?? null,
+            idempotencyKey: parameters.idempotencyKey,
+            text,
+            isOffline: isOfflineNetwork(),
+            optimisticActions: Object.values(optimisticReportActions).map((action) => ({
+                reportActionID: action?.reportActionID ?? null,
+                pendingAction: action?.pendingAction ?? null,
+                isOptimisticAction: action?.isOptimisticAction ?? null,
+            })),
+            successActions: successReportActions,
+        });
     }
 
     API.write(commandName, parameters, {
