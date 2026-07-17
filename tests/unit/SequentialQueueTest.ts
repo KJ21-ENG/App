@@ -372,19 +372,22 @@ describe('SequentialQueue', () => {
         expect(SequentialQueue.getQueueFlushedData()).toEqual([flushedUpdate]);
     });
 
-    it('should treat a request as success and drain it without retry when the server says the record already exists', async () => {
+    it.each([
+        {command: 'ReconnectApp', errorMessage: CONST.ERROR.ALREADY_CREATED},
+        {command: 'AddComment', errorMessage: CONST.ERROR.DUPLICATE_RECORD},
+    ] as const)('should apply success data when $command reports an already-created record', async ({command, errorMessage}) => {
         await Onyx.set(ONYXKEYS.NETWORK, {shouldFailAllRequests: false, shouldForceOffline: false});
         await clearPersistedRequests();
         await waitForBatchedUpdates();
 
-        const processSpy = jest.spyOn(RequestModule, 'processWithMiddleware').mockRejectedValue(new Error(CONST.ERROR.ALREADY_CREATED));
+        const processSpy = jest.spyOn(RequestModule, 'processWithMiddleware').mockRejectedValue(new Error(errorMessage));
         const onyxUpdateSpy = jest.spyOn(Onyx, 'update');
 
         const successData: Array<OnyxUpdate<typeof ONYXKEYS.USER_METADATA>> = [{key: 'userMetadata', onyxMethod: 'set', value: {accountID: 9999}}];
         const failureData: Array<OnyxUpdate<typeof ONYXKEYS.USER_METADATA>> = [{key: 'userMetadata', onyxMethod: 'set', value: {accountID: 1}}];
 
         try {
-            SequentialQueue.push({command: 'ReconnectApp', successData, failureData});
+            SequentialQueue.push({command, successData, failureData});
             await Promise.resolve();
             await waitForBatchedUpdates();
 
@@ -402,6 +405,36 @@ describe('SequentialQueue', () => {
                 return Array.isArray(updates) && updates.includes(failureData.at(0));
             });
             expect(dispatchedFailure).toBe(false);
+        } finally {
+            processSpy.mockRestore();
+            onyxUpdateSpy.mockRestore();
+        }
+    });
+
+    it('should preserve generic duplicate-record handling for non-AddComment requests', async () => {
+        await Onyx.set(ONYXKEYS.NETWORK, {shouldFailAllRequests: false, shouldForceOffline: false});
+        await clearPersistedRequests();
+        await waitForBatchedUpdates();
+
+        const processSpy = jest.spyOn(RequestModule, 'processWithMiddleware').mockRejectedValue(new Error(CONST.ERROR.DUPLICATE_RECORD));
+        const onyxUpdateSpy = jest.spyOn(Onyx, 'update');
+
+        const successData: Array<OnyxUpdate<typeof ONYXKEYS.USER_METADATA>> = [{key: 'userMetadata', onyxMethod: 'set', value: {accountID: 9999}}];
+        const failureData: Array<OnyxUpdate<typeof ONYXKEYS.USER_METADATA>> = [{key: 'userMetadata', onyxMethod: 'set', value: {accountID: 1}}];
+
+        try {
+            SequentialQueue.push({command: 'ReconnectApp', successData, failureData});
+            await Promise.resolve();
+            await waitForBatchedUpdates();
+
+            expect(processSpy).toHaveBeenCalledTimes(1);
+            expect(getAll().length).toBe(0);
+
+            const dispatchedRequestData = onyxUpdateSpy.mock.calls.some((args) => {
+                const updates = args.at(0) as unknown[] | undefined;
+                return Array.isArray(updates) && (updates.includes(successData.at(0)) || updates.includes(failureData.at(0)));
+            });
+            expect(dispatchedRequestData).toBe(false);
         } finally {
             processSpy.mockRestore();
             onyxUpdateSpy.mockRestore();

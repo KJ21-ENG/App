@@ -226,9 +226,11 @@ function process(): Promise<void> {
                 shouldFailAllRequests,
             });
 
+            const isDuplicateAddComment = error.message === CONST.ERROR.DUPLICATE_RECORD && requestToProcess.command === WRITE_COMMANDS.ADD_COMMENT;
+
             // On sign out we cancel any in flight requests from the user. Since that user is no longer signed in their requests should not be retried.
-            // Duplicate records don't need to be retried as they just mean the record already exists on the server
-            if (error.name === CONST.ERROR.REQUEST_CANCELLED || error.message === CONST.ERROR.DUPLICATE_RECORD || shouldFailAllRequests) {
+            // Preserve the existing behavior for generic duplicate-record errors. AddComment is handled as a successful replay below.
+            if (error.name === CONST.ERROR.REQUEST_CANCELLED || (error.message === CONST.ERROR.DUPLICATE_RECORD && !isDuplicateAddComment) || shouldFailAllRequests) {
                 if (shouldFailAllRequests) {
                     const onyxUpdates = [...(requestToProcess.failureData ?? []), ...(requestToProcess.finallyData ?? [])] as AnyOnyxUpdate[];
                     Log.info('[SequentialQueue] Applying failure and finally data because shouldFailAllRequests', false, {
@@ -247,9 +249,9 @@ function process(): Promise<void> {
                 return process();
             }
 
-            if (error.message === CONST.ERROR.ALREADY_CREATED) {
+            if (error.message === CONST.ERROR.ALREADY_CREATED || isDuplicateAddComment) {
                 const onyxUpdates = [...(requestToProcess.successData ?? []), ...(requestToProcess.finallyData ?? [])] as AnyOnyxUpdate[];
-                Log.info('[SequentialQueue] Applying success and finally data on ALREADY_CREATED — resource already exists server-side', false, {
+                Log.info('[SequentialQueue] Applying success and finally data because the resource already exists server-side', false, {
                     command: requestToProcess.command,
                     updatesCount: onyxUpdates.length,
                 });
