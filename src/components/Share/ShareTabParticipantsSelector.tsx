@@ -1,9 +1,13 @@
 import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
+import useDefaultExpensePolicy from '@hooks/useDefaultExpensePolicy';
 import useOnyx from '@hooks/useOnyx';
+import usePreferredPolicy from '@hooks/usePreferredPolicy';
 
 import {clearMoneyRequest} from '@libs/actions/IOU/MoneyRequest';
 import {saveUnknownUserDetails} from '@libs/actions/Share';
 import Navigation from '@libs/Navigation/Navigation';
+import {getPolicyExpenseChat} from '@libs/ReportUtils';
+import shouldUseDefaultExpensePolicy from '@libs/shouldUseDefaultExpensePolicy';
 import {cancelSpan, getSpan, startSpan} from '@libs/telemetry/activeSpans';
 
 import MoneyRequestParticipantsSelector from '@pages/iou/request/MoneyRequestParticipantsSelector';
@@ -23,10 +27,26 @@ type ShareTabParticipantsSelectorProps = {
 
 function ShareTabParticipantsSelectorComponent({detailsPageRouteObject}: ShareTabParticipantsSelectorProps) {
     const {accountID: currentUserAccountID} = useCurrentUserPersonalDetails();
+    const defaultExpensePolicy = useDefaultExpensePolicy();
+    const {isRestrictedToPreferredPolicy} = usePreferredPolicy();
     const [draftTransactionIDs] = useOnyx(ONYXKEYS.COLLECTION.TRANSACTION_DRAFT, {selector: validTransactionDraftIDsSelector});
+    const [amountOwed] = useOnyx(ONYXKEYS.NVP_PRIVATE_AMOUNT_OWED);
+    const [userBillingGracePeriodEnds] = useOnyx(ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_USER_BILLING_GRACE_PERIOD_END);
+    const [ownerBillingGracePeriodEnd] = useOnyx(ONYXKEYS.NVP_PRIVATE_OWNER_BILLING_GRACE_PERIOD_END);
     const [selectedReportID, setSelectedReportID] = useState<string | number | undefined>();
 
     const isSubmitFlow = detailsPageRouteObject === ROUTES.SHARE_SUBMIT_DETAILS;
+    const passesDefaultExpensePolicyGuard = shouldUseDefaultExpensePolicy(
+        CONST.IOU.TYPE.CREATE,
+        defaultExpensePolicy,
+        amountOwed,
+        userBillingGracePeriodEnds,
+        ownerBillingGracePeriodEnd,
+        currentUserAccountID,
+    );
+    const shouldUseRestrictedPolicy = isSubmitFlow && isRestrictedToPreferredPolicy && passesDefaultExpensePolicyGuard;
+    const policyExpenseChat = shouldUseRestrictedPolicy ? getPolicyExpenseChat(currentUserAccountID, defaultExpensePolicy?.id) : undefined;
+    const policyExpenseChatReportID = policyExpenseChat?.reportID;
 
     // This span belongs to the submit flow, so the share flow instance must not cancel a span it never started. For the submit flow this cancels an attempt that closes before SubmitDetailsPage mounts to end the span, so it is
     useEffect(
@@ -38,6 +58,29 @@ function ShareTabParticipantsSelectorComponent({detailsPageRouteObject}: ShareTa
         },
         [isSubmitFlow],
     );
+
+    useEffect(() => {
+        if (!policyExpenseChatReportID || selectedReportID === policyExpenseChatReportID) {
+            return;
+        }
+
+        clearMoneyRequest(CONST.IOU.OPTIMISTIC_TRANSACTION_ID, draftTransactionIDs);
+        startSpan(CONST.TELEMETRY.SPAN_SHARE_EXTENSION_OPEN_SUBMIT_FLOW, {
+            name: CONST.TELEMETRY.SPAN_SHARE_EXTENSION_OPEN_SUBMIT_FLOW,
+            op: CONST.TELEMETRY.SPAN_SHARE_EXTENSION_OPEN_SUBMIT_FLOW,
+            forceTransaction: true,
+            attributes: {
+                [CONST.TELEMETRY.ATTRIBUTE_REPORT_ID]: policyExpenseChatReportID.toString(),
+                [CONST.TELEMETRY.ATTRIBUTE_ROUTE_FROM]: Navigation.getActiveRoute() || 'unknown',
+            },
+        });
+        setSelectedReportID(policyExpenseChatReportID);
+        Navigation.navigate(detailsPageRouteObject.getRoute(policyExpenseChatReportID.toString()));
+    }, [detailsPageRouteObject, draftTransactionIDs, isSubmitFlow, policyExpenseChatReportID, selectedReportID]);
+
+    if (policyExpenseChatReportID) {
+        return null;
+    }
 
     return (
         <MoneyRequestParticipantsSelector
