@@ -30,10 +30,22 @@ function getWriteOptions(): WriteOptions {
     if (!options || typeof options !== 'object' || !('optimisticData' in options)) {
         throw new Error('write was not called with optimistic options');
     }
+
+    const {optimisticData, successData, failureData} = options;
+    if (optimisticData !== undefined && !Array.isArray(optimisticData)) {
+        throw new Error('optimisticData was not an update collection');
+    }
+    if (successData !== undefined && !Array.isArray(successData)) {
+        throw new Error('successData was not an update collection');
+    }
+    if (failureData !== undefined && !Array.isArray(failureData)) {
+        throw new Error('failureData was not an update collection');
+    }
+
     return {
-        optimisticData: options.optimisticData ?? [],
-        successData: options.successData ?? [],
-        failureData: options.failureData ?? [],
+        optimisticData: optimisticData ?? [],
+        successData: successData ?? [],
+        failureData: failureData ?? [],
     };
 }
 
