@@ -1,0 +1,196 @@
+# Remote dev-server workflow for the KJ21-ENG/App fork (gh-dev / MC Ops module).
+#
+# This file lives ONLY on the fork's default branch (main). It must NEVER be
+# committed to a feature branch and NEVER appear in a PR to Expensify/App — same
+# rule as fork-checks.yml. Deploy/update it with:
+#   expensify-mission-control/tools/deploy-fork-dev-workflow.sh
+#
+# It is dispatch-only (never triggers on push/PR). The dispatch ref is always
+# `main` (where this file lives); the branch/commit to host is passed as an input
+# and checked out explicitly via a scratch ref `fork-dev/<branch>` pushed before
+# dispatch. All tooling (setupNode composite action, rsbuild config, certs) comes
+# from the checked-out branch tree, so the dev server matches local `npm run web`.
+#
+# The runner joins the Mac's tailnet (Tailscale), starts a real OpenSSH daemon on
+# :2222 (Mutagen's agent install breaks over Tailscale SSH — proven in the smoke
+# test), and hosts `npm run web` on https://dev.new.expensify.com:<port>. The Mac
+# reaches it via an SSH port-forward; Mutagen one-way-replicas local edits in for
+# live HMR. Handshake sentinels in /tmp coordinate with the MC supervisor/driver:
+#   /tmp/env-provisioned   (driver -> runner: local .env uploaded, port-rewritten)
+#   /tmp/dev-server-ready  (runner -> driver: dev server answering on the port)
+#   /tmp/stop-session      (driver -> runner: graceful shutdown requested)
+name: Fork dev server
+run-name: 'fork-dev: ${{ inputs.branch }} @ ${{ inputs.sha }} port=${{ inputs.port }} tag=${{ inputs.tag }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Fork branch being hosted (used for the scratch ref + concurrency group)
+        required: true
+        type: string
+      sha:
+        description: Exact commit to check out and host (reachable via the fork-dev/<branch> scratch ref)
+        required: true
+        type: string
+      port:
+        description: Dev-server port (BASE_PORT patch + curl probe + forward target)
+        required: false
+        default: '8082'
+        type: string
+      ssh_pubkey:
+        description: Public key appended to the runner's authorized_keys for Mutagen/forward SSH on :2222
+        required: true
+        type: string
+      slug:
+        description: Tailnet-safe session slug; the runner joins as gh-dev-<slug>
+        required: true
+        type: string
+      tag:
+        description: Opaque dispatch tag used by the driver to locate this run
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+# Re-dispatching the same branch supersedes the older dev session for it.
+concurrency:
+  group: fork-dev-${{ inputs.branch }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+
+jobs:
+  dev-server:
+    name: Remote dev server
+    runs-on: ubuntu-latest
+    # Clean end before the 6h hard job kill (350 min = 5h50m).
+    timeout-minutes: 350
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          hostname: gh-dev-${{ inputs.slug }}
+          # Tailscale SSH kept as an interactive fallback; Mutagen + forwards use
+          # the real OpenSSH daemon started below (Tailscale SSH breaks Mutagen's
+          # agent install — smoke-test finding).
+          args: --ssh
+
+      - name: Start OpenSSH on :2222 for Mutagen and port-forwards
+        run: |
+          set -euxo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ inputs.ssh_pubkey }}" >> ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/authorized_keys
+          sudo ssh-keygen -A
+          sudo mkdir -p /run/sshd
+          # Tailscale SSH owns :22 once --ssh is active, so real sshd listens on :2222.
+          sudo /usr/sbin/sshd -p 2222
+          echo "sshd listening on :2222"
+
+      - name: Host alias and inotify limits
+        run: |
+          set -euxo pipefail
+          echo "127.0.0.1 dev.new.expensify.com" | sudo tee -a /etc/hosts
+          # rsbuild uses native inotify watchers; raise the ceilings for a big tree.
+          sudo sysctl fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=512
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Setup Bun (web-proxy runs on Bun)
+        uses: oven-sh/setup-bun@v2
+
+      - name: Patch BASE_PORT if not default
+        if: ${{ inputs.port != '8082' }}
+        run: |
+          set -euxo pipefail
+          # Runner-side only; config/rsbuild/rsbuild.config.ts is in the Mutagen
+          # ignore list, so the local -> runner sync never reverts this edit.
+          sed -i "s/const BASE_PORT = 8082/const BASE_PORT = ${{ inputs.port }}/" config/rsbuild/rsbuild.config.ts
+          grep -n "const BASE_PORT" config/rsbuild/rsbuild.config.ts
+
+      - name: Provision .env (handshake with the driver)
+        run: |
+          set -euxo pipefail
+          PORT="${{ inputs.port }}"
+          # The driver uploads the Mac's local .env (port-rewritten) over ssh:2222
+          # then touches /tmp/env-provisioned. Poll up to 5 min.
+          provisioned=0
+          for i in $(seq 1 60); do
+            if [ -f /tmp/env-provisioned ]; then
+              provisioned=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$provisioned" = "1" ] && [ -f .env ]; then
+            echo "Using driver-provisioned .env:"
+            sed -e 's/\(SECRET\|KEY\|TOKEN\)=.*/\1=<redacted>/' .env || true
+          else
+            echo "WARNING: /tmp/env-provisioned not seen within 5 min; generating a degraded .env from .env.example (parity reduced)."
+            if [ -f .env.example ]; then
+              cp .env.example .env
+            else
+              : > .env
+            fi
+            if grep -q '^NEW_EXPENSIFY_URL=' .env; then
+              sed -i "s#^NEW_EXPENSIFY_URL=.*#NEW_EXPENSIFY_URL=https://dev.new.expensify.com:${PORT}/#" .env
+            else
+              echo "NEW_EXPENSIFY_URL=https://dev.new.expensify.com:${PORT}/" >> .env
+            fi
+            grep -q '^USE_WEB_PROXY=' .env || echo "USE_WEB_PROXY=true" >> .env
+            grep -q '^ENVIRONMENT=' .env || echo "ENVIRONMENT=development" >> .env
+            echo "Degraded .env generated for port ${PORT}."
+          fi
+
+      - name: Start dev server and wait for readiness
+        run: |
+          set -uxo pipefail
+          PORT="${{ inputs.port }}"
+          # --open is harmless headless; set-pusher-suffix.sh no-ops without OldDot.
+          NODE_OPTIONS=--max_old_space_size=8192 nohup npm run web > /tmp/dev-server.log 2>&1 &
+          echo "npm run web started (pid $!); polling https://dev.new.expensify.com:${PORT}"
+          up=0
+          # Cap ~12 min (144 * 5s) for the cold rsbuild build.
+          for i in $(seq 1 144); do
+            if curl -ksf "https://dev.new.expensify.com:${PORT}" >/dev/null 2>&1; then
+              up=1
+              break
+            fi
+            if [ $((i % 12)) -eq 0 ]; then
+              echo "--- still waiting ($((i*5))s); dev-server.log tail: ---"
+              tail -n 15 /tmp/dev-server.log || true
+            fi
+            sleep 5
+          done
+          if [ "$up" != "1" ]; then
+            echo "ERROR: dev server did not answer on :${PORT} within ~12 min. Full log:"
+            cat /tmp/dev-server.log || true
+            exit 1
+          fi
+          touch /tmp/dev-server-ready
+          echo "dev-server-ready: https://dev.new.expensify.com:${PORT} is up."
+
+      - name: Keep session alive until stop or timeout
+        run: |
+          set -uxo pipefail
+          echo "Session live. Waiting for /tmp/stop-session (graceful) or the job timeout."
+          # timeout-minutes (350) is the backstop; this loop exits early on the sentinel.
+          while true; do
+            if [ -f /tmp/stop-session ]; then
+              echo "stop-session sentinel seen; shutting down gracefully."
+              break
+            fi
+            sleep 15
+          done
