@@ -1,6 +1,7 @@
 import * as APIModule from '@libs/API';
 import {WRITE_COMMANDS} from '@libs/API/types';
 import GoogleTagManager from '@libs/GoogleTagManager';
+import {isRecord} from '@libs/ObjectUtils';
 import * as PersonalDetailsUtils from '@libs/PersonalDetailsUtils';
 import {isPolicyPayer} from '@libs/PolicyUtils';
 import * as ReportUtils from '@libs/ReportUtils';
@@ -31,8 +32,6 @@ import type {OnyxCollection, OnyxEntry} from 'react-native-onyx';
 import {Str} from 'expensify-common';
 import Onyx from 'react-native-onyx';
 
-import type {MockFetch} from '../utils/TestHelper';
-
 import createRandomPolicy from '../utils/collections/policies';
 import {createRandomReport} from '../utils/collections/reports';
 import createRandomTransaction from '../utils/collections/transaction';
@@ -57,10 +56,6 @@ const TEST_SMS_DOMAIN_EMAIL = 'esh@expensify.sms';
 
 type UnknownRecord = Record<string, unknown>;
 type GuidedSetupItem = {task?: string; completedTaskReportActionID?: string};
-
-function isRecord(value: unknown): value is UnknownRecord {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function requireRecord(value: unknown, label = 'value'): UnknownRecord {
     if (!isRecord(value)) {
@@ -143,21 +138,6 @@ function mockTranslate(key: TranslationPaths): string {
     return key;
 }
 
-function isMockFetch(value: typeof fetch): value is MockFetch {
-    return (
-        'pause' in value &&
-        typeof value.pause === 'function' &&
-        'resume' in value &&
-        typeof value.resume === 'function' &&
-        'fail' in value &&
-        typeof value.fail === 'function' &&
-        'succeed' in value &&
-        typeof value.succeed === 'function' &&
-        'mockAPICommand' in value &&
-        typeof value.mockAPICommand === 'function'
-    );
-}
-
 jest.mock('@libs/GoogleTagManager');
 
 OnyxUpdateManager();
@@ -168,14 +148,10 @@ describe('actions/Policy', () => {
         });
     });
 
-    let mockFetch: MockFetch;
+    let mockFetch: ReturnType<typeof TestHelper.createGlobalFetchMock>;
     beforeEach(() => {
-        const fetchMock = TestHelper.getGlobalFetchMock();
-        if (!isMockFetch(fetchMock)) {
-            throw new Error('Expected TestHelper.getGlobalFetchMock() to return a MockFetch');
-        }
-        global.fetch = fetchMock;
-        mockFetch = fetchMock;
+        mockFetch = TestHelper.createGlobalFetchMock();
+        global.fetch = mockFetch;
         IntlStore.load(CONST.LOCALES.EN);
         jest.clearAllMocks();
         return Onyx.clear().then(waitForBatchedUpdates);
