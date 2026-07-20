@@ -4,7 +4,7 @@ on: workflow_dispatch
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 20
     steps:
       - name: Join tailnet
         uses: tailscale/github-action@v3
@@ -12,8 +12,16 @@ jobs:
           authkey: ${{ secrets.TS_AUTHKEY }}
           hostname: gh-dev-smoke
           args: --ssh
-      - name: Report identity and wait for SSH probe
+      - name: Start OpenSSH on 2222 for mutagen
+        run: |
+          mkdir -p ~/.ssh
+          echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBS/phmhBDwn8LLSfp0FM1rlpSHBkDKoqBO2qhLa3bdq gh-dev-runner-access" >> ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+          sudo ssh-keygen -A
+          sudo mkdir -p /run/sshd
+          sudo /usr/sbin/sshd -p 2222
+          echo "sshd up on 2222"
+      - name: Wait for probes
         run: |
           tailscale status --self
-          echo "runner user: $(whoami)"
-          sleep 300
+          sleep 900
