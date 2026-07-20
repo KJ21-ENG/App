@@ -38,6 +38,7 @@ import type {ReportActions} from '@src/types/onyx/ReportAction';
 import type Transaction from '@src/types/onyx/Transaction';
 
 import type {OnyxEntry} from 'react-native-onyx';
+import type {ValueOf} from 'type-fest';
 
 import Onyx from 'react-native-onyx';
 
@@ -105,6 +106,62 @@ const RORY_EMAIL = 'rory@expensifail.com';
 const RORY_ACCOUNT_ID = 3;
 const CARLOS_EMAIL = 'cmartins@expensifail.com';
 const CARLOS_ACCOUNT_ID = 1;
+
+type OnyxDataRecord = Record<PropertyKey, unknown>;
+type OnyxDataType = 'optimisticData' | 'successData' | 'failureData';
+type OnyxMethod = ValueOf<typeof Onyx.METHOD>;
+type RequiredOnyxUpdate<TValue = unknown> = {onyxMethod: OnyxMethod; key: string; value: TValue};
+
+function getRequiredWriteCall(calls: unknown, callIndex = -1): [unknown, OnyxDataRecord, OnyxDataRecord] {
+    if (!Array.isArray(calls)) {
+        throw new Error('Expected API.write mock calls.');
+    }
+
+    const call: unknown = calls.at(callIndex);
+    if (!Array.isArray(call)) {
+        throw new Error(`Expected API.write call ${callIndex}.`);
+    }
+
+    const parameters: unknown = call.at(1);
+    const onyxData: unknown = call.at(2);
+    if (!isObject(parameters) || !isObject(onyxData)) {
+        throw new Error(`Expected API.write call ${callIndex} to include parameters and Onyx data.`);
+    }
+
+    return [call.at(0), parameters, onyxData];
+}
+
+function getRequiredOnyxUpdates(onyxData: OnyxDataRecord, dataType: OnyxDataType): unknown[] {
+    const updates = onyxData[dataType];
+    if (!Array.isArray(updates)) {
+        throw new Error(`Expected API.write Onyx data to include ${dataType}.`);
+    }
+    return updates;
+}
+
+function getRequiredOnyxUpdate(onyxData: OnyxDataRecord, dataType: OnyxDataType, key: string, onyxMethod: OnyxMethod, requireObjectValue: true): RequiredOnyxUpdate<OnyxDataRecord>;
+function getRequiredOnyxUpdate(onyxData: OnyxDataRecord, dataType: OnyxDataType, key: string, onyxMethod: OnyxMethod, requireObjectValue?: false): RequiredOnyxUpdate;
+function getRequiredOnyxUpdate(onyxData: OnyxDataRecord, dataType: OnyxDataType, key: string, onyxMethod: OnyxMethod, requireObjectValue = false): RequiredOnyxUpdate {
+    const update = getRequiredOnyxUpdates(onyxData, dataType).find((candidate) => isObject(candidate) && candidate.key === key && candidate.onyxMethod === onyxMethod);
+    if (!isObject(update)) {
+        throw new Error(`Expected API.write ${dataType} to include a ${onyxMethod} update for ${key}.`);
+    }
+
+    const value = update.value;
+    if (requireObjectValue && !isObject(value)) {
+        throw new Error(`Expected API.write ${dataType} update for ${key} to include an object value.`);
+    }
+
+    return {onyxMethod, key, value};
+}
+
+function getRequiredReportAction(update: RequiredOnyxUpdate<OnyxDataRecord>): OnyxDataRecord {
+    const reportAction: unknown = Object.values(update.value).at(0);
+    if (!isObject(reportAction)) {
+        throw new Error(`Expected an optimistic report action in ${update.key}.`);
+    }
+    return reportAction;
+}
 
 OnyxUpdateManager();
 
@@ -1284,34 +1341,11 @@ describe('actions/IOU/ReportWorkflow', () => {
                 isTrackIntentUser: false,
             });
 
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(Array.isArray(apiWriteCall)).toBe(true);
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const parameters: unknown = apiWriteCall.at(1);
-            expect(isObject(parameters)).toBe(true);
-            if (!isObject(parameters)) {
-                throw new Error('Expected API.write to include parameters.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
+            const [, parameters, onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
             expect(parameters.managerAccountID).toBe(correctManagerAccountID);
 
             const reportKey = `${ONYXKEYS.COLLECTION.REPORT}${expenseReport.reportID}`;
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
-            const optimisticReportUpdate = optimisticData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
-            expect(optimisticReportUpdate).toBeDefined();
-            if (!isObject(optimisticReportUpdate) || !isObject(optimisticReportUpdate.value)) {
-                throw new Error('Expected an optimistic report merge with a value.');
-            }
+            const optimisticReportUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportKey, Onyx.METHOD.MERGE, true);
             expect(optimisticReportUpdate.value.managerID).toBe(correctManagerAccountID);
         });
 
@@ -1372,34 +1406,11 @@ describe('actions/IOU/ReportWorkflow', () => {
                 isTrackIntentUser: false,
             });
 
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(Array.isArray(apiWriteCall)).toBe(true);
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const parameters: unknown = apiWriteCall.at(1);
-            expect(isObject(parameters)).toBe(true);
-            if (!isObject(parameters)) {
-                throw new Error('Expected API.write to include parameters.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
+            const [, parameters, onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
             expect(parameters.managerAccountID).toBe(correctManagerAccountID);
 
             const reportKey = `${ONYXKEYS.COLLECTION.REPORT}${expenseReport.reportID}`;
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
-            const optimisticReportUpdate = optimisticData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
-            expect(optimisticReportUpdate).toBeDefined();
-            if (!isObject(optimisticReportUpdate) || !isObject(optimisticReportUpdate.value)) {
-                throw new Error('Expected an optimistic report merge with a value.');
-            }
+            const optimisticReportUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportKey, Onyx.METHOD.MERGE, true);
             expect(optimisticReportUpdate.value.managerID).toBe(correctManagerAccountID);
         });
 
@@ -1447,42 +1458,12 @@ describe('actions/IOU/ReportWorkflow', () => {
             });
 
             const pdfNvpKey = `${ONYXKEYS.COLLECTION.NVP_EXPENSIFY_REPORT_PDF_FILENAME}${expenseReport.reportID}`;
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(Array.isArray(apiWriteCall)).toBe(true);
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
-            const optimisticPdfUpdate = optimisticData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.SET && update.key === pdfNvpKey && update.value === null);
-            expect(isObject(optimisticPdfUpdate)).toBe(true);
-            if (!isObject(optimisticPdfUpdate)) {
-                throw new Error('Expected the optimistic PDF-filename update.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
+            const optimisticPdfUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', pdfNvpKey, Onyx.METHOD.SET);
             expect(optimisticPdfUpdate.onyxMethod).toBe(Onyx.METHOD.SET);
             expect(optimisticPdfUpdate.value).toBeNull();
 
-            const failureData = onyxData.failureData;
-            expect(Array.isArray(failureData)).toBe(true);
-            if (!Array.isArray(failureData)) {
-                throw new Error('Expected failure Onyx data.');
-            }
-            const failurePdfUpdate = failureData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === pdfNvpKey && update.value === CONST.REPORT_DETAILS_MENU_ITEM.ERROR,
-            );
-            expect(isObject(failurePdfUpdate)).toBe(true);
-            if (!isObject(failurePdfUpdate)) {
-                throw new Error('Expected the failure PDF-filename update.');
-            }
+            const failurePdfUpdate = getRequiredOnyxUpdate(onyxData, 'failureData', pdfNvpKey, Onyx.METHOD.MERGE);
             expect(failurePdfUpdate.onyxMethod).toBe(Onyx.METHOD.MERGE);
             expect(failurePdfUpdate.value).toBe(CONST.REPORT_DETAILS_MENU_ITEM.ERROR);
         });
@@ -1530,24 +1511,9 @@ describe('actions/IOU/ReportWorkflow', () => {
             });
 
             const pdfNvpKey = `${ONYXKEYS.COLLECTION.NVP_EXPENSIFY_REPORT_PDF_FILENAME}${expenseReport.reportID}`;
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(Array.isArray(apiWriteCall)).toBe(true);
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-
-            const optimisticData = onyxData.optimisticData;
-            const failureData = onyxData.failureData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            expect(Array.isArray(failureData)).toBe(true);
-            if (!Array.isArray(optimisticData) || !Array.isArray(failureData)) {
-                throw new Error('Expected optimistic and failure Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
+            const optimisticData = getRequiredOnyxUpdates(onyxData, 'optimisticData');
+            const failureData = getRequiredOnyxUpdates(onyxData, 'failureData');
             expect(optimisticData.some((update) => isObject(update) && update.key === pdfNvpKey)).toBe(false);
             expect(failureData.some((update) => isObject(update) && update.key === pdfNvpKey)).toBe(false);
         });
@@ -1614,34 +1580,11 @@ describe('actions/IOU/ReportWorkflow', () => {
                 isTrackIntentUser: false,
             });
 
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(Array.isArray(apiWriteCall)).toBe(true);
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const parameters: unknown = apiWriteCall.at(1);
-            expect(isObject(parameters)).toBe(true);
-            if (!isObject(parameters)) {
-                throw new Error('Expected API.write to include parameters.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
+            const [, parameters, onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
             expect(parameters.managerAccountID).toBe(adminAccountID);
 
             const reportKey = `${ONYXKEYS.COLLECTION.REPORT}${expenseReport.reportID}`;
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
-            const optimisticReportUpdate = optimisticData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
-            expect(optimisticReportUpdate).toBeDefined();
-            if (!isObject(optimisticReportUpdate) || !isObject(optimisticReportUpdate.value)) {
-                throw new Error('Expected an optimistic report merge with a value.');
-            }
+            const optimisticReportUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportKey, Onyx.METHOD.MERGE, true);
             expect(optimisticReportUpdate.value.managerID).toBe(adminAccountID);
         });
 
@@ -1728,54 +1671,25 @@ describe('actions/IOU/ReportWorkflow', () => {
                 isTrackIntentUser: false,
             });
 
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const parameters: unknown = apiWriteCall.at(1);
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(parameters)).toBe(true);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(parameters) || !isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
+            const [, parameters, onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
             expect(parameters.managerAccountID).toBe(ruleApproverAccountID);
 
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
             const reportKey = `${ONYXKEYS.COLLECTION.REPORT}${expenseReport.reportID}`;
-            const optimisticReportUpdate = optimisticData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
-            expect(optimisticReportUpdate).toBeDefined();
-            if (!isObject(optimisticReportUpdate) || !isObject(optimisticReportUpdate.value)) {
-                throw new Error('Expected an optimistic report merge with a value.');
-            }
+            const optimisticReportUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportKey, Onyx.METHOD.MERGE, true);
             const optimisticReportValue = optimisticReportUpdate.value;
             expect(optimisticReportValue.managerID).toBe(ruleApproverAccountID);
-            expect(isObject(optimisticReportValue.nextStep)).toBe(true);
             if (!isObject(optimisticReportValue.nextStep)) {
                 throw new Error('Expected an optimistic next step.');
             }
             expect(optimisticReportValue.nextStep.actorAccountID).toBe(ruleApproverAccountID);
 
             const nextStepKey = `${ONYXKEYS.COLLECTION.NEXT_STEP}${expenseReport.reportID}`;
-            const optimisticDeprecatedNextStepUpdate = optimisticData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === nextStepKey && isObject(update.value),
-            );
-            expect(optimisticDeprecatedNextStepUpdate).toBeDefined();
-            if (!isObject(optimisticDeprecatedNextStepUpdate) || !isObject(optimisticDeprecatedNextStepUpdate.value)) {
-                throw new Error('Expected an optimistic next-step merge with a value.');
-            }
+            const optimisticDeprecatedNextStepUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', nextStepKey, Onyx.METHOD.MERGE, true);
             const optimisticDeprecatedNextStep = optimisticDeprecatedNextStepUpdate.value;
-            expect(Array.isArray(optimisticDeprecatedNextStep.message)).toBe(true);
             if (!Array.isArray(optimisticDeprecatedNextStep.message)) {
                 throw new Error('Expected optimistic next-step messages.');
             }
             const strongMessage: unknown = optimisticDeprecatedNextStep.message.find((message) => isObject(message) && message.type === 'strong');
-            expect(isObject(strongMessage)).toBe(true);
             if (!isObject(strongMessage)) {
                 throw new Error('Expected a strong optimistic next-step message.');
             }
@@ -1859,33 +1773,11 @@ describe('actions/IOU/ReportWorkflow', () => {
                 isTrackIntentUser: false,
             });
 
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const parameters: unknown = apiWriteCall.at(1);
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(parameters)).toBe(true);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(parameters) || !isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
+            const [, parameters, onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
             expect(parameters.managerAccountID).toBe(adminAccountID);
 
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
             const parentReportKey = `${ONYXKEYS.COLLECTION.REPORT}${workspaceChatReportID}`;
-            const optimisticParentReportUpdate = optimisticData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === parentReportKey && isObject(update.value),
-            );
-            expect(optimisticParentReportUpdate).toBeDefined();
-            if (!isObject(optimisticParentReportUpdate) || !isObject(optimisticParentReportUpdate.value)) {
-                throw new Error('Expected an optimistic parent report merge with a value.');
-            }
+            const optimisticParentReportUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', parentReportKey, Onyx.METHOD.MERGE, true);
             expect(optimisticParentReportUpdate.value.hasOutstandingChildRequest).toBe(true);
             expect(optimisticParentReportUpdate.value.iouReportID).toBeNull();
         });
@@ -2025,31 +1917,11 @@ describe('actions/IOU/ReportWorkflow', () => {
                 isTrackIntentUser: false,
             });
 
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const parameters: unknown = apiWriteCall.at(1);
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(parameters)).toBe(true);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(parameters) || !isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
+            const [, parameters, onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
             expect(parameters.managerAccountID).toBe(firstApproverAccountID);
 
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
             const reportKey = `${ONYXKEYS.COLLECTION.REPORT}${expenseReport.reportID}`;
-            const optimisticReportUpdate = optimisticData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
-            expect(optimisticReportUpdate).toBeDefined();
-            if (!isObject(optimisticReportUpdate) || !isObject(optimisticReportUpdate.value)) {
-                throw new Error('Expected an optimistic report merge with a value.');
-            }
+            const optimisticReportUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportKey, Onyx.METHOD.MERGE, true);
             expect(optimisticReportUpdate.value.managerID).toBe(firstApproverAccountID);
         });
 
@@ -2220,27 +2092,9 @@ describe('actions/IOU/ReportWorkflow', () => {
                 isTrackIntentUser: false,
             });
 
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-            const failureData = onyxData.failureData;
-            expect(Array.isArray(failureData)).toBe(true);
-            if (!Array.isArray(failureData)) {
-                throw new Error('Expected failure Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
             const reportKey = `${ONYXKEYS.COLLECTION.REPORT}${expenseReport.reportID}`;
-            const failureReportUpdate = failureData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
-            expect(failureReportUpdate).toBeDefined();
-            if (!isObject(failureReportUpdate) || !isObject(failureReportUpdate.value)) {
-                throw new Error('Expected a failure report merge with a value.');
-            }
+            const failureReportUpdate = getRequiredOnyxUpdate(onyxData, 'failureData', reportKey, Onyx.METHOD.MERGE, true);
             expect(failureReportUpdate.value.stateNum).toBe(CONST.REPORT.STATE_NUM.SUBMITTED);
             expect(failureReportUpdate.value.statusNum).toBe(CONST.REPORT.STATUS_NUM.SUBMITTED);
             expect(failureReportUpdate.value.managerID).toBe(managerAccountID);
@@ -2499,36 +2353,13 @@ describe('actions/IOU/ReportWorkflow', () => {
 
             // eslint-disable-next-line rulesdir/no-multiple-api-calls -- Inspecting mock call args to verify optimistic data structure
             const calls = jest.mocked(API.write).mock.calls;
-            const apiWriteCall: unknown = calls.at(0);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(calls, 0);
 
             const reportActionsKey = `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReport.reportID}`;
-            const reportActionsUpdate = optimisticData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportActionsKey && isObject(update.value),
-            );
+            const reportActionsUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportActionsKey, Onyx.METHOD.MERGE, true);
             expect(reportActionsUpdate).toBeDefined();
-            if (!isObject(reportActionsUpdate) || !isObject(reportActionsUpdate.value)) {
-                throw new Error('Expected an optimistic report-action merge with a value.');
-            }
 
-            const reportAction = Object.values(reportActionsUpdate.value).at(0);
-            expect(isObject(reportAction)).toBe(true);
-            if (!isObject(reportAction)) {
-                throw new Error('Expected an optimistic report action.');
-            }
+            const reportAction = getRequiredReportAction(reportActionsUpdate);
             expect(reportAction.delegateAccountID).toBe(DELEGATE_ACCOUNT_ID);
         });
 
@@ -2559,35 +2390,12 @@ describe('actions/IOU/ReportWorkflow', () => {
 
             // eslint-disable-next-line rulesdir/no-multiple-api-calls -- Inspecting mock call args to verify optimistic data structure
             const calls = jest.mocked(API.write).mock.calls;
-            const apiWriteCall: unknown = calls.at(0);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(calls, 0);
 
             const reportActionsKey = `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReport.reportID}`;
-            const reportActionsUpdate = optimisticData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportActionsKey && isObject(update.value),
-            );
+            const reportActionsUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportActionsKey, Onyx.METHOD.MERGE, true);
             expect(reportActionsUpdate).toBeDefined();
-            if (!isObject(reportActionsUpdate) || !isObject(reportActionsUpdate.value)) {
-                throw new Error('Expected an optimistic report-action merge with a value.');
-            }
-            const reportAction = Object.values(reportActionsUpdate.value).at(0);
-            expect(isObject(reportAction)).toBe(true);
-            if (!isObject(reportAction)) {
-                throw new Error('Expected an optimistic report action.');
-            }
+            const reportAction = getRequiredReportAction(reportActionsUpdate);
             expect(reportAction.delegateAccountID).toBeUndefined();
         });
 
@@ -2604,36 +2412,13 @@ describe('actions/IOU/ReportWorkflow', () => {
 
             // eslint-disable-next-line rulesdir/no-multiple-api-calls -- Inspecting mock call args to verify optimistic data structure
             const calls = jest.mocked(API.write).mock.calls;
-            const apiWriteCall: unknown = calls.at(0);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(calls, 0);
 
             const reportActionsKey = `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReport.reportID}`;
-            const reportActionsUpdate = optimisticData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportActionsKey && isObject(update.value),
-            );
+            const reportActionsUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportActionsKey, Onyx.METHOD.MERGE, true);
             expect(reportActionsUpdate).toBeDefined();
-            if (!isObject(reportActionsUpdate) || !isObject(reportActionsUpdate.value)) {
-                throw new Error('Expected an optimistic report-action merge with a value.');
-            }
 
-            const reportAction = Object.values(reportActionsUpdate.value).at(0);
-            expect(isObject(reportAction)).toBe(true);
-            if (!isObject(reportAction)) {
-                throw new Error('Expected an optimistic report action.');
-            }
+            const reportAction = getRequiredReportAction(reportActionsUpdate);
             expect(reportAction.delegateAccountID).toBe(DELEGATE_ACCOUNT_ID);
         });
 
@@ -2653,36 +2438,13 @@ describe('actions/IOU/ReportWorkflow', () => {
 
             // eslint-disable-next-line rulesdir/no-multiple-api-calls -- Inspecting mock call args to verify optimistic data structure
             const calls = jest.mocked(API.write).mock.calls;
-            const apiWriteCall: unknown = calls.at(0);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(calls, 0);
 
             const reportActionsKey = `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReport.reportID}`;
-            const reportActionsUpdate = optimisticData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportActionsKey && isObject(update.value),
-            );
+            const reportActionsUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportActionsKey, Onyx.METHOD.MERGE, true);
             expect(reportActionsUpdate).toBeDefined();
-            if (!isObject(reportActionsUpdate) || !isObject(reportActionsUpdate.value)) {
-                throw new Error('Expected an optimistic report-action merge with a value.');
-            }
 
-            const reportAction = Object.values(reportActionsUpdate.value).at(0);
-            expect(isObject(reportAction)).toBe(true);
-            if (!isObject(reportAction)) {
-                throw new Error('Expected an optimistic report action.');
-            }
+            const reportAction = getRequiredReportAction(reportActionsUpdate);
             expect(reportAction.delegateAccountID).toBe(DELEGATE_ACCOUNT_ID);
         });
 
@@ -2718,36 +2480,13 @@ describe('actions/IOU/ReportWorkflow', () => {
 
             // eslint-disable-next-line rulesdir/no-multiple-api-calls -- Inspecting mock call args to verify optimistic data structure
             const calls = jest.mocked(API.write).mock.calls;
-            const apiWriteCall: unknown = calls.at(0);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(calls, 0);
 
             const reportActionsKey = `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReport.reportID}`;
-            const reportActionsUpdate = optimisticData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportActionsKey && isObject(update.value),
-            );
+            const reportActionsUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportActionsKey, Onyx.METHOD.MERGE, true);
             expect(reportActionsUpdate).toBeDefined();
-            if (!isObject(reportActionsUpdate) || !isObject(reportActionsUpdate.value)) {
-                throw new Error('Expected an optimistic report-action merge with a value.');
-            }
 
-            const reportAction = Object.values(reportActionsUpdate.value).at(0);
-            expect(isObject(reportAction)).toBe(true);
-            if (!isObject(reportAction)) {
-                throw new Error('Expected an optimistic report action.');
-            }
+            const reportAction = getRequiredReportAction(reportActionsUpdate);
             expect(reportAction.delegateAccountID).toBe(DELEGATE_ACCOUNT_ID);
         });
 
@@ -2783,35 +2522,12 @@ describe('actions/IOU/ReportWorkflow', () => {
 
             // eslint-disable-next-line rulesdir/no-multiple-api-calls -- Inspecting mock call args to verify optimistic data structure
             const calls = jest.mocked(API.write).mock.calls;
-            const apiWriteCall: unknown = calls.at(0);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-            const optimisticData = onyxData.optimisticData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            if (!Array.isArray(optimisticData)) {
-                throw new Error('Expected optimistic Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(calls, 0);
 
             const reportActionsKey = `${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReport.reportID}`;
-            const reportActionsUpdate = optimisticData.find(
-                (update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportActionsKey && isObject(update.value),
-            );
+            const reportActionsUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportActionsKey, Onyx.METHOD.MERGE, true);
             expect(reportActionsUpdate).toBeDefined();
-            if (!isObject(reportActionsUpdate) || !isObject(reportActionsUpdate.value)) {
-                throw new Error('Expected an optimistic report-action merge with a value.');
-            }
-            const reportAction = Object.values(reportActionsUpdate.value).at(0);
-            expect(isObject(reportAction)).toBe(true);
-            if (!isObject(reportAction)) {
-                throw new Error('Expected an optimistic report action.');
-            }
+            const reportAction = getRequiredReportAction(reportActionsUpdate);
             expect(reportAction.delegateAccountID).toBeUndefined();
         });
     });
@@ -3382,49 +3098,18 @@ describe('actions/IOU/ReportWorkflow', () => {
 
             retractReport(expenseReport, undefined, policy, 1, 'test@example.com', false, false, undefined, undefined, false);
 
-            const apiWriteCall: unknown = apiWriteSpy.mock.calls.at(-1);
-            expect(apiWriteCall).toBeDefined();
-            if (!Array.isArray(apiWriteCall)) {
-                throw new Error('Expected API.write to be called.');
-            }
-            const onyxData: unknown = apiWriteCall.at(2);
-            expect(isObject(onyxData)).toBe(true);
-            if (!isObject(onyxData)) {
-                throw new Error('Expected API.write to include Onyx data.');
-            }
-            const optimisticData = onyxData.optimisticData;
-            const successData = onyxData.successData;
-            const failureData = onyxData.failureData;
-            expect(Array.isArray(optimisticData)).toBe(true);
-            expect(Array.isArray(successData)).toBe(true);
-            expect(Array.isArray(failureData)).toBe(true);
-            if (!Array.isArray(optimisticData) || !Array.isArray(successData) || !Array.isArray(failureData)) {
-                throw new Error('Expected retract Onyx data.');
-            }
+            const [, , onyxData] = getRequiredWriteCall(apiWriteSpy.mock.calls);
             const reportKey = `${ONYXKEYS.COLLECTION.REPORT}${expenseReport.reportID}`;
-            const optimisticReportUpdate = optimisticData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
-            const successReportUpdate = successData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
-            const failureReportUpdate = failureData.find((update) => isObject(update) && update.onyxMethod === Onyx.METHOD.MERGE && update.key === reportKey && isObject(update.value));
+            const optimisticReportUpdate = getRequiredOnyxUpdate(onyxData, 'optimisticData', reportKey, Onyx.METHOD.MERGE, true);
+            const successReportUpdate = getRequiredOnyxUpdate(onyxData, 'successData', reportKey, Onyx.METHOD.MERGE, true);
+            const failureReportUpdate = getRequiredOnyxUpdate(onyxData, 'failureData', reportKey, Onyx.METHOD.MERGE, true);
 
             expect(optimisticReportUpdate).toBeDefined();
             expect(successReportUpdate).toBeDefined();
             expect(failureReportUpdate).toBeDefined();
-            if (
-                !isObject(optimisticReportUpdate) ||
-                !isObject(optimisticReportUpdate.value) ||
-                !isObject(successReportUpdate) ||
-                !isObject(successReportUpdate.value) ||
-                !isObject(failureReportUpdate) ||
-                !isObject(failureReportUpdate.value)
-            ) {
-                throw new Error('Expected retract report merges with values.');
-            }
             const optimisticPendingFields = optimisticReportUpdate.value.pendingFields;
             const successPendingFields = successReportUpdate.value.pendingFields;
             const failurePendingFields = failureReportUpdate.value.pendingFields;
-            expect(optimisticPendingFields === undefined || isObject(optimisticPendingFields)).toBe(true);
-            expect(successPendingFields === undefined || isObject(successPendingFields)).toBe(true);
-            expect(failurePendingFields === undefined || isObject(failurePendingFields)).toBe(true);
             if (
                 (optimisticPendingFields !== undefined && !isObject(optimisticPendingFields)) ||
                 (successPendingFields !== undefined && !isObject(successPendingFields)) ||
