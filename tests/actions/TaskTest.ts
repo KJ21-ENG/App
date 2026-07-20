@@ -57,6 +57,10 @@ jest.mock('@components/LocaleContextProvider');
 
 const mockWrite = jest.mocked(API.write);
 
+type ReportActionsKey = `${typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS}${string}`;
+
+type ReportKey = `${typeof ONYXKEYS.COLLECTION.REPORT}${string}`;
+
 function getRequiredWriteOnyxData(callIndex = 0): OnyxData<OnyxKey> {
     const onyxData = mockWrite.mock.calls.at(callIndex)?.[2];
     if (!onyxData) {
@@ -65,20 +69,20 @@ function getRequiredWriteOnyxData(callIndex = 0): OnyxData<OnyxKey> {
     return onyxData;
 }
 
-function getRequiredOnyxUpdate<TKey extends OnyxKey>(onyxData: OnyxData<OnyxKey>, dataType: 'optimisticData' | 'failureData', key: TKey): OnyxUpdate<TKey> {
+function getRequiredOnyxUpdate(onyxData: OnyxData<OnyxKey>, dataType: 'optimisticData' | 'failureData', key: ReportActionsKey): OnyxUpdate<ReportActionsKey>;
+function getRequiredOnyxUpdate(onyxData: OnyxData<OnyxKey>, dataType: 'optimisticData' | 'failureData', key: ReportKey): OnyxUpdate<ReportKey>;
+function getRequiredOnyxUpdate(onyxData: OnyxData<OnyxKey>, dataType: 'optimisticData' | 'failureData', key: OnyxKey): OnyxUpdate<OnyxKey> {
     const updates = onyxData[dataType];
     if (!updates) {
         throw new Error(`API.write Onyx data did not include ${dataType}`);
     }
 
-    const update = updates.find((candidate): candidate is OnyxUpdate<TKey> => candidate.key === key);
+    const update = updates.find((candidate) => candidate.key === key);
     if (!update) {
         throw new Error(`API.write ${dataType} did not include ${key}`);
     }
     return update;
 }
-
-type ReportActionsKey = `${typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS}${string}`;
 
 function getRequiredReportAction(update: OnyxUpdate<ReportActionsKey>, actionName: ReportAction['actionName']) {
     if (update.onyxMethod !== Onyx.METHOD.MERGE || !update.value) {
@@ -485,7 +489,11 @@ describe('actions/Task', () => {
             // Then: Verify API.write called with expected arguments
             const calls = mockWrite.mock.calls;
             expect(calls.length).toBe(1);
-            const [command, params] = calls.at(0);
+            const call = calls.at(0);
+            if (!call) {
+                throw new Error('CreateTask write was not called');
+            }
+            const [command, params] = call;
             expect(command).toBe('CreateTask');
             expect(params).toEqual(
                 expect.objectContaining({
@@ -749,7 +757,11 @@ describe('actions/Task', () => {
 
             const calls = mockWrite.mock.calls;
             expect(calls.length).toBe(1);
-            const [command, params] = calls.at(0);
+            const call = calls.at(0);
+            if (!call) {
+                throw new Error('CreateTask write was not called');
+            }
+            const [command, params] = call;
             expect(command).toBe('CreateTask');
             expect(params).toEqual(
                 expect.objectContaining({
