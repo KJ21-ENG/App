@@ -20,12 +20,20 @@
 #   /tmp/dev-server-ready  (runner -> driver: dev server answering on the port)
 #   /tmp/stop-session      (driver -> runner: graceful shutdown requested)
 #
-# rsbuild's HTTPS dev server reads config/rsbuild/key.pem + certificate.pem, which
-# are GITIGNORED (.gitignore: config/rsbuild/*.pem) and never in the checkout. The
-# driver uploads the Mac's local mkcert-signed pems alongside .env before touching
-# /tmp/env-provisioned (preserves browser trust). If they are absent at server-start
-# time, the handshake step self-signs a fallback pair into config/rsbuild/ so the
-# session still comes up (curl -k only; degraded browser trust — logged).
+# The dev server reads HTTPS certs (key.pem + certificate.pem) from ITS OWN config
+# dir, which differs by branch era: newer branches are rsbuild (config/rsbuild/),
+# pre-rsbuild ones (e.g. new.expensify 9.4.x) are webpack (config/webpack/, read by
+# webpack.dev.ts). Those *.pem are GITIGNORED (config/{rsbuild,webpack}/*.pem) and
+# never in the checkout. The driver uploads the Mac's local mkcert-signed pems
+# alongside .env into every config dir the checkout has, before touching
+# /tmp/env-provisioned (preserves browser trust). The handshake step VALIDATES each
+# uploaded pair and, if absent/invalid at server-start time, self-signs a fallback
+# pair into that config dir so the session still comes up (curl -k only; degraded
+# browser trust — logged). Note: webpack-dev-server treats a MISSING cert path as
+# literal PEM bytes → ERR_OSSL_PEM_NO_START_LINE, so a valid pem in config/webpack/
+# is mandatory for webpack-era branches (this is why the flavor-aware provisioning
+# exists). The BASE_PORT patch is likewise flavor-aware (patches whichever config
+# declares `const BASE_PORT = 8082`), so non-default ports work for both flavors.
 name: Fork dev server
 run-name: 'fork-dev: ${{ inputs.branch }} @ ${{ inputs.sha }} port=${{ inputs.port }} tag=${{ inputs.tag }}'
 
@@ -122,20 +130,30 @@ jobs:
         if: ${{ inputs.port != '8082' }}
         run: |
           set -euxo pipefail
-          # Runner-side only; config/rsbuild/rsbuild.config.ts is in the Mutagen
-          # ignore list, so the local -> runner sync never reverts this edit.
-          sed -i "s/const BASE_PORT = 8082/const BASE_PORT = ${{ inputs.port }}/" config/rsbuild/rsbuild.config.ts
-          grep -n "const BASE_PORT" config/rsbuild/rsbuild.config.ts
+          # Flavor-aware: newer branches carry config/rsbuild/rsbuild.config.ts,
+          # older (pre-rsbuild) ones config/webpack/webpack.dev.ts. Both declare
+          # `const BASE_PORT = 8082` and portfinder from it, so patching whichever
+          # exists makes non-default ports work for both. Runner-side only; both
+          # config files are in the Mutagen ignore list so the sync never reverts.
+          patched=0
+          for f in config/rsbuild/rsbuild.config.ts config/webpack/webpack.dev.ts; do
+            if [ -f "$f" ] && grep -q "const BASE_PORT = 8082" "$f"; then
+              sed -i "s/const BASE_PORT = 8082/const BASE_PORT = ${{ inputs.port }}/" "$f"
+              grep -n "const BASE_PORT" "$f"
+              patched=1
+            fi
+          done
+          if [ "$patched" != "1" ]; then
+            echo "WARNING: no known dev-server config (rsbuild/webpack) had 'const BASE_PORT = 8082' to patch; port ${{ inputs.port }} may not take effect."
+          fi
 
       - name: Provision .env and rsbuild certs (handshake with the driver)
         run: |
           set -euxo pipefail
           PORT="${{ inputs.port }}"
-          KEY_PEM="config/rsbuild/key.pem"
-          CERT_PEM="config/rsbuild/certificate.pem"
           # The driver uploads the Mac's local .env (port-rewritten) AND the local
-          # mkcert-signed config/rsbuild/{key,certificate}.pem over ssh:2222, then
-          # touches /tmp/env-provisioned. Poll up to 5 min for the sentinel.
+          # mkcert-signed certs into every config/{rsbuild,webpack} dir the checkout
+          # has, over ssh:2222, then touches /tmp/env-provisioned. Poll up to 5 min.
           provisioned=0
           for i in $(seq 1 60); do
             if [ -f /tmp/env-provisioned ]; then
@@ -166,21 +184,50 @@ jobs:
             echo "Degraded .env generated for port ${PORT}."
           fi
 
-          # --- rsbuild HTTPS certs (config/rsbuild/*.pem are gitignored, never in
-          # the checkout; rsbuild.config.ts reads them at dev-server start). Prefer
-          # the driver-uploaded mkcert pair; self-sign a fallback otherwise. ---
-          mkdir -p config/rsbuild
-          if [ -s "$KEY_PEM" ] && [ -s "$CERT_PEM" ]; then
-            echo "Using driver-provisioned rsbuild certs (mkcert-signed; browser trust preserved):"
-            openssl x509 -in "$CERT_PEM" -noout -subject -ext subjectAltName 2>/dev/null || true
-          else
-            echo "WARNING: config/rsbuild/{key,certificate}.pem absent after handshake; self-signing a fallback pair (curl -k only, degraded browser trust)."
-            openssl req -x509 -newkey rsa:2048 -nodes \
-              -keyout "$KEY_PEM" -out "$CERT_PEM" -days 825 \
-              -subj "/CN=dev.new.expensify.com" \
-              -addext "subjectAltName=DNS:dev.new.expensify.com"
-            echo "Self-signed fallback cert generated into config/rsbuild/."
+          # --- HTTPS certs (flavor-aware). config/{rsbuild,webpack}/*.pem are
+          # gitignored, never in the checkout; the dev-server config reads
+          # key.pem + certificate.pem from ITS OWN config dir at server start
+          # (rsbuild.config.ts for newer branches, webpack.dev.ts for pre-rsbuild
+          # ones like 9.4.x). Provision a valid pair into EVERY config dir that
+          # exists in this checkout. Prefer the driver-uploaded mkcert pair, but
+          # VALIDATE it first (openssl) — a webpack-era branch that got no cert
+          # made webpack-dev-server treat the missing path as literal PEM bytes
+          # and die with ERR_OSSL_PEM_NO_START_LINE; an empty/garbage upload
+          # would do the same. Treat an invalid/empty pair as absent and
+          # self-sign a fallback (curl -k only, degraded browser trust). ---
+          valid_pair() {
+            # $1=key $2=cert — both must exist, be non-empty, and parse as PEM.
+            [ -s "$1" ] && [ -s "$2" ] || return 1
+            openssl x509 -in "$2" -noout >/dev/null 2>&1 || return 1
+            openssl pkey -in "$1" -noout >/dev/null 2>&1 \
+              || openssl rsa -in "$1" -noout >/dev/null 2>&1 || return 1
+            return 0
+          }
+          FLAVOR_DIRS=""
+          for d in config/rsbuild config/webpack; do
+            [ -d "$d" ] && FLAVOR_DIRS="$FLAVOR_DIRS $d"
+          done
+          # Defensive: if the checkout somehow has neither dir, provision rsbuild.
+          if [ -z "$FLAVOR_DIRS" ]; then
+            echo "WARNING: neither config/rsbuild nor config/webpack present; defaulting to config/rsbuild."
+            FLAVOR_DIRS="config/rsbuild"
           fi
+          for d in $FLAVOR_DIRS; do
+            mkdir -p "$d"
+            K="$d/key.pem"
+            C="$d/certificate.pem"
+            if valid_pair "$K" "$C"; then
+              echo "Using driver-provisioned certs in $d (valid; browser trust preserved if mkcert-signed):"
+              openssl x509 -in "$C" -noout -subject -ext subjectAltName 2>/dev/null || true
+            else
+              echo "WARNING: $d/{key,certificate}.pem missing/invalid after handshake; self-signing a fallback pair (curl -k only, degraded browser trust)."
+              openssl req -x509 -newkey rsa:2048 -nodes \
+                -keyout "$K" -out "$C" -days 825 \
+                -subj "/CN=dev.new.expensify.com" \
+                -addext "subjectAltName=DNS:dev.new.expensify.com"
+              echo "Self-signed fallback cert generated into $d/."
+            fi
+          done
 
       - name: Start dev server and wait for readiness
         run: |
