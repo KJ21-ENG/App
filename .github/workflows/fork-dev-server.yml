@@ -16,9 +16,16 @@
 # test), and hosts `npm run web` on https://dev.new.expensify.com:<port>. The Mac
 # reaches it via an SSH port-forward; Mutagen one-way-replicas local edits in for
 # live HMR. Handshake sentinels in /tmp coordinate with the MC supervisor/driver:
-#   /tmp/env-provisioned   (driver -> runner: local .env uploaded, port-rewritten)
+#   /tmp/env-provisioned   (driver -> runner: local .env + rsbuild certs uploaded)
 #   /tmp/dev-server-ready  (runner -> driver: dev server answering on the port)
 #   /tmp/stop-session      (driver -> runner: graceful shutdown requested)
+#
+# rsbuild's HTTPS dev server reads config/rsbuild/key.pem + certificate.pem, which
+# are GITIGNORED (.gitignore: config/rsbuild/*.pem) and never in the checkout. The
+# driver uploads the Mac's local mkcert-signed pems alongside .env before touching
+# /tmp/env-provisioned (preserves browser trust). If they are absent at server-start
+# time, the handshake step self-signs a fallback pair into config/rsbuild/ so the
+# session still comes up (curl -k only; degraded browser trust — logged).
 name: Fork dev server
 run-name: 'fork-dev: ${{ inputs.branch }} @ ${{ inputs.sha }} port=${{ inputs.port }} tag=${{ inputs.tag }}'
 
@@ -120,12 +127,15 @@ jobs:
           sed -i "s/const BASE_PORT = 8082/const BASE_PORT = ${{ inputs.port }}/" config/rsbuild/rsbuild.config.ts
           grep -n "const BASE_PORT" config/rsbuild/rsbuild.config.ts
 
-      - name: Provision .env (handshake with the driver)
+      - name: Provision .env and rsbuild certs (handshake with the driver)
         run: |
           set -euxo pipefail
           PORT="${{ inputs.port }}"
-          # The driver uploads the Mac's local .env (port-rewritten) over ssh:2222
-          # then touches /tmp/env-provisioned. Poll up to 5 min.
+          KEY_PEM="config/rsbuild/key.pem"
+          CERT_PEM="config/rsbuild/certificate.pem"
+          # The driver uploads the Mac's local .env (port-rewritten) AND the local
+          # mkcert-signed config/rsbuild/{key,certificate}.pem over ssh:2222, then
+          # touches /tmp/env-provisioned. Poll up to 5 min for the sentinel.
           provisioned=0
           for i in $(seq 1 60); do
             if [ -f /tmp/env-provisioned ]; then
@@ -134,11 +144,13 @@ jobs:
             fi
             sleep 5
           done
+
+          # --- .env ---
           if [ "$provisioned" = "1" ] && [ -f .env ]; then
             echo "Using driver-provisioned .env:"
             sed -e 's/\(SECRET\|KEY\|TOKEN\)=.*/\1=<redacted>/' .env || true
           else
-            echo "WARNING: /tmp/env-provisioned not seen within 5 min; generating a degraded .env from .env.example (parity reduced)."
+            echo "WARNING: /tmp/env-provisioned not seen within 5 min (or .env missing); generating a degraded .env from .env.example (parity reduced)."
             if [ -f .env.example ]; then
               cp .env.example .env
             else
@@ -152,6 +164,22 @@ jobs:
             grep -q '^USE_WEB_PROXY=' .env || echo "USE_WEB_PROXY=true" >> .env
             grep -q '^ENVIRONMENT=' .env || echo "ENVIRONMENT=development" >> .env
             echo "Degraded .env generated for port ${PORT}."
+          fi
+
+          # --- rsbuild HTTPS certs (config/rsbuild/*.pem are gitignored, never in
+          # the checkout; rsbuild.config.ts reads them at dev-server start). Prefer
+          # the driver-uploaded mkcert pair; self-sign a fallback otherwise. ---
+          mkdir -p config/rsbuild
+          if [ -s "$KEY_PEM" ] && [ -s "$CERT_PEM" ]; then
+            echo "Using driver-provisioned rsbuild certs (mkcert-signed; browser trust preserved):"
+            openssl x509 -in "$CERT_PEM" -noout -subject -ext subjectAltName 2>/dev/null || true
+          else
+            echo "WARNING: config/rsbuild/{key,certificate}.pem absent after handshake; self-signing a fallback pair (curl -k only, degraded browser trust)."
+            openssl req -x509 -newkey rsa:2048 -nodes \
+              -keyout "$KEY_PEM" -out "$CERT_PEM" -days 825 \
+              -subj "/CN=dev.new.expensify.com" \
+              -addext "subjectAltName=DNS:dev.new.expensify.com"
+            echo "Self-signed fallback cert generated into config/rsbuild/."
           fi
 
       - name: Start dev server and wait for readiness
