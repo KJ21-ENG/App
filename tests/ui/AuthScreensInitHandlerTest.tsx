@@ -17,7 +17,7 @@ import CONST from '@src/CONST';
 import IntlStore from '@src/languages/IntlStore';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
-import type {ReportAttributesDerivedValue} from '@src/types/onyx';
+import type {ReportAction, ReportAttributesDerivedValue} from '@src/types/onyx';
 
 import React from 'react';
 import {View} from 'react-native';
@@ -50,6 +50,7 @@ jest.mock('@libs/Navigation/Navigation', () => ({
         navigate: jest.fn(),
         getActiveRouteWithoutParams: jest.fn(() => ''),
         getTopmostReportId: jest.fn(() => undefined),
+        getTopmostSuperWideRHPReportID: jest.fn(() => undefined),
         isNavigationReady: jest.fn(() => Promise.resolve()),
         setNavigationActionToMicrotaskQueue: jest.fn(() => Promise.resolve()),
     },
@@ -115,6 +116,8 @@ jest.mock('@src/components/ConfirmedRoute.tsx');
 const mockedPusherInit = jest.mocked(Pusher.init);
 const mockedGetCurrentUrl = jest.mocked(getCurrentUrl);
 const mockedIsActiveRoute = jest.mocked(Navigation.isActiveRoute);
+const mockedGetTopmostReportId = jest.mocked(Navigation.getTopmostReportId);
+const mockedGetTopmostSuperWideRHPReportID = jest.mocked(Navigation.getTopmostSuperWideRHPReportID);
 const mockedIsLoggingInAsNewUser = jest.mocked(isLoggingInAsNewUser);
 const mockedDidUserLogInDuringSession = jest.mocked(didUserLogInDuringSession);
 const mockedIsClientTheLeader = jest.mocked(isClientTheLeader);
@@ -144,6 +147,8 @@ describe('AuthScreensInitHandler', () => {
         mockedIsClientTheLeader.mockReturnValue(true);
         mockedIsReady.mockReturnValue(Promise.resolve());
         mockedIsActiveRoute.mockReturnValue(false);
+        mockedGetTopmostReportId.mockReturnValue(undefined);
+        mockedGetTopmostSuperWideRHPReportID.mockReturnValue(undefined);
         wrapOnyxWithWaitForBatchedUpdates(Onyx);
         await Onyx.clear();
         await waitForBatchedUpdates();
@@ -158,6 +163,83 @@ describe('AuthScreensInitHandler', () => {
 
         expect(mockedPusherInit).toHaveBeenCalled();
         expect(subscribeToUserEvents).toHaveBeenCalledWith(TEST_ACCOUNT_ID, 'test@test.com', expect.any(Function), expect.any(Function));
+    });
+
+    it('derives the transaction thread from the focused super-wide RHP report instead of the background split report', async () => {
+        const expenseReportID = 'expense-report-id';
+        const backgroundReportID = 'background-report-id';
+        const chatReportID = 'chat-report-id';
+        const transactionThreadReportID = 'transaction-thread-report-id';
+        const iouAction: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.IOU> = {
+            reportActionID: 'iou-action-id',
+            childReportID: transactionThreadReportID,
+            actionName: CONST.REPORT.ACTIONS.TYPE.IOU,
+            created: '2026-01-01 00:00:00.000',
+            originalMessage: {
+                type: CONST.IOU.REPORT_ACTION_TYPE.CREATE,
+                amount: 100,
+                currency: CONST.CURRENCY.USD,
+                IOUTransactionID: 'transaction-id',
+            },
+            message: [{type: CONST.REPORT.MESSAGE.TYPE.COMMENT, html: '$1 expense', text: '$1 expense'}],
+        };
+
+        mockedGetTopmostSuperWideRHPReportID.mockReturnValue(expenseReportID);
+        mockedGetTopmostReportId.mockReturnValue(backgroundReportID);
+        await Onyx.merge(ONYXKEYS.SESSION, {accountID: TEST_ACCOUNT_ID, email: 'test@test.com'});
+        await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${expenseReportID}`, {
+            reportID: expenseReportID,
+            chatReportID,
+            type: CONST.REPORT.TYPE.EXPENSE,
+        });
+        await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${chatReportID}`, {reportID: chatReportID, type: CONST.REPORT.TYPE.CHAT});
+        await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReportID}`, {[iouAction.reportActionID]: iouAction});
+        await waitForBatchedUpdates();
+
+        renderAuthScreensInitHandler();
+        await waitForBatchedUpdatesWithAct();
+
+        const firstCallArgs = (subscribeToUserEvents as jest.Mock).mock.calls.at(0) as unknown[];
+        const getTopmostOneTransactionThreadReportID = firstCallArgs.at(2) as () => string | undefined;
+        expect(getTopmostOneTransactionThreadReportID()).toBe(transactionThreadReportID);
+    });
+
+    it('falls back to the split report when there is no focused super-wide RHP report', async () => {
+        const expenseReportID = 'expense-report-id';
+        const chatReportID = 'chat-report-id';
+        const transactionThreadReportID = 'transaction-thread-report-id';
+        const iouAction: ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.IOU> = {
+            reportActionID: 'iou-action-id',
+            childReportID: transactionThreadReportID,
+            actionName: CONST.REPORT.ACTIONS.TYPE.IOU,
+            created: '2026-01-01 00:00:00.000',
+            originalMessage: {
+                type: CONST.IOU.REPORT_ACTION_TYPE.CREATE,
+                amount: 100,
+                currency: CONST.CURRENCY.USD,
+                IOUTransactionID: 'transaction-id',
+            },
+            message: [{type: CONST.REPORT.MESSAGE.TYPE.COMMENT, html: '$1 expense', text: '$1 expense'}],
+        };
+
+        mockedGetTopmostSuperWideRHPReportID.mockReturnValue(undefined);
+        mockedGetTopmostReportId.mockReturnValue(expenseReportID);
+        await Onyx.merge(ONYXKEYS.SESSION, {accountID: TEST_ACCOUNT_ID, email: 'test@test.com'});
+        await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${expenseReportID}`, {
+            reportID: expenseReportID,
+            chatReportID,
+            type: CONST.REPORT.TYPE.EXPENSE,
+        });
+        await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${chatReportID}`, {reportID: chatReportID, type: CONST.REPORT.TYPE.CHAT});
+        await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${expenseReportID}`, {[iouAction.reportActionID]: iouAction});
+        await waitForBatchedUpdates();
+
+        renderAuthScreensInitHandler();
+        await waitForBatchedUpdatesWithAct();
+
+        const firstCallArgs = (subscribeToUserEvents as jest.Mock).mock.calls.at(0) as unknown[];
+        const getTopmostOneTransactionThreadReportID = firstCallArgs.at(2) as () => string | undefined;
+        expect(getTopmostOneTransactionThreadReportID()).toBe(transactionThreadReportID);
     });
 
     it('calls subscribeToUserEvents from sign-in modal effect when SIGN_IN_MODAL is active', async () => {

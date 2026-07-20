@@ -56,7 +56,7 @@ export default function shouldShowPushNotification(pushPayload: PushPayload): bo
         shouldShow = true;
     } else {
         const reportAction = ReportActionUtils.getLatestReportActionFromOnyxData(data.onyxData ?? null);
-        const topmostReportID = Navigation.getTopmostReportId();
+        const topmostReportID = Navigation.getTopmostSuperWideRHPReportID() ?? Navigation.getTopmostReportId();
         const topmostReport = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${topmostReportID}`];
         const topmostChatReport = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${topmostReport?.chatReportID}`];
         const topmostReportActions = allReportActions?.[`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${topmostReportID}`];
