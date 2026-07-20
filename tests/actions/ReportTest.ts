@@ -16,7 +16,7 @@ import HttpUtils from '@libs/HttpUtils';
 import Navigation from '@libs/Navigation/Navigation';
 import {buildNextStepNew} from '@libs/NextStepUtils';
 import {getAccountIDsByLogins} from '@libs/PersonalDetailsUtils';
-import {getOriginalMessage, isDeletedAction} from '@libs/ReportActionsUtils';
+import {getOriginalMessage, isActionOfType, isDeletedAction} from '@libs/ReportActionsUtils';
 import playSound, {SOUNDS} from '@libs/Sound';
 
 import {toggleEmojiReaction} from '@userActions/EmojiReactions';
@@ -36,7 +36,6 @@ import type * as SearchQueryUtilsType from '@src/libs/SearchQueryUtils';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES from '@src/ROUTES';
 import type * as OnyxTypes from '@src/types/onyx';
-import type {Message} from '@src/types/onyx/ReportAction';
 
 import type {OnyxCollection, OnyxEntry, OnyxUpdate} from 'react-native-onyx';
 
@@ -198,7 +197,53 @@ const TEST_INTRO_SELECTED: OnyxTypes.IntroSelected = {
     isInviteOnboardingComplete: false,
 };
 
-const getMockFetch = (fetch: typeof global.fetch) => fetch as MockFetch;
+const isMockFetch = (fetch: typeof global.fetch): fetch is MockFetch =>
+    jest.isMockFunction(fetch) &&
+    'pause' in fetch &&
+    typeof fetch.pause === 'function' &&
+    'fail' in fetch &&
+    typeof fetch.fail === 'function' &&
+    'succeed' in fetch &&
+    typeof fetch.succeed === 'function' &&
+    'resume' in fetch &&
+    typeof fetch.resume === 'function' &&
+    'mockAPICommand' in fetch &&
+    typeof fetch.mockAPICommand === 'function';
+
+const getMockFetch = (fetch: typeof global.fetch): MockFetch => {
+    if (!isMockFetch(fetch)) {
+        throw new Error('Expected the global fetch implementation to be the test mock');
+    }
+    return fetch;
+};
+
+const getTransactionProperty = (value: unknown, property: 'pendingAction' | 'convertedAmount'): unknown =>
+    typeof value === 'object' && value !== null && property in value ? value[property] : undefined;
+
+type GuidedSetupItem = {
+    type: string;
+    task?: string;
+    completedTaskReportActionID?: string;
+};
+
+const parseGuidedSetupData = (value: string): GuidedSetupItem[] => {
+    const parsed: unknown = JSON.parse(value);
+    if (
+        !Array.isArray(parsed) ||
+        !parsed.every(
+            (item: unknown): item is GuidedSetupItem =>
+                typeof item === 'object' &&
+                item !== null &&
+                'type' in item &&
+                typeof item.type === 'string' &&
+                (!('task' in item) || typeof item.task === 'string') &&
+                (!('completedTaskReportActionID' in item) || typeof item.completedTaskReportActionID === 'string'),
+        )
+    ) {
+        throw new Error('Expected guided setup data to contain only valid items');
+    }
+    return parsed;
+};
 
 type APIWriteSpy = jest.SpiedFunction<typeof API.write>;
 
@@ -538,8 +583,7 @@ describe('actions/Report', () => {
             })
             .then(() => {
                 // THEN only ONE call to AddComment will happen
-                const URL_ARGUMENT_INDEX = 0;
-                const addCommentCalls = (global.fetch as jest.Mock).mock.calls.filter((callArguments: string[]) => callArguments.at(URL_ARGUMENT_INDEX)?.includes('AddComment'));
+                const addCommentCalls = jest.mocked(global.fetch).mock.calls.filter(([input]) => typeof input === 'string' && input.includes('AddComment'));
                 expect(addCommentCalls.length).toBe(1);
             });
     });
@@ -750,7 +794,7 @@ describe('actions/Report', () => {
 
                 reportActionCreatedDate = DateUtils.getDBTime();
 
-                const optimisticReportActionsValue = optimisticReportActions.value as Record<string, OnyxTypes.ReportAction>;
+                const optimisticReportActionsValue = optimisticReportActions.value;
 
                 if (optimisticReportActionsValue?.[400]) {
                     optimisticReportActionsValue[400].created = reportActionCreatedDate;
@@ -1400,7 +1444,7 @@ describe('actions/Report', () => {
 
         // Need the reportActionID to delete the comments
         const newComment = PersistedRequests.getAll().at(0);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const newReportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
         const originalReport = {
             reportID: REPORT_ID,
@@ -1484,7 +1528,8 @@ describe('actions/Report', () => {
             conciergeReportID: undefined,
         });
 
-        const reportActionID = PersistedRequests.getAll().at(0)?.data?.reportActionID as string | undefined;
+        const reportActionIDCandidate = PersistedRequests.getAll().at(0)?.data?.reportActionID;
+        const reportActionID = typeof reportActionIDCandidate === 'string' ? reportActionIDCandidate : undefined;
         const newReportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
         const originalReport = {reportID: REPORT_ID};
         const {result: ancestors, rerender} = renderHook(() => useAncestors(originalReport));
@@ -1536,7 +1581,7 @@ describe('actions/Report', () => {
 
         // Need the reportActionID to delete the comments — read before the queue processes the request
         const newComment = PersistedRequests.getAll().at(1);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const reportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
 
         // Let the queue process the online ADD_COMMENT request before going offline.
@@ -1610,7 +1655,7 @@ describe('actions/Report', () => {
         expect(PersistedRequests.getAll().length).toBe(1);
         expect(PersistedRequests.getAll().at(0)?.isRollback).toBeTruthy();
         const newComment = PersistedRequests.getAll().at(1);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const reportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
 
         await waitForBatchedUpdates();
@@ -1631,7 +1676,7 @@ describe('actions/Report', () => {
         jest.runOnlyPendingTimers();
         await waitForBatchedUpdates();
 
-        const httpCalls = (HttpUtils.xhr as jest.Mock).mock.calls;
+        const httpCalls = jest.mocked(HttpUtils.xhr).mock.calls;
 
         const addCommentCalls = httpCalls.filter(([command]) => command === 'AddComment');
         const deleteCommentCalls = httpCalls.filter(([command]) => command === 'DeleteComment');
@@ -1671,7 +1716,7 @@ describe('actions/Report', () => {
 
         // Need the reportActionID to delete the comments
         const newComment = PersistedRequests.getAll().at(0);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const newReportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
 
         // wait for Onyx.connect execute the callback and start processing the queue
@@ -1755,7 +1800,7 @@ describe('actions/Report', () => {
 
         // Need the reportActionID to delete the comments
         const newComment = PersistedRequests.getAll().at(0);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const newReportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
 
         // wait for Onyx.connect execute the callback and start processing the queue
@@ -1815,12 +1860,12 @@ describe('actions/Report', () => {
                 'Content-Type': 'image/jpeg',
             }),
         });
-        const playSoundMock = playSound as jest.MockedFunction<typeof playSound>;
+        const playSoundMock = jest.mocked(playSound);
         setHasRadio(false);
         await waitForBatchedUpdates();
         await waitForBatchedUpdates();
 
-        const relevantPromise = new Promise((resolve) => {
+        const relevantPromise = new Promise<OnyxTypes.AnyRequest[]>((resolve) => {
             const conn = Onyx.connect({
                 key: ONYXKEYS.PERSISTED_REQUESTS,
                 callback: (persisted) => {
@@ -1852,7 +1897,7 @@ describe('actions/Report', () => {
             delegateAccountID: undefined,
             conciergeReportID: undefined,
         });
-        const relevant = (await relevantPromise) as OnyxTypes.AnyRequest[];
+        const relevant = await relevantPromise;
 
         expect(playSoundMock).toHaveBeenCalledTimes(1);
         expect(playSoundMock).toHaveBeenCalledWith(SOUNDS.DONE);
@@ -1866,12 +1911,12 @@ describe('actions/Report', () => {
                 'Content-Type': 'image/jpeg',
             }),
         });
-        const playSoundMock = playSound as jest.MockedFunction<typeof playSound>;
+        const playSoundMock = jest.mocked(playSound);
         setHasRadio(false);
         await waitForBatchedUpdates();
         await waitForBatchedUpdates();
 
-        const relevantPromise = new Promise((resolve) => {
+        const relevantPromise = new Promise<OnyxTypes.AnyRequest[]>((resolve) => {
             const conn = Onyx.connect({
                 key: ONYXKEYS.PERSISTED_REQUESTS,
                 callback: (persisted) => {
@@ -1901,7 +1946,7 @@ describe('actions/Report', () => {
             delegateAccountID: undefined,
             conciergeReportID: undefined,
         });
-        const relevant = (await relevantPromise) as OnyxTypes.AnyRequest[];
+        const relevant = await relevantPromise;
 
         expect(playSoundMock).toHaveBeenCalledTimes(1);
         expect(playSoundMock).toHaveBeenCalledWith(SOUNDS.DONE);
@@ -1916,12 +1961,12 @@ describe('actions/Report', () => {
                 'Content-Type': 'image/jpeg',
             }),
         });
-        const playSoundMock = playSound as jest.MockedFunction<typeof playSound>;
+        const playSoundMock = jest.mocked(playSound);
         setHasRadio(false);
         await waitForBatchedUpdates();
         await waitForBatchedUpdates();
 
-        const relevantPromise = new Promise((resolve) => {
+        const relevantPromise = new Promise<OnyxTypes.AnyRequest[]>((resolve) => {
             const conn = Onyx.connect({
                 key: ONYXKEYS.PERSISTED_REQUESTS,
                 callback: (persisted) => {
@@ -1947,7 +1992,7 @@ describe('actions/Report', () => {
             delegateAccountID: undefined,
             conciergeReportID: undefined,
         });
-        const relevant = (await relevantPromise) as OnyxTypes.AnyRequest[];
+        const relevant = await relevantPromise;
 
         expect(playSoundMock).toHaveBeenCalledTimes(0);
         expect(relevant.at(0)?.command).toBe(WRITE_COMMANDS.ADD_ATTACHMENT);
@@ -2128,7 +2173,7 @@ describe('actions/Report', () => {
 
         // Need the reportActionID to delete the comments
         const newComment = PersistedRequests.getAll().at(0);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const newReportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
 
         await waitForBatchedUpdates();
@@ -2237,7 +2282,7 @@ describe('actions/Report', () => {
 
         // Need the reportActionID to delete the comments — read before the queue processes the request
         const newComment = PersistedRequests.getAll().at(0);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const reportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
 
         // Let the queue process the online ADD_COMMENT request before going offline
@@ -2326,7 +2371,7 @@ describe('actions/Report', () => {
         });
 
         const newComment = PersistedRequests.getAll().at(0);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const reportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
 
         Report.openReport({
@@ -2390,7 +2435,7 @@ describe('actions/Report', () => {
         });
         // Need the reportActionID to delete the comments
         const newComment = PersistedRequests.getAll().at(0);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const reportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
         const originalReport = {
             reportID: REPORT_ID,
@@ -2488,7 +2533,7 @@ describe('actions/Report', () => {
 
         // Get the reportActionID to edit and delete the comment
         const newComment = PersistedRequests.getAll().at(0);
-        const reportActionID = newComment?.data?.reportActionID as string | undefined;
+        const reportActionID = typeof newComment?.data?.reportActionID === 'string' ? newComment.data.reportActionID : undefined;
         const newReportAction = TestHelper.buildTestReportComment(created, TEST_USER_ACCOUNT_ID, reportActionID);
         const originalReport = {
             reportID: REPORT_ID,
@@ -2684,7 +2729,10 @@ describe('actions/Report', () => {
                 callback: (reportActions) => {
                     Onyx.disconnect(connection);
                     const action = Object.values(reportActions ?? {}).at(0);
-                    resolve(action as OnyxTypes.ReportAction<typeof CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW>);
+                    if (!isActionOfType(action, CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW)) {
+                        throw new Error('Expected the optimistic report preview action');
+                    }
+                    resolve(action);
                 },
             });
         });
@@ -2925,7 +2973,7 @@ describe('actions/Report', () => {
 
         it('should forward selectedInterestedFeatures to the CompleteGuidedSetup API call as a JSON-encoded array', async () => {
             await Onyx.set(ONYXKEYS.SESSION, {email: TEST_USER_LOGIN, accountID: TEST_USER_ACCOUNT_ID});
-            (global.fetch as jest.Mock).mockClear();
+            jest.mocked(global.fetch).mockClear();
             await waitForBatchedUpdates();
 
             const engagementChoice = CONST.INTRO_CHOICES.MANAGE_TEAM;
@@ -2950,7 +2998,10 @@ describe('actions/Report', () => {
             expect(calls.length).toBeGreaterThan(0);
             const body = calls.at(-1)?.[1]?.body;
             expect(body).toBeInstanceOf(FormData);
-            const formEntries = Object.fromEntries(body as FormData);
+            if (!(body instanceof FormData)) {
+                throw new Error('Expected CompleteGuidedSetup request body to be FormData');
+            }
+            const formEntries = Object.fromEntries(body);
             expect(formEntries.selectedInterestedFeatures).toBe(JSON.stringify(selectedInterestedFeatures));
         });
 
@@ -4288,11 +4339,9 @@ describe('actions/Report', () => {
                 const result = Report.convertIOUReportToExpenseReport(iouReport, policyWithEmptyFieldList, policyID, 'expenseChat123', undefined, []);
 
                 // Then the report name should be set to the default formula result ("New Report")
-                const reportUpdate = result.optimisticData.find((update) => update.key === `${ONYXKEYS.COLLECTION.REPORT}${iouReport.reportID}`) as
-                    | OnyxUpdate<typeof ONYXKEYS.COLLECTION.REPORT>
-                    | undefined;
-                const reportValue = reportUpdate?.value as Partial<OnyxTypes.Report> | undefined;
-                expect(reportValue?.reportName).toBe(CONST.REPORT.DEFAULT_EXPENSE_REPORT_NAME);
+                const reportUpdate = result.optimisticData.find((update) => update.key === `${ONYXKEYS.COLLECTION.REPORT}${iouReport.reportID}`);
+                const reportName = reportUpdate?.value && typeof reportUpdate.value === 'object' && 'reportName' in reportUpdate.value ? reportUpdate.value.reportName : undefined;
+                expect(reportName).toBe(CONST.REPORT.DEFAULT_EXPENSE_REPORT_NAME);
             });
 
             it('should set reportName to default formula when policy field list is empty for different report', () => {
@@ -4322,11 +4371,9 @@ describe('actions/Report', () => {
                 const result = Report.convertIOUReportToExpenseReport(iouReport, policyWithEmptyFieldList, policyID, 'expenseChat124', undefined, []);
 
                 // Then the report name should be set to the default formula result ("New Report")
-                const reportUpdate = result.optimisticData.find((update) => update.key === `${ONYXKEYS.COLLECTION.REPORT}${iouReport.reportID}`) as
-                    | OnyxUpdate<typeof ONYXKEYS.COLLECTION.REPORT>
-                    | undefined;
-                const reportValue = reportUpdate?.value as Partial<OnyxTypes.Report> | undefined;
-                expect(reportValue?.reportName).toBe(CONST.REPORT.DEFAULT_EXPENSE_REPORT_NAME);
+                const reportUpdate = result.optimisticData.find((update) => update.key === `${ONYXKEYS.COLLECTION.REPORT}${iouReport.reportID}`);
+                const reportName = reportUpdate?.value && typeof reportUpdate.value === 'object' && 'reportName' in reportUpdate.value ? reportUpdate.value.reportName : undefined;
+                expect(reportName).toBe(CONST.REPORT.DEFAULT_EXPENSE_REPORT_NAME);
             });
         });
     });
@@ -4546,8 +4593,7 @@ describe('actions/Report', () => {
                 ...createRandomReport(1, undefined),
                 type: CONST.REPORT.TYPE.IOU,
             };
-            const result = Report.moveIOUReportToPolicyAndInviteSubmitter(iouReport, undefined as unknown as OnyxTypes.Policy, {}, undefined, TEST_USER_ACCOUNT_ID, '', false);
-            expect(result).toBeUndefined();
+            expect(Reflect.apply(Report.moveIOUReportToPolicyAndInviteSubmitter, undefined, [iouReport, undefined, {}, undefined, TEST_USER_ACCOUNT_ID, '', false])).toBeUndefined();
         });
 
         it('should return undefined when iouReport is missing', () => {
@@ -4640,16 +4686,16 @@ describe('actions/Report', () => {
             const transactionFailureData = failureData.find((data) => data.key === `${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`);
 
             // Should have pendingAction set to UPDATE
-            expect((transactionOptimisticData?.value as OnyxTypes.Transaction)?.pendingAction).toBe(CONST.RED_BRICK_ROAD_PENDING_ACTION.UPDATE);
+            expect(getTransactionProperty(transactionOptimisticData?.value, 'pendingAction')).toBe(CONST.RED_BRICK_ROAD_PENDING_ACTION.UPDATE);
             // Should have convertedAmount cleared
-            expect((transactionOptimisticData?.value as OnyxTypes.Transaction)?.convertedAmount).toBeNull();
+            expect(getTransactionProperty(transactionOptimisticData?.value, 'convertedAmount')).toBeNull();
 
             // Success data should clear pendingAction
-            expect((transactionSuccessData?.value as OnyxTypes.Transaction)?.pendingAction).toBeNull();
+            expect(getTransactionProperty(transactionSuccessData?.value, 'pendingAction')).toBeNull();
 
             // Failure data should restore original values
-            expect((transactionFailureData?.value as OnyxTypes.Transaction)?.pendingAction).toBe(transaction.pendingAction ?? null);
-            expect((transactionFailureData?.value as OnyxTypes.Transaction)?.convertedAmount).toBe(transaction.convertedAmount);
+            expect(getTransactionProperty(transactionFailureData?.value, 'pendingAction')).toBe(transaction.pendingAction ?? null);
+            expect(getTransactionProperty(transactionFailureData?.value, 'convertedAmount')).toBe(transaction.convertedAmount);
         });
 
         it('should NOT clear convertedAmount when source and destination currencies are the same', async () => {
@@ -4811,8 +4857,8 @@ describe('actions/Report', () => {
             // Should find optimistic data for the non-matching transaction (AUD doesn't match USD destination)
             const nonMatchingOptimisticData = optimisticData.find((data) => data.key === `${ONYXKEYS.COLLECTION.TRANSACTION}${nonMatchingTransactionID}`);
             expect(nonMatchingOptimisticData).toBeDefined();
-            expect((nonMatchingOptimisticData?.value as OnyxTypes.Transaction)?.pendingAction).toBe(CONST.RED_BRICK_ROAD_PENDING_ACTION.UPDATE);
-            expect((nonMatchingOptimisticData?.value as OnyxTypes.Transaction)?.convertedAmount).toBeNull();
+            expect(getTransactionProperty(nonMatchingOptimisticData?.value, 'pendingAction')).toBe(CONST.RED_BRICK_ROAD_PENDING_ACTION.UPDATE);
+            expect(getTransactionProperty(nonMatchingOptimisticData?.value, 'convertedAmount')).toBeNull();
         });
 
         it('should mark old report preview action as deleted when changing report policy', () => {
@@ -5595,13 +5641,10 @@ describe('actions/Report', () => {
             TestHelper.expectAPICommandToHaveBeenCalled(WRITE_COMMANDS.OPEN_REPORT, 1);
 
             const openReportCall = TestHelper.getFetchMockCalls(WRITE_COMMANDS.OPEN_REPORT).at(0);
-            const body = (openReportCall?.at(1) as RequestInit)?.body;
+            const requestOptions = openReportCall?.at(1);
+            const body = requestOptions && typeof requestOptions === 'object' && 'body' in requestOptions ? requestOptions.body : undefined;
             const guidedSetupDataParam = body instanceof FormData ? body.get('guidedSetupData') : null;
-            const guidedSetupData = JSON.parse(typeof guidedSetupDataParam === 'string' ? guidedSetupDataParam : '[]') as Array<{
-                type: string;
-                task?: string;
-                completedTaskReportActionID?: string;
-            }>;
+            const guidedSetupData = parseGuidedSetupData(typeof guidedSetupDataParam === 'string' ? guidedSetupDataParam : '[]');
             const viewTourTask = guidedSetupData.find((item) => item.type === 'task' && item.task === CONST.ONBOARDING_TASK_TYPE.VIEW_TOUR);
             expect(viewTourTask).toBeDefined();
             if (expectation === 'defined') {
@@ -5893,13 +5936,10 @@ describe('actions/Report', () => {
             TestHelper.expectAPICommandToHaveBeenCalled(WRITE_COMMANDS.OPEN_REPORT, 1);
 
             const openReportCall = TestHelper.getFetchMockCalls(WRITE_COMMANDS.OPEN_REPORT).at(0);
-            const body = (openReportCall?.at(1) as RequestInit)?.body;
+            const requestOptions = openReportCall?.at(1);
+            const body = requestOptions && typeof requestOptions === 'object' && 'body' in requestOptions ? requestOptions.body : undefined;
             const guidedSetupDataParam = body instanceof FormData ? body.get('guidedSetupData') : null;
-            const guidedSetupData = JSON.parse(typeof guidedSetupDataParam === 'string' ? guidedSetupDataParam : '[]') as Array<{
-                type: string;
-                task?: string;
-                completedTaskReportActionID?: string;
-            }>;
+            const guidedSetupData = parseGuidedSetupData(typeof guidedSetupDataParam === 'string' ? guidedSetupDataParam : '[]');
             const viewTourTask = guidedSetupData.find((item) => item.type === 'task' && item.task === CONST.ONBOARDING_TASK_TYPE.VIEW_TOUR);
             expect(viewTourTask).toBeDefined();
             if (expectation === 'defined') {
@@ -6251,8 +6291,9 @@ describe('actions/Report', () => {
             expect(result).not.toBeNull();
 
             expect(result?.reportActionID).toBe('123');
-            expect((result?.message as Message[]).at(0)?.html).toContain('<followup-list selected>');
-            expect((result?.message as Message[]).at(0)?.html).not.toMatch(/<followup-list>/);
+            const firstMessage = Array.isArray(result?.message) ? result.message.at(0) : undefined;
+            expect(firstMessage?.html).toContain('<followup-list selected>');
+            expect(firstMessage?.html).not.toMatch(/<followup-list>/);
         });
 
         it('should handle followup-list with attributes before adding selected', () => {
@@ -6270,7 +6311,8 @@ describe('actions/Report', () => {
             const result = Report.buildOptimisticResolvedFollowups(reportAction);
 
             expect(result).not.toBeNull();
-            expect((result?.message as Message[]).at(0)?.html).toContain('<followup-list selected>');
+            const firstMessage = Array.isArray(result?.message) ? result.message.at(0) : undefined;
+            expect(firstMessage?.html).toContain('<followup-list selected>');
         });
     });
 
@@ -6308,7 +6350,8 @@ describe('actions/Report', () => {
 
             // The report action should remain unchanged (no followup-list to resolve)
             const reportActions = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${REPORT_ID}` as const);
-            expect((reportActions?.[REPORT_ACTION_ID]?.message as Message[])?.at(0)?.html).toBe(htmlMessage);
+            const message = reportActions?.[REPORT_ACTION_ID]?.message;
+            expect(Array.isArray(message) ? message.at(0)?.html : undefined).toBe(htmlMessage);
         });
 
         it('should optimistically resolve followups and post comment when unresolved followups exist', async () => {
@@ -6346,7 +6389,8 @@ describe('actions/Report', () => {
 
             // Verify the followup-list was marked as selected
             const reportActions = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${REPORT_ID}` as const);
-            const updatedHtml = (reportActions?.[REPORT_ACTION_ID]?.message as Message[])?.at(0)?.html;
+            const message = reportActions?.[REPORT_ACTION_ID]?.message;
+            const updatedHtml = Array.isArray(message) ? message.at(0)?.html : undefined;
             expect(updatedHtml).toContain('<followup-list selected>');
 
             // Verify addComment was called (which triggers ADD_COMMENT API call)
@@ -6388,7 +6432,8 @@ describe('actions/Report', () => {
 
             // Verify the followup-list was marked as selected
             const reportActions = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${REPORT_ID}` as const);
-            const updatedHtml = (reportActions?.[REPORT_ACTION_ID]?.message as Message[])?.at(0)?.html;
+            const message = reportActions?.[REPORT_ACTION_ID]?.message;
+            const updatedHtml = Array.isArray(message) ? message.at(0)?.html : undefined;
             expect(updatedHtml).toContain('<followup-list selected>');
 
             // Verify addComment was called (which triggers ADD_COMMENT API call)
@@ -6501,7 +6546,7 @@ describe('actions/Report', () => {
 
             const telemetryCall = logInfoSpy.mock.calls.find((args) => {
                 const params = args.at(2);
-                return !!params && typeof params === 'object' && !Array.isArray(params) && (params as Record<string, unknown>).event === 'followup_clicked';
+                return !!params && typeof params === 'object' && !Array.isArray(params) && 'event' in params && params.event === 'followup_clicked';
             });
             expect(telemetryCall).toBeDefined();
 
@@ -8012,7 +8057,8 @@ describe('actions/Report', () => {
             const openReportCalls = getMockFetch(global.fetch).mock.calls.filter((c) => c[0] === `https://www.expensify.com.dev/api/${WRITE_COMMANDS.OPEN_REPORT}?`);
             expect(openReportCalls.length).toBeGreaterThanOrEqual(1);
             const openReportParamsList = openReportCalls.map((call) => {
-                const body = (call.at(1) as RequestInit)?.body;
+                const requestOptions = call.at(1);
+                const body = requestOptions && typeof requestOptions === 'object' && 'body' in requestOptions ? requestOptions.body : undefined;
                 return body instanceof FormData ? Object.fromEntries(body) : {};
             });
             expect(openReportParamsList.some((p) => p.reportID === MOCK_FALLBACK_DM_REPORT_ID)).toBe(true);
@@ -8031,7 +8077,8 @@ describe('actions/Report', () => {
 
             TestHelper.expectAPICommandToHaveBeenCalled(WRITE_COMMANDS.ADD_COMMENT, 1);
             const addCommentCalls = getMockFetch(global.fetch).mock.calls.filter((c) => c[0] === `https://www.expensify.com.dev/api/${WRITE_COMMANDS.ADD_COMMENT}?`);
-            const addCommentBody = (addCommentCalls.at(-1)?.at(1) as RequestInit)?.body;
+            const requestOptions = addCommentCalls.at(-1)?.at(1);
+            const addCommentBody = requestOptions && typeof requestOptions === 'object' && 'body' in requestOptions ? requestOptions.body : undefined;
             const addCommentParams = addCommentBody instanceof FormData ? Object.fromEntries(addCommentBody) : {};
             expect(addCommentParams.reportID).toBe(MOCK_FALLBACK_DM_REPORT_ID);
         });
@@ -8151,7 +8198,7 @@ describe('actions/Report', () => {
             const result = Report.getGuidedSetupDataForOpenReport(introSelected, isSelfTourViewed);
 
             expect(result).toBeDefined();
-            const guidedSetupData = JSON.parse(result?.guidedSetupData ?? '[]') as Array<{type: string; task?: string; completedTaskReportActionID?: string}>;
+            const guidedSetupData = parseGuidedSetupData(result?.guidedSetupData ?? '[]');
             const viewTourTask = guidedSetupData.find((item) => item.type === 'task' && item.task === CONST.ONBOARDING_TASK_TYPE.VIEW_TOUR);
             expect(viewTourTask).toBeDefined();
 
