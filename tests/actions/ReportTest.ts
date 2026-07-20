@@ -217,8 +217,18 @@ const getMockFetch = (fetch: typeof global.fetch): MockFetch => {
     return fetch;
 };
 
-const getTransactionProperty = (value: unknown, property: 'pendingAction' | 'convertedAmount'): unknown =>
-    typeof value === 'object' && value !== null && property in value ? value[property] : undefined;
+const getTransactionProperty = (value: unknown, property: 'pendingAction' | 'convertedAmount'): unknown => {
+    if (typeof value !== 'object' || value === null) {
+        return undefined;
+    }
+    if (property === 'pendingAction' && 'pendingAction' in value) {
+        return value.pendingAction;
+    }
+    if (property === 'convertedAmount' && 'convertedAmount' in value) {
+        return value.convertedAmount;
+    }
+    return undefined;
+};
 
 type GuidedSetupItem = {
     type: string;
