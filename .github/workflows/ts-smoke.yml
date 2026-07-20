@@ -1,0 +1,19 @@
+# Temporary smoke test for the gh-dev Tailscale setup. Deleted after the test.
+name: TS smoke
+on: workflow_dispatch
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          hostname: gh-dev-smoke
+          args: --ssh
+      - name: Report identity and wait for SSH probe
+        run: |
+          tailscale status --self
+          echo "runner user: $(whoami)"
+          sleep 300
