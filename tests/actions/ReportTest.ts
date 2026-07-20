@@ -197,26 +197,6 @@ const TEST_INTRO_SELECTED: OnyxTypes.IntroSelected = {
     isInviteOnboardingComplete: false,
 };
 
-const isMockFetch = (fetch: typeof global.fetch): fetch is MockFetch =>
-    jest.isMockFunction(fetch) &&
-    'pause' in fetch &&
-    typeof fetch.pause === 'function' &&
-    'fail' in fetch &&
-    typeof fetch.fail === 'function' &&
-    'succeed' in fetch &&
-    typeof fetch.succeed === 'function' &&
-    'resume' in fetch &&
-    typeof fetch.resume === 'function' &&
-    'mockAPICommand' in fetch &&
-    typeof fetch.mockAPICommand === 'function';
-
-const getMockFetch = (fetch: typeof global.fetch): MockFetch => {
-    if (!isMockFetch(fetch)) {
-        throw new Error('Expected the global fetch implementation to be the test mock');
-    }
-    return fetch;
-};
-
 const getTransactionProperty = (value: unknown, property: 'pendingAction' | 'convertedAmount'): unknown => {
     if (typeof value !== 'object' || value === null) {
         return undefined;
@@ -280,7 +260,7 @@ describe('actions/Report', () => {
             // Onyx.clear() promise is resolved in batch which happens after the current microtasks cycle
             setImmediate(jest.runOnlyPendingTimers);
         }
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
         apiWriteSpy = jest.spyOn(API, 'write');
 
         // Clear the queue before each test to avoid test pollution
@@ -296,7 +276,7 @@ describe('actions/Report', () => {
     });
 
     it('should store a new report action in Onyx when onyxApiUpdate event is handled via Pusher', () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_ACCOUNT_ID = 1;
         const TEST_USER_LOGIN = 'test@test.com';
@@ -566,7 +546,7 @@ describe('actions/Report', () => {
         return TestHelper.signInWithTestUser(TEST_USER_ACCOUNT_ID, TEST_USER_LOGIN)
             .then(() => TestHelper.setPersonalDetails(TEST_USER_LOGIN, TEST_USER_ACCOUNT_ID))
             .then(() => {
-                global.fetch = TestHelper.getGlobalFetchMock();
+                global.fetch = TestHelper.createGlobalFetchMock();
 
                 // WHEN we add enough logs to send a packet
                 for (let i = 0; i <= LOGGER_MAX_LOG_LINES; i++) {
@@ -599,7 +579,7 @@ describe('actions/Report', () => {
     });
 
     it('should be updated correctly when new comments are added, deleted or marked as unread', () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
         const REPORT_ID = '1';
         let report: OnyxEntry<OnyxTypes.Report>;
         let reportActionCreatedDate: string;
@@ -873,7 +853,7 @@ describe('actions/Report', () => {
          * already in the comment and the user deleted it on purpose.
          */
 
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_LOGIN = 'test@expensify.com';
 
@@ -1006,7 +986,7 @@ describe('actions/Report', () => {
     });
 
     it('should properly toggle reactions on a message', () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_ACCOUNT_ID = 1;
         const TEST_USER_LOGIN = 'test@test.com';
@@ -1147,7 +1127,7 @@ describe('actions/Report', () => {
     });
 
     it("shouldn't add the same reaction twice when changing preferred skin color and reaction doesn't support skin colors", () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_ACCOUNT_ID = 1;
         const TEST_USER_LOGIN = 'test@test.com';
@@ -1228,7 +1208,7 @@ describe('actions/Report', () => {
     });
 
     it('should send only one OpenReport, replacing any extra ones with same reportIDs', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const REPORT_ID = '1';
 
@@ -1307,7 +1287,7 @@ describe('actions/Report', () => {
     });
 
     it('openReport legacy preview fallback stores action under correct Onyx key and preserves existing actions', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_ACCOUNT_ID = 1;
         const TEST_USER_LOGIN = 'test@user.com';
@@ -1395,7 +1375,7 @@ describe('actions/Report', () => {
     });
 
     it('should replace duplicate OpenReport commands with the same reportID', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const REPORT_ID = '1';
 
@@ -1431,7 +1411,7 @@ describe('actions/Report', () => {
     });
 
     it('should remove AddComment and UpdateComment without sending any request when DeleteComment is set', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_ACCOUNT_ID = 1;
         const REPORT_ID = '1';
@@ -1520,7 +1500,7 @@ describe('actions/Report', () => {
     });
 
     it('should remove AddComment and UpdateComment without sending any request when DeleteComment is set with currentUserEmail', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
         const TEST_USER_ACCOUNT_ID = 1;
         const REPORT_ID = '1';
         const REPORT: OnyxTypes.Report = createRandomReport(1, undefined);
@@ -1565,7 +1545,7 @@ describe('actions/Report', () => {
     });
 
     it('should send DeleteComment request and remove UpdateComment accordingly', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_ACCOUNT_ID = 1;
         const REPORT_ID = '1';
@@ -1698,7 +1678,7 @@ describe('actions/Report', () => {
     });
 
     it('should send not DeleteComment request and remove AddAttachment accordingly', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock({
+        global.fetch = TestHelper.createGlobalFetchMock({
             headers: new Headers({
                 'Content-Type': 'image/jpeg',
             }),
@@ -1781,7 +1761,7 @@ describe('actions/Report', () => {
     });
 
     it('should send not DeleteComment request and remove AddTextAndAttachment accordingly', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock({
+        global.fetch = TestHelper.createGlobalFetchMock({
             headers: new Headers({
                 'Content-Type': 'image/jpeg',
             }),
@@ -1865,7 +1845,7 @@ describe('actions/Report', () => {
     });
 
     it('should post text + attachment as first action then attachment only for remaining attachments when adding multiple attachments with a comment', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock({
+        global.fetch = TestHelper.createGlobalFetchMock({
             headers: new Headers({
                 'Content-Type': 'image/jpeg',
             }),
@@ -1916,7 +1896,7 @@ describe('actions/Report', () => {
     });
 
     it('should create attachment only actions when adding multiple attachments without a comment', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock({
+        global.fetch = TestHelper.createGlobalFetchMock({
             headers: new Headers({
                 'Content-Type': 'image/jpeg',
             }),
@@ -1966,7 +1946,7 @@ describe('actions/Report', () => {
     });
 
     it('should create attachment only action & not play sound when adding attachment without a comment & shouldPlaySound not passed', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock({
+        global.fetch = TestHelper.createGlobalFetchMock({
             headers: new Headers({
                 'Content-Type': 'image/jpeg',
             }),
@@ -2009,7 +1989,7 @@ describe('actions/Report', () => {
     });
 
     it('should optimistically mark an unresolved ACTIONABLE_MENTION_WHISPER as deleted when its parent comment is deleted', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const REPORT_ID = '1';
         const COMMENT_ACTION_ID = '1000';
@@ -2067,7 +2047,7 @@ describe('actions/Report', () => {
     });
 
     it('should only delete the whisper linked to the deleted comment, not other whispers in the same report', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const REPORT_ID = '1';
         // Two comments, each triggering a whisper at parentID + 1
@@ -2154,7 +2134,7 @@ describe('actions/Report', () => {
     });
 
     it('should not send DeleteComment request and remove any Reactions accordingly', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
         // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         jest.doMock('@libs/EmojiUtils', () => ({
             ...jest.requireActual('@libs/EmojiUtils'),
@@ -2267,7 +2247,7 @@ describe('actions/Report', () => {
     });
 
     it('should send DeleteComment request and remove any Reactions accordingly', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
         // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         jest.doMock('@libs/EmojiUtils', () => ({
             ...jest.requireActual('@libs/EmojiUtils'),
@@ -2357,7 +2337,7 @@ describe('actions/Report', () => {
     });
 
     it('should create and delete thread processing all the requests', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_ACCOUNT_ID = 1;
         const REPORT_ID = '1';
@@ -2423,7 +2403,7 @@ describe('actions/Report', () => {
     });
 
     it('should update AddComment text with the UpdateComment text, sending just an AddComment request', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_ACCOUNT_ID = 1;
         const REPORT_ID = '1';
@@ -2470,7 +2450,7 @@ describe('actions/Report', () => {
     });
 
     it('it should only send the last sequential UpdateComment request to BE', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
         const reportID = '123';
 
         setHasRadio(false);
@@ -2505,7 +2485,7 @@ describe('actions/Report', () => {
     });
 
     it('should convert short mentions to full format when editing comments', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         const TEST_USER_LOGIN = 'alice@expensify.com';
         const TEST_USER_ACCOUNT_ID = 1;
@@ -2580,7 +2560,7 @@ describe('actions/Report', () => {
     });
 
     it('it should only send the last sequential UpdateComment request to BE with currentUserLogin', async () => {
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
         setHasRadio(false);
         await waitForBatchedUpdates();
 
@@ -2715,7 +2695,8 @@ describe('actions/Report', () => {
     it('should create new report and "create report" quick action, when createNewReport gets called', async () => {
         const accountID = 1234;
         const policyID = '5678';
-        const mockFetchData = getMockFetch(fetch);
+        const mockFetchData = TestHelper.createGlobalFetchMock();
+        global.fetch = mockFetchData;
         // Given a policy with harvesting is disabled
         const policy = {
             ...createRandomPolicy(Number(policyID)),
@@ -2794,7 +2775,8 @@ describe('actions/Report', () => {
     it('should set hasOnceLoadedReportActions for parent report metadata when creating a new report', async () => {
         const accountID = 1234;
         const policyID = '5678';
-        const mockFetchData = getMockFetch(fetch);
+        const mockFetchData = TestHelper.createGlobalFetchMock();
+        global.fetch = mockFetchData;
         const policy = {
             ...createRandomPolicy(Number(policyID)),
             isPolicyExpenseChatEnabled: true,
@@ -2944,7 +2926,7 @@ describe('actions/Report', () => {
     describe('completeOnboarding', () => {
         const TEST_USER_LOGIN = 'test@gmail.com';
         const TEST_USER_ACCOUNT_ID = 1;
-        global.fetch = TestHelper.getGlobalFetchMock();
+        global.fetch = TestHelper.createGlobalFetchMock();
 
         it('should not write any optimistic actions to admins report for MANAGE_TEAM (server posts via inboxAdminsBespoke)', async () => {
             await Onyx.set(ONYXKEYS.SESSION, {email: TEST_USER_LOGIN, accountID: TEST_USER_ACCOUNT_ID});
@@ -3178,7 +3160,7 @@ describe('actions/Report', () => {
     describe('updateDescription', () => {
         const currentUserAccountID = 1;
         it('should not call UpdateRoomDescription API if the description is not changed', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
             const report: OnyxTypes.Report = {
                 ...createRandomReport(1, undefined),
                 description: '<h1>test</h1>',
@@ -3195,7 +3177,8 @@ describe('actions/Report', () => {
                 ...createRandomReport(1, undefined),
                 description: '<h1>test</h1>',
             };
-            const mockFetch = getMockFetch(fetch);
+            const mockFetch = TestHelper.createGlobalFetchMock();
+            global.fetch = mockFetch;
 
             await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${report.reportID}`, report);
 
@@ -3898,7 +3881,7 @@ describe('actions/Report', () => {
             const ownerAccountID = 999;
             const ownerEmail = 'submitter@test.com';
             const adminEmail = 'admin@test.com';
-            const mockFetch = getMockFetch(TestHelper.getGlobalFetchMock());
+            const mockFetch = TestHelper.createGlobalFetchMock();
 
             const expenseReport: OnyxTypes.Report = {
                 ...createRandomReport(1, undefined),
@@ -4169,7 +4152,7 @@ describe('actions/Report', () => {
             await Onyx.set(`${ONYXKEYS.COLLECTION.POLICY}${targetPolicy.id}`, targetPolicy);
             await Onyx.merge(ONYXKEYS.PERSONAL_DETAILS_LIST, {[ownerAccountID]: {login: ownerEmail, accountID: ownerAccountID}});
 
-            const mockFetch = getMockFetch(TestHelper.getGlobalFetchMock());
+            const mockFetch = TestHelper.createGlobalFetchMock();
             global.fetch = mockFetch;
             mockFetch.pause?.();
 
@@ -4429,7 +4412,7 @@ describe('actions/Report', () => {
         it('correctly implements RedBrickRoad error handling for MoveIOUReportToPolicyAndInviteSubmitter when the request fails to add a new user to workspace', async () => {
             const ownerAccountID = 999;
             const ownerEmail = 'submitter@test.com';
-            const mockFetch = getMockFetch(TestHelper.getGlobalFetchMock());
+            const mockFetch = TestHelper.createGlobalFetchMock();
 
             const iouReport: OnyxTypes.Report = {
                 ...createRandomReport(1, undefined),
@@ -4966,7 +4949,7 @@ describe('actions/Report', () => {
 
     describe('openReport with introSelected', () => {
         it('should call OpenReport API with introSelected parameter', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '1';
 
@@ -4980,7 +4963,7 @@ describe('actions/Report', () => {
         });
 
         it('should handle openReport with TEST_INTRO_SELECTED', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '2';
 
@@ -4991,7 +4974,7 @@ describe('actions/Report', () => {
         });
 
         it('should handle openReport when introSelected is undefined', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '3';
 
@@ -6566,7 +6549,7 @@ describe('actions/Report', () => {
 
     describe('resolveConciergeCategoryOptions', () => {
         it('posts the selected category back to Concierge as a comment (routes through resolveConciergeOptions → addComment)', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
             const REPORT_ID = 'concierge-opts-1';
             const report = createMock<OnyxTypes.Report>({reportID: REPORT_ID, type: CONST.REPORT.TYPE.CHAT});
             await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`, report);
@@ -8044,6 +8027,8 @@ describe('actions/Report', () => {
             const STALE_REPORT_ID = '456';
             // Matches ReportUtils jest mock: mockGenerateReportID returns '9876' for optimistic fallback DM reportID.
             const MOCK_FALLBACK_DM_REPORT_ID = '9876';
+            const mockFetch = TestHelper.createGlobalFetchMock();
+            global.fetch = mockFetch;
 
             await TestHelper.signInWithTestUser(TEST_USER_ACCOUNT_ID, TEST_USER_LOGIN);
             await TestHelper.setPersonalDetails(TEST_USER_LOGIN, TEST_USER_ACCOUNT_ID);
@@ -8064,7 +8049,7 @@ describe('actions/Report', () => {
             Report.navigateToAndOpenReportWithAccountIDs([PARTICIPANT_ACCOUNT_ID], TEST_USER_ACCOUNT_ID, testIntroSelected, false, undefined, undefined, {}, true);
             await waitForBatchedUpdates();
 
-            const openReportCalls = getMockFetch(global.fetch).mock.calls.filter((c) => c[0] === `https://www.expensify.com.dev/api/${WRITE_COMMANDS.OPEN_REPORT}?`);
+            const openReportCalls = mockFetch.mock.calls.filter((c) => c[0] === `https://www.expensify.com.dev/api/${WRITE_COMMANDS.OPEN_REPORT}?`);
             expect(openReportCalls.length).toBeGreaterThanOrEqual(1);
             const openReportParamsList = openReportCalls.map((call) => {
                 const requestOptions = call.at(1);
@@ -8086,7 +8071,7 @@ describe('actions/Report', () => {
             await waitForBatchedUpdates();
 
             TestHelper.expectAPICommandToHaveBeenCalled(WRITE_COMMANDS.ADD_COMMENT, 1);
-            const addCommentCalls = getMockFetch(global.fetch).mock.calls.filter((c) => c[0] === `https://www.expensify.com.dev/api/${WRITE_COMMANDS.ADD_COMMENT}?`);
+            const addCommentCalls = mockFetch.mock.calls.filter((c) => c[0] === `https://www.expensify.com.dev/api/${WRITE_COMMANDS.ADD_COMMENT}?`);
             const requestOptions = addCommentCalls.at(-1)?.at(1);
             const addCommentBody = requestOptions && typeof requestOptions === 'object' && 'body' in requestOptions ? requestOptions.body : undefined;
             const addCommentParams = addCommentBody instanceof FormData ? Object.fromEntries(addCommentBody) : {};
@@ -8262,7 +8247,7 @@ describe('actions/Report', () => {
         const TEST_USER_LOGIN = 'test@test.com';
 
         beforeEach(async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
             await TestHelper.signInWithTestUser(TEST_USER_ACCOUNT_ID, TEST_USER_LOGIN);
             await waitForBatchedUpdates();
         });
@@ -8455,7 +8440,7 @@ describe('actions/Report', () => {
 
     describe('resolveActionableMentionWhisper', () => {
         it('should optimistically add invited users to report.participants when resolution is INVITE', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '1';
             const WHISPER_ACTION_ID = '1001';
@@ -8524,7 +8509,7 @@ describe('actions/Report', () => {
         });
 
         it('should NOT update participants when resolution is NOTHING', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '2';
             const WHISPER_ACTION_ID = '2001';
@@ -8580,7 +8565,7 @@ describe('actions/Report', () => {
         });
 
         it('should preserve existing participant settings when invitee is already in participants', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '4';
             const WHISPER_ACTION_ID = '4001';
@@ -8647,7 +8632,7 @@ describe('actions/Report', () => {
         });
 
         it('should also update parent report participants when parentReport is provided (oneTransactionThread)', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const TRANSACTION_THREAD_ID = '10';
             const PARENT_REPORT_ID = '11';
@@ -8725,7 +8710,7 @@ describe('actions/Report', () => {
         });
 
         it('should fall back to ancestor report via parentReportID when parentReport matches current report', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const TRANSACTION_THREAD_ID = '20';
             const ANCESTOR_IOU_REPORT_ID = '21';
@@ -8804,7 +8789,7 @@ describe('actions/Report', () => {
         });
 
         it('should remove optimistically added participants on failure rollback', async () => {
-            const mockFetch = getMockFetch(TestHelper.getGlobalFetchMock());
+            const mockFetch = TestHelper.createGlobalFetchMock();
             global.fetch = mockFetch;
 
             const REPORT_ID = '3';
@@ -8875,7 +8860,7 @@ describe('actions/Report', () => {
         });
 
         it('should forward reportID and inviteeEmails to the API when resolution is INVITE', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '900';
             const WHISPER_ACTION_ID = '9001';
@@ -8913,7 +8898,7 @@ describe('actions/Report', () => {
         });
 
         it('should NOT forward reportID and inviteeEmails when resolution is NOTHING', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '901';
             const WHISPER_ACTION_ID = '9011';
@@ -8945,7 +8930,7 @@ describe('actions/Report', () => {
         });
 
         it('should NOT forward reportID and inviteeEmails when the whisper has no invitee emails', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '902';
             const WHISPER_ACTION_ID = '9021';
@@ -8977,7 +8962,7 @@ describe('actions/Report', () => {
         });
 
         it('should only forward emails for invitees not already in the room (stale whisper)', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '903';
             const WHISPER_ACTION_ID = '9031';
@@ -9022,7 +9007,7 @@ describe('actions/Report', () => {
         });
 
         it('should still forward a brand-new-user email that has no matching accountID (shorter inviteeAccountIDs)', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '904';
             const WHISPER_ACTION_ID = '9041';
@@ -9068,7 +9053,7 @@ describe('actions/Report', () => {
         });
 
         it('should optimistically add only the new invitee to participants for a stale whisper (offline path)', async () => {
-            global.fetch = TestHelper.getGlobalFetchMock();
+            global.fetch = TestHelper.createGlobalFetchMock();
 
             const REPORT_ID = '905';
             const WHISPER_ACTION_ID = '9051';
@@ -9337,8 +9322,8 @@ describe('actions/Report', () => {
             });
             await waitForBatchedUpdates();
 
-            global.fetch = TestHelper.getGlobalFetchMock();
-            mockFetch = getMockFetch(global.fetch);
+            mockFetch = TestHelper.createGlobalFetchMock();
+            global.fetch = mockFetch;
             // Clear the queue before each test to avoid test pollution
             SequentialQueue.resetQueue();
         });
