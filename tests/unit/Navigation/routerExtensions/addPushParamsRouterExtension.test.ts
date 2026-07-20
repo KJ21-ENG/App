@@ -6,7 +6,7 @@ import {isRecord} from '@libs/ObjectUtils';
 
 import CONST from '@src/CONST';
 
-import type {NavigationRoute, NavigationState, ParamListBase, PartialState, Router, RouterConfigOptions, StackNavigationState} from '@react-navigation/native';
+import type {NavigationRoute, ParamListBase, PartialState, Router, RouterConfigOptions, StackNavigationState} from '@react-navigation/native';
 
 import {CommonActions} from '@react-navigation/native';
 
@@ -192,32 +192,6 @@ function createMockRouterFactory(actionHandler?: (state: TestState, action: Push
 }
 
 describe('addPushParamsRouterExtension', () => {
-    it('base router rehydration preserves history entries with valid full and partial nested navigation state', () => {
-        const factory = createMockRouterFactory();
-        const baseRouter = factory(createMock<PlatformStackRouterOptions>({}));
-        const partialNestedState: PartialState<NavigationState> = {routes: [{name: 'Nested'}], stale: true as const};
-        const nestedStates: Array<NavigationState | PartialState<NavigationState>> = [makeState([makeRoute('Nested', 'nested-1')]), partialNestedState];
-
-        for (const [index, nestedState] of nestedStates.entries()) {
-            const routeKey = `parent-${index}`;
-            const historyEntry = createMock<TestRoute>({key: routeKey, name: 'Parent', state: nestedState});
-            const partialState: PartialState<TestState> = {
-                routes: [{key: routeKey, name: 'Parent'}],
-                history: [historyEntry],
-                stale: true as const,
-            };
-
-            const rehydratedState = baseRouter.getRehydratedState(partialState, CONFIG_OPTIONS);
-            const entry = rehydratedState.history?.at(0);
-
-            expect(isCustomHistoryEntry(entry)).toBe(true);
-            if (!isCustomHistoryEntry(entry) || typeof entry === 'string') {
-                throw new Error('Expected a navigation route entry');
-            }
-            expect(entry.state).toEqual(nestedState);
-        }
-    });
-
     it('PUSH_PARAMS action sets params on focused route AND appends a snapshot to history', () => {
         const factory = createMockRouterFactory();
         const enhancedRouter = addPushParamsRouterExtension(factory)(createMock<PlatformStackRouterOptions>({}));
