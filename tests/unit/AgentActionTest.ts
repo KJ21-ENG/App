@@ -1,6 +1,7 @@
 import {write} from '@libs/API';
 import {WRITE_COMMANDS} from '@libs/API/types';
 import Navigation from '@libs/Navigation/Navigation';
+import {isRecord} from '@libs/ObjectUtils';
 
 import {clearAgentAvatarUpdateError, clearAgentUpdateError, createAgent, deleteAgent, updateAgentAvatar, updateAgentName, updateAgentPrompt} from '@userActions/Agent';
 
@@ -51,10 +52,6 @@ function getWriteOptions(): WriteOptions {
 
 function findUpdate(updates: CapturedUpdate[], key: OnyxKey): CapturedUpdate | undefined {
     return updates.find((update) => update.key === key);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function requireRecord(value: unknown, message: string): Record<string, unknown> {
