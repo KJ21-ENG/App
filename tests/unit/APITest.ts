@@ -14,7 +14,7 @@ import * as Request from '@src/libs/Request';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {RequestConflictResolver} from '@src/types/onyx/Request';
 
-import type {OnyxKey, OnyxSetInput} from 'react-native-onyx';
+import type {OnyxKey, OnyxSetInput, OnyxUpdate} from 'react-native-onyx';
 import type {ValueOf} from 'type-fest';
 
 import Onyx from '../../__mocks__/react-native-onyx';
@@ -800,7 +800,7 @@ describe('APITests', () => {
         const onyxUpdateSpy = jest.spyOn(Onyx, 'update');
         const onyxSetSpy = jest.spyOn(Onyx, 'set');
 
-        const failureData = [
+        const failureData: Array<OnyxUpdate<typeof ONYXKEYS.ONBOARDING_ERROR_MESSAGE_TRANSLATION_KEY>> = [
             {
                 onyxMethod: Onyx.METHOD.SET,
                 key: ONYXKEYS.ONBOARDING_ERROR_MESSAGE_TRANSLATION_KEY,
