@@ -1,4 +1,5 @@
 import {initReconnect} from '@libs/actions/Reconnect';
+import {READ_COMMANDS, WRITE_COMMANDS} from '@libs/API/types';
 
 import CONST from '@src/CONST';
 import * as PersistedRequests from '@src/libs/actions/PersistedRequests';
@@ -11,8 +12,7 @@ import {sequentialQueueRequestThrottle} from '@src/libs/Network/SequentialQueue'
 import {getIsOffline, setHasRadio} from '@src/libs/NetworkState';
 import * as Request from '@src/libs/Request';
 import ONYXKEYS from '@src/ONYXKEYS';
-import type {OnyxData, RequestConflictResolver} from '@src/types/onyx/Request';
-import type OnyxResponse from '@src/types/onyx/Response';
+import type {RequestConflictResolver} from '@src/types/onyx/Request';
 
 import type {OnyxKey, OnyxSetInput} from 'react-native-onyx';
 import type {ValueOf} from 'type-fest';
@@ -22,58 +22,25 @@ import * as TestHelper from '../utils/TestHelper';
 import waitForBatchedUpdates from '../utils/waitForBatchedUpdates';
 import waitForNetworkPromises from '../utils/waitForNetworkPromises';
 
-type EmptyTestParameters = Record<string, never>;
-const MOCK_COMMAND_LOWERCASE = 'mock command';
+const MOCK_COMMAND_LOWERCASE = WRITE_COMMANDS.UPDATE_SPLIT_TRANSACTION;
+const MOCK_READ_COMMAND_LOWERCASE = READ_COMMANDS.GET_REPORT_PRIVATE_NOTE;
+const MOCK_COMMAND = WRITE_COMMANDS.SPLIT_TRANSACTION;
+const MOCK_READ_COMMAND = READ_COMMANDS.GET_REPORT_PRIVATE_NOTE;
+const MOCK_COMMAND_ONE = WRITE_COMMANDS.SPLIT_TRANSACTION;
+const MOCK_COMMAND_TWO = WRITE_COMMANDS.UPDATE_SPLIT_TRANSACTION;
+const MOCK_READ_COMMAND_TWO = READ_COMMANDS.GET_REPORT_PRIVATE_NOTE;
+const MOCK_COMMAND_THREE = WRITE_COMMANDS.SET_NAME_VALUE_PAIR;
+const MOCK_WRITE_COMMAND_ONE = WRITE_COMMANDS.DELETE_USER_AVATAR;
+const MOCK_WRITE_COMMAND_TWO = WRITE_COMMANDS.CLEAR_STATUS;
+const MOCK_READ_COMMAND_ONE = READ_COMMANDS.OPEN_PAYMENTS_PAGE;
+const MOCK_ENABLE_COMMAND = WRITE_COMMANDS.SET_POLICY_RULES_ENABLED;
+const COMMAND_A = WRITE_COMMANDS.SPLIT_TRANSACTION;
+const COMMAND_B = WRITE_COMMANDS.UPDATE_SPLIT_TRANSACTION;
+const COMMAND_C = WRITE_COMMANDS.SET_NAME_VALUE_PAIR;
 
-type TestWriteCommandParameters = {
-    [MOCK_COMMAND_LOWERCASE]: {param1: string} | {param2: string} | {param3: string};
-    Mock: {param1: string};
-    MockCommand: EmptyTestParameters | {content: string} | {param1: string};
-    MockCommandOne: EmptyTestParameters | {content: string};
-    MockCommandTwo: {content: string};
-    MockCommandThree: EmptyTestParameters | {content: string};
-    MockWriteCommandOne: EmptyTestParameters;
-    MockWriteCommandTwo: EmptyTestParameters;
-    CommandA: {param1: string};
-    CommandB: {param2: string};
-    CommandC: {param3: string};
-};
-
-type TestReadCommandParameters = {
-    [MOCK_COMMAND_LOWERCASE]: {param2: string};
-    MockCommand: {content: string};
-    MockCommandTwo: null;
-    MockReadCommand: null;
-};
-
-type TestWriteCommand = keyof TestWriteCommandParameters;
-type TestReadCommand = keyof TestReadCommandParameters;
-type TestEnableFeatureParameters = {policyID: string; enabled: boolean};
-
-declare module '@src/libs/API' {
-    function write<TCommand extends TestWriteCommand>(command: TCommand, apiCommandParameters: TestWriteCommandParameters[TCommand]): Promise<void | OnyxResponse<never>>;
-    function write<TCommand extends TestWriteCommand, TKey extends OnyxKey>(
-        command: TCommand,
-        apiCommandParameters: TestWriteCommandParameters[TCommand],
-        onyxData?: OnyxData<TKey>,
-        conflictResolver?: RequestConflictResolver<TKey>,
-    ): Promise<void | OnyxResponse<TKey>>;
-
-    function read<TCommand extends TestReadCommand>(command: TCommand, apiCommandParameters: TestReadCommandParameters[TCommand]): void;
-    function read<TCommand extends TestReadCommand, TKey extends OnyxKey>(command: TCommand, apiCommandParameters: TestReadCommandParameters[TCommand], onyxData: OnyxData<TKey>): void;
-
-    function writeWithNoDuplicatesConflictAction<TCommand extends TestWriteCommand, TKey extends OnyxKey>(
-        command: TCommand,
-        apiCommandParameters: TestWriteCommandParameters[TCommand],
-        onyxData?: OnyxData<TKey>,
-    ): Promise<void | OnyxResponse<TKey>>;
-
-    function writeWithNoDuplicatesEnableFeatureConflicts<TKey extends OnyxKey>(
-        command: 'MockCommand',
-        apiCommandParameters: TestEnableFeatureParameters,
-        onyxData?: OnyxData<TKey>,
-    ): Promise<void | OnyxResponse<TKey>>;
-}
+const splitParams = (values: Record<string, string> = {}) => ({transactionID: 'test-transaction', ...values});
+const nameValueParams = (value: string) => ({name: 'test', value, content: value});
+const readParams = (value: string) => ({reportID: value, content: value});
 
 jest.mock('@src/libs/Log');
 
@@ -132,9 +99,9 @@ describe('APITests', () => {
         return Promise.resolve(setHasRadio(false))
             .then(() => {
                 // When API Writes and Reads are called
-                API.write('mock command', {param1: 'value1'});
-                API.read('mock command', {param2: 'value2'});
-                API.write('mock command', {param3: 'value3'});
+                API.write(MOCK_COMMAND_LOWERCASE, splitParams({param1: 'value1'}));
+                API.read(MOCK_READ_COMMAND_LOWERCASE, readParams('value2'));
+                API.write(MOCK_COMMAND_LOWERCASE, splitParams({param3: 'value3'}));
                 return waitForBatchedUpdates();
             })
             .then(() => {
@@ -143,8 +110,8 @@ describe('APITests', () => {
 
                 const persisted = PersistedRequests.getAll();
                 expect(persisted).toEqual([
-                    expect.objectContaining({command: 'mock command', data: expect.objectContaining({param1: 'value1'})}),
-                    expect.objectContaining({command: 'mock command', data: expect.objectContaining({param3: 'value3'})}),
+                    expect.objectContaining({command: MOCK_COMMAND_LOWERCASE, data: expect.objectContaining({param1: 'value1'})}),
+                    expect.objectContaining({command: MOCK_COMMAND_LOWERCASE, data: expect.objectContaining({param3: 'value3'})}),
                 ]);
 
                 PersistedRequests.clear();
@@ -168,8 +135,8 @@ describe('APITests', () => {
             })
                 .then(() => {
                     // When API Write commands are made
-                    API.write('mock command', {param1: 'value1'});
-                    API.write('mock command', {param2: 'value2'});
+                    API.write(MOCK_COMMAND_LOWERCASE, splitParams({param1: 'value1'}));
+                    API.write(MOCK_COMMAND_LOWERCASE, splitParams({param2: 'value2'}));
                     return waitForBatchedUpdates();
                 })
                 .then(() => {
@@ -187,8 +154,8 @@ describe('APITests', () => {
                     // Then `xhr` should be called with expected data, and the persisted queue should be empty
                     expect(xhr).toHaveBeenCalledTimes(2);
                     expect(xhr.mock.calls).toEqual([
-                        expect.arrayContaining(['mock command', expect.objectContaining({param1: 'value1'})]),
-                        expect.arrayContaining(['mock command', expect.objectContaining({param2: 'value2'})]),
+                        expect.arrayContaining([MOCK_COMMAND_LOWERCASE, expect.objectContaining({param1: 'value1'})]),
+                        expect.arrayContaining([MOCK_COMMAND_LOWERCASE, expect.objectContaining({param2: 'value2'})]),
                     ]);
 
                     const persisted = PersistedRequests.getAll();
@@ -221,8 +188,8 @@ describe('APITests', () => {
             Promise.resolve(setHasRadio(false))
                 .then(() => {
                     // When API Write commands are made
-                    API.write('mock command', {param1: 'value1'});
-                    API.write('mock command', {param2: 'value2'});
+                    API.write(MOCK_COMMAND_LOWERCASE, splitParams({param1: 'value1'}));
+                    API.write(MOCK_COMMAND_LOWERCASE, splitParams({param2: 'value2'}));
                     return waitForBatchedUpdates();
                 })
 
@@ -239,7 +206,7 @@ describe('APITests', () => {
                 .then(waitForBatchedUpdates)
                 .then(() => {
                     expect(PersistedRequests.getAll().length).toEqual(0);
-                    expect(PersistedRequests.getOngoingRequest()).toEqual(expect.objectContaining({command: 'mock command', data: expect.objectContaining({param2: 'value2'})}));
+                    expect(PersistedRequests.getOngoingRequest()).toEqual(expect.objectContaining({command: MOCK_COMMAND_LOWERCASE, data: expect.objectContaining({param2: 'value2'})}));
 
                     // When a request fails it should be retried
                     xhrCalls.at(1)?.reject(new Error(CONST.ERROR.FAILED_TO_FETCH));
@@ -248,7 +215,7 @@ describe('APITests', () => {
                 .then(() => {
                     // The ongoingRequest it is moving back to the persistedRequests queue
                     expect(PersistedRequests.getAll().length).toEqual(1);
-                    expect(PersistedRequests.getAll()).toEqual([expect.objectContaining({command: 'mock command', data: expect.objectContaining({param2: 'value2'})})]);
+                    expect(PersistedRequests.getAll()).toEqual([expect.objectContaining({command: MOCK_COMMAND_LOWERCASE, data: expect.objectContaining({param2: 'value2'})})]);
                     // We need to advance past the request throttle back off timer because the request won't be retried until then
                     return new Promise((resolve) => {
                         setTimeout(resolve, CONST.NETWORK.MAX_RANDOM_RETRY_WAIT_TIME_MS);
@@ -285,7 +252,7 @@ describe('APITests', () => {
             Promise.resolve(setHasRadio(false))
                 .then(() => {
                     // When API Write commands are made
-                    API.write('mock command', {param1: 'value1'});
+                    API.write(MOCK_COMMAND_LOWERCASE, splitParams({param1: 'value1'}));
                     return waitForNetworkPromises();
                 })
 
@@ -298,7 +265,7 @@ describe('APITests', () => {
 
                     // And we still have 1 persisted request since it failed
                     expect(PersistedRequests.getAll().length).toEqual(1);
-                    expect(PersistedRequests.getAll()).toEqual([expect.objectContaining({command: 'mock command', data: expect.objectContaining({param1: 'value1'})})]);
+                    expect(PersistedRequests.getAll()).toEqual([expect.objectContaining({command: MOCK_COMMAND_LOWERCASE, data: expect.objectContaining({param1: 'value1'})})]);
 
                     // We let the SequentialQueue process again after its wait time
                     return new Promise((resolve) => {
@@ -311,7 +278,7 @@ describe('APITests', () => {
 
                     // And we still have 1 persisted request since it failed
                     expect(PersistedRequests.getAll().length).toEqual(1);
-                    expect(PersistedRequests.getAll()).toEqual([expect.objectContaining({command: 'mock command', data: expect.objectContaining({param1: 'value1'})})]);
+                    expect(PersistedRequests.getAll()).toEqual([expect.objectContaining({command: MOCK_COMMAND_LOWERCASE, data: expect.objectContaining({param1: 'value1'})})]);
 
                     // We let the SequentialQueue process again after its wait time
                     return new Promise((resolve) => {
@@ -371,7 +338,7 @@ describe('APITests', () => {
             waitForBatchedUpdates()
                 .then(() => Promise.resolve(setHasRadio(false)))
                 .then(() => {
-                    API.write('Mock', {param1: 'value1'});
+                    API.write(MOCK_COMMAND, splitParams({param1: 'value1'}));
                     return waitForBatchedUpdates();
                 })
 
@@ -387,9 +354,9 @@ describe('APITests', () => {
                     const [commandName1] = call1;
                     const [commandName2] = call2;
                     const [commandName3] = call3;
-                    expect(commandName1).toBe('Mock');
+                    expect(commandName1).toBe(MOCK_COMMAND);
                     expect(commandName2).toBe('Authenticate');
-                    expect(commandName3).toBe('Mock');
+                    expect(commandName3).toBe(MOCK_COMMAND);
                 })
         );
     });
@@ -404,13 +371,13 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 6 persistable commands and one not persistable
-                API.write('MockCommand', {content: 'value1'});
-                API.write('MockCommand', {content: 'value2'});
-                API.write('MockCommand', {content: 'value3'});
-                API.read('MockCommand', {content: 'not-persisted'});
-                API.write('MockCommand', {content: 'value4'});
-                API.write('MockCommand', {content: 'value5'});
-                API.write('MockCommand', {content: 'value6'});
+                API.write(MOCK_COMMAND, splitParams({content: 'value1'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value2'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value3'}));
+                API.read(MOCK_READ_COMMAND, readParams('not-persisted'));
+                API.write(MOCK_COMMAND, splitParams({content: 'value4'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value5'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value6'}));
 
                 return waitForBatchedUpdates();
             })
@@ -441,12 +408,12 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 6 persistable commands
-                API.write('MockCommand', {content: 'value1'});
-                API.write('MockCommand', {content: 'value2'});
-                API.write('MockCommand', {content: 'value3'});
-                API.write('MockCommand', {content: 'value4'});
-                API.write('MockCommand', {content: 'value5'});
-                API.write('MockCommand', {content: 'value6'});
+                API.write(MOCK_COMMAND, splitParams({content: 'value1'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value2'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value3'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value4'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value5'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value6'}));
                 return waitForBatchedUpdates();
             })
             .then(() => Promise.resolve(setHasRadio(true)))
@@ -500,7 +467,7 @@ describe('APITests', () => {
                 return waitForBatchedUpdates();
             })
             .then(() => {
-                API.write('MockCommand', {});
+                API.write(MOCK_COMMAND, splitParams());
                 expect(PersistedRequests.getAll().length).toBe(1);
                 expect(getIsOffline()).toBe(true);
                 expect(SequentialQueue.isRunning()).toBe(false);
@@ -535,14 +502,14 @@ describe('APITests', () => {
 
                 // Second call to xhr is the MockCommand that also failed with a 407
                 const [secondCommand] = xhr.mock.calls.at(1) ?? [];
-                expect(secondCommand).toBe('MockCommand');
+                expect(secondCommand).toBe(MOCK_COMMAND);
 
                 // Third command should be the call to Authenticate
                 const [thirdCommand] = xhr.mock.calls.at(2) ?? [];
                 expect(thirdCommand).toBe('Authenticate');
 
                 const [fourthCommand] = xhr.mock.calls.at(3) ?? [];
-                expect(fourthCommand).toBe('MockCommand');
+                expect(fourthCommand).toBe(MOCK_COMMAND);
 
                 // We are using the new authToken
                 expect(NetworkStore.getAuthToken()).toBe('newToken');
@@ -569,7 +536,7 @@ describe('APITests', () => {
                 NetworkStore.resetHasReadRequiredDataFromStorage();
 
                 // And queue a Write request while offline
-                API.write('MockCommand', {content: 'value1'});
+                API.write(MOCK_COMMAND, splitParams({content: 'value1'}));
 
                 // Then we should expect the request to get persisted
                 expect(PersistedRequests.getAll().length).toBe(1);
@@ -605,9 +572,9 @@ describe('APITests', () => {
                 expect(getIsOffline()).toBe(false);
 
                 // WHEN we make a request that should be retried, one that should not, and another that should
-                API.write('MockCommandOne', {});
-                API.read('MockCommandTwo', null);
-                API.write('MockCommandThree', {});
+                API.write(MOCK_COMMAND_ONE, splitParams());
+                API.read(MOCK_READ_COMMAND_TWO, readParams('value2'));
+                API.write(MOCK_COMMAND_THREE, nameValueParams('value3'));
 
                 // THEN the retryable requests should immediately be added to the persisted requests
                 expect(PersistedRequests.getLength()).toBe(2);
@@ -622,11 +589,11 @@ describe('APITests', () => {
                 // And our Write request should run before our non persistable one in a blocking way
                 const firstRequest = xhr.mock.calls.at(0);
                 const [firstRequestCommandName] = firstRequest ?? [];
-                expect(firstRequestCommandName).toBe('MockCommandOne');
+                expect(firstRequestCommandName).toBe(MOCK_COMMAND_ONE);
 
                 const secondRequest = xhr.mock.calls.at(1);
                 const [secondRequestCommandName] = secondRequest ?? [];
-                expect(secondRequestCommandName).toBe('MockCommandThree');
+                expect(secondRequestCommandName).toBe(MOCK_COMMAND_THREE);
 
                 // WHEN we advance the main queue timer and wait for promises
                 return new Promise((resolve) => {
@@ -637,7 +604,7 @@ describe('APITests', () => {
                 // THEN we should see that our third (non-persistable) request has run last
                 const thirdRequest = xhr.mock.calls.at(2);
                 const [thirdRequestCommandName] = thirdRequest ?? [];
-                expect(thirdRequestCommandName).toBe('MockCommandTwo');
+                expect(thirdRequestCommandName).toBe(MOCK_READ_COMMAND_TWO);
             });
     });
 
@@ -651,9 +618,9 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 3 persistable commands and two of them are the same
-                API.write('MockCommand', {content: 'value1'});
-                API.write('MockCommand', {content: 'value2'});
-                API.write('MockCommand', {content: 'value1'});
+                API.write(MOCK_COMMAND, splitParams({content: 'value1'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value2'}));
+                API.write(MOCK_COMMAND, splitParams({content: 'value1'}));
 
                 return waitForBatchedUpdates();
             })
@@ -671,9 +638,9 @@ describe('APITests', () => {
     test('Read request should not stuck when SequentialQueue is paused and resumed', async () => {
         // Given 2 WRITE requests and 1 READ request where the first write request pauses the SequentialQueue
         const xhr = jest.spyOn(HttpUtils, 'xhr').mockResolvedValueOnce({previousUpdateID: 1});
-        API.write('MockWriteCommandOne', {});
-        API.write('MockWriteCommandTwo', {});
-        API.read('MockReadCommand', null);
+        API.write(MOCK_WRITE_COMMAND_ONE, null);
+        API.write(MOCK_WRITE_COMMAND_TWO, null);
+        API.read(MOCK_READ_COMMAND_ONE, null);
 
         await waitForBatchedUpdates();
 
@@ -684,7 +651,7 @@ describe('APITests', () => {
 
         // Then the pending READ command should be called
         const [thirdCommand] = xhr.mock.calls.at(2) ?? [];
-        expect(thirdCommand).toBe('MockReadCommand');
+        expect(thirdCommand).toBe(MOCK_READ_COMMAND_ONE);
     });
 
     test('duplicated write APIs with resolveDuplicationConflictAction conflict', () => {
@@ -696,9 +663,9 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 3 duplicate persistable commands
-                API.writeWithNoDuplicatesConflictAction('MockCommand', {content: 'value1'});
-                API.writeWithNoDuplicatesConflictAction('MockCommand', {content: 'value2'});
-                API.writeWithNoDuplicatesConflictAction('MockCommand', {content: 'value3'});
+                API.writeWithNoDuplicatesConflictAction(MOCK_COMMAND, splitParams({content: 'value1'}));
+                API.writeWithNoDuplicatesConflictAction(MOCK_COMMAND, splitParams({content: 'value2'}));
+                API.writeWithNoDuplicatesConflictAction(MOCK_COMMAND, splitParams({content: 'value3'}));
                 return waitForBatchedUpdates();
             })
             .then(() => Promise.resolve(setHasRadio(true)))
@@ -719,9 +686,9 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 3 different persistable commands
-                API.writeWithNoDuplicatesConflictAction('MockCommandOne', {content: 'value1'});
-                API.writeWithNoDuplicatesConflictAction('MockCommandTwo', {content: 'value2'});
-                API.writeWithNoDuplicatesConflictAction('MockCommandThree', {content: 'value3'});
+                API.writeWithNoDuplicatesConflictAction(MOCK_COMMAND_ONE, splitParams({content: 'value1'}));
+                API.writeWithNoDuplicatesConflictAction(MOCK_COMMAND_TWO, splitParams({content: 'value2'}));
+                API.writeWithNoDuplicatesConflictAction(MOCK_COMMAND_THREE, nameValueParams('value3'));
                 return waitForBatchedUpdates();
             })
             .then(() => Promise.resolve(setHasRadio(true)))
@@ -744,9 +711,9 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 3 duplicate persistable commands with same policyID and different enabled values
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '1', enabled: true});
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '1', enabled: false});
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '1', enabled: true});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '1', enabled: true});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '1', enabled: false});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '1', enabled: true});
                 return waitForBatchedUpdates();
             })
             .then(() => Promise.resolve(setHasRadio(true)))
@@ -767,8 +734,8 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 2 duplicate persistable commands with same policyID and true and false enabled values
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '1', enabled: true});
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '1', enabled: false});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '1', enabled: true});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '1', enabled: false});
                 return waitForBatchedUpdates();
             })
             .then(() => Promise.resolve(setHasRadio(true)))
@@ -788,9 +755,9 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 3 different persistable commands with different policyIDs
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '1', enabled: true});
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '2', enabled: false});
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '3', enabled: true});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '1', enabled: true});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '2', enabled: false});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '3', enabled: true});
                 return waitForBatchedUpdates();
             })
             .then(() => Promise.resolve(setHasRadio(true)))
@@ -813,9 +780,9 @@ describe('APITests', () => {
         })
             .then(() => {
                 // When we queue 3 different persistable commands with only 2 policyIDs
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '1', enabled: true});
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '2', enabled: false});
-                API.writeWithNoDuplicatesEnableFeatureConflicts('MockCommand', {policyID: '1', enabled: false});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '1', enabled: true});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '2', enabled: false});
+                API.writeWithNoDuplicatesEnableFeatureConflicts(MOCK_ENABLE_COMMAND, {policyID: '1', enabled: false});
                 return waitForBatchedUpdates();
             })
             .then(() => Promise.resolve(setHasRadio(true)))
@@ -846,7 +813,7 @@ describe('APITests', () => {
             [ONYXKEYS.SESSION]: {authToken: 'anyToken', authTokenType: CONST.AUTH_TOKEN_TYPES.SUPPORT},
         })
             .then(() => {
-                API.write('MockCommand', {}, {failureData});
+                API.write(MOCK_COMMAND, splitParams(), {failureData});
                 return waitForNetworkPromises();
             })
             .then(waitForBatchedUpdates)
@@ -874,7 +841,7 @@ describe('APITests', () => {
                     if (typeof payload !== 'object' || payload === null) {
                         return false;
                     }
-                    return Reflect.get(payload, 'command') === 'MockCommand';
+                    return Reflect.get(payload, 'command') === MOCK_COMMAND;
                 });
                 expect(supportalModalSet).toBe(true);
             });
@@ -900,25 +867,21 @@ describe('API.write() persistence guarantees', () => {
                 const hasMarker = data.some((entry) => entry.key === ONYXKEYS.RAM_ONLY_IS_CHECKING_PUBLIC_ROOM);
                 if (hasMarker) {
                     optimisticDataApplied = true;
-                    requestPersistedBeforeOptimistic = PersistedRequests.getAll().some((r) => r.command === 'MockCommand');
+                    requestPersistedBeforeOptimistic = PersistedRequests.getAll().some((r) => r.command === MOCK_COMMAND);
                 }
                 return Promise.resolve();
             });
 
             try {
-                API.write(
-                    'MockCommand',
-                    {param1: 'value1'},
-                    {
-                        optimisticData: [
-                            {
-                                onyxMethod: Onyx.METHOD.SET,
-                                key: ONYXKEYS.RAM_ONLY_IS_CHECKING_PUBLIC_ROOM,
-                                value: true,
-                            },
-                        ],
-                    },
-                );
+                API.write(MOCK_COMMAND, splitParams({param1: 'value1'}), {
+                    optimisticData: [
+                        {
+                            onyxMethod: Onyx.METHOD.SET,
+                            key: ONYXKEYS.RAM_ONLY_IS_CHECKING_PUBLIC_ROOM,
+                            value: true,
+                        },
+                    ],
+                });
 
                 expect(optimisticDataApplied).toBe(true);
                 // BUG: The request is NOT in the persisted queue when optimistic data is
@@ -960,7 +923,7 @@ describe('API.write() persistence guarantees', () => {
                 return originalSet(key, value);
             });
 
-            API.write('MockCommand', {param1: 'value1'}).then(() => {
+            API.write(MOCK_COMMAND, splitParams({param1: 'value1'})).then(() => {
                 writePromiseResolved = true;
             });
 
@@ -1018,9 +981,9 @@ describe('API.write() persistence guarantees', () => {
             // Rapidly write two commands while offline — each save() call updates
             // in-memory state immediately then fires Onyx.set (captured, not resolved).
             // save(CommandA): in-memory = [A], Onyx.set([A]) captured
-            API.write('CommandA', {param1: 'value1'});
+            API.write(COMMAND_A, splitParams({param1: 'value1'}));
             // save(CommandB): in-memory = [A, B], Onyx.set([A, B]) captured
-            API.write('CommandB', {param2: 'value2'});
+            API.write(COMMAND_B, splitParams({param2: 'value2'}));
 
             expect(capturedSets).toHaveLength(2);
             expect(PersistedRequests.getAll()).toHaveLength(2);
@@ -1051,11 +1014,11 @@ describe('API.write() persistence guarantees', () => {
                     return {conflictAction: {type: 'push'}};
                 },
             } satisfies RequestConflictResolver<OnyxKey>;
-            API.write('CommandC', {param3: 'value3'}, {}, conflictResolver);
+            API.write(COMMAND_C, nameValueParams('value3'), {}, conflictResolver);
 
             // FIX (Issue 5): With Issue 4 fixed, the conflict resolver sees the complete
             // queue including CommandB, enabling correct deduplication decisions.
-            expect(queueSeenByResolver).toContainEqual(expect.objectContaining({command: 'CommandB'}));
+            expect(queueSeenByResolver).toContainEqual(expect.objectContaining({command: COMMAND_B}));
         } finally {
             setMock.mockRestore();
         }
