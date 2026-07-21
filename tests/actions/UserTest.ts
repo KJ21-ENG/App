@@ -2,11 +2,8 @@ import * as API from '@libs/API';
 import {READ_COMMANDS, SIDE_EFFECT_REQUEST_COMMANDS, WRITE_COMMANDS} from '@libs/API/types';
 
 import CONST from '@src/CONST';
-import type {OnyxKey} from '@src/ONYXKEYS';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {NewLogin} from '@src/types/onyx';
-
-import type {OnyxMergeInput} from 'react-native-onyx';
 
 import Onyx from 'react-native-onyx';
 
@@ -225,7 +222,7 @@ describe('actions/User', () => {
             // Then verify the optimisticData structure
 
             const onyxData = mockAPI.write.mock.calls.at(0)?.[2];
-            const optimisticData = onyxData.optimisticData ?? [];
+            const optimisticData = onyxData?.optimisticData ?? [];
 
             expect(optimisticData).toHaveLength(1);
             expect(optimisticData.at(0)).toEqual({
@@ -252,7 +249,7 @@ describe('actions/User', () => {
             // Then verify the successData structure
 
             const onyxData = mockAPI.write.mock.calls.at(0)?.[2];
-            const successData = onyxData.successData ?? [];
+            const successData = onyxData?.successData ?? [];
 
             expect(successData).toHaveLength(1);
             expect(successData.at(0)).toEqual({
@@ -276,7 +273,7 @@ describe('actions/User', () => {
             // Then verify the failureData structure
 
             const onyxData = mockAPI.write.mock.calls.at(0)?.[2];
-            const failureData = onyxData.failureData ?? [];
+            const failureData = onyxData?.failureData ?? [];
 
             expect(failureData).toHaveLength(1);
             expect(failureData.at(0)).toEqual({
@@ -295,24 +292,16 @@ describe('actions/User', () => {
 
             // Mock API.write to apply optimisticData
 
-            mockAPI.write.mockImplementation(
-                (
-                    command: unknown,
-                    params: unknown,
-                    options?: {
-                        optimisticData?: Array<{onyxMethod: typeof Onyx.METHOD.MERGE; key: OnyxKey; value: OnyxMergeInput<OnyxKey>}>;
-                    },
-                ) => {
-                    if (options?.optimisticData) {
-                        for (const update of options.optimisticData) {
-                            if (update.onyxMethod === Onyx.METHOD.MERGE) {
-                                Onyx.merge(update.key, update.value);
-                            }
+            mockAPI.write.mockImplementation((_command, _params, options) => {
+                if (options?.optimisticData) {
+                    for (const update of options.optimisticData) {
+                        if (update.onyxMethod === Onyx.METHOD.MERGE) {
+                            Onyx.merge(update.key, update.value);
                         }
                     }
-                    return Promise.resolve();
-                },
-            );
+                }
+                return Promise.resolve();
+            });
 
             // When verifyAddSecondaryLoginCode is called
             UserActions.verifyAddSecondaryLoginCode(validateCode);
@@ -413,7 +402,7 @@ describe('actions/User', () => {
             // Then verify the optimisticData structure
 
             const onyxData = mockAPI.write.mock.calls.at(0)?.[2];
-            const optimisticData = onyxData.optimisticData ?? [];
+            const optimisticData = onyxData?.optimisticData ?? [];
 
             expect(optimisticData).toHaveLength(3);
 
@@ -467,7 +456,7 @@ describe('actions/User', () => {
 
             // Then verify the successData structure
             const onyxData = mockAPI.write.mock.calls.at(0)?.[2];
-            const successData = onyxData.successData ?? [];
+            const successData = onyxData?.successData ?? [];
 
             expect(successData).toHaveLength(2);
 
@@ -504,7 +493,7 @@ describe('actions/User', () => {
             // Then verify the failureData structure
 
             const onyxData = mockAPI.write.mock.calls.at(0)?.[2];
-            const failureData = onyxData.failureData ?? [];
+            const failureData = onyxData?.failureData ?? [];
 
             expect(failureData).toHaveLength(3);
 
@@ -534,24 +523,16 @@ describe('actions/User', () => {
 
             // Mock API.write to apply optimisticData
 
-            mockAPI.write.mockImplementation(
-                (
-                    command: unknown,
-                    params: unknown,
-                    options?: {
-                        optimisticData?: Array<{onyxMethod: typeof Onyx.METHOD.MERGE; key: OnyxKey; value: OnyxMergeInput<OnyxKey>}>;
-                    },
-                ) => {
-                    if (options?.optimisticData) {
-                        for (const update of options.optimisticData) {
-                            if (update.onyxMethod === Onyx.METHOD.MERGE) {
-                                Onyx.merge(update.key, update.value);
-                            }
+            mockAPI.write.mockImplementation((_command, _params, options) => {
+                if (options?.optimisticData) {
+                    for (const update of options.optimisticData) {
+                        if (update.onyxMethod === Onyx.METHOD.MERGE) {
+                            Onyx.merge(update.key, update.value);
                         }
                     }
-                    return Promise.resolve();
-                },
-            );
+                }
+                return Promise.resolve();
+            });
 
             // When addNewContactMethod is called
             UserActions.addNewContactMethod(contactMethod);
@@ -897,9 +878,9 @@ describe('actions/User', () => {
             expect(command).toBe(WRITE_COMMANDS.REVOKE_DEVICE);
             expect(parameters).toEqual({partnerID, partnerUserID});
 
-            const optimisticData = onyxData.optimisticData ?? [];
-            const successData = onyxData.successData ?? [];
-            const failureData = onyxData.failureData ?? [];
+            const optimisticData = onyxData?.optimisticData ?? [];
+            const successData = onyxData?.successData ?? [];
+            const failureData = onyxData?.failureData ?? [];
 
             // And it should include correct optimistic, success, and failure data structures
             // Optimistic: sets pendingAction to DELETE
@@ -944,7 +925,7 @@ describe('actions/User', () => {
             const autoGeneratedLogin = 'device_123';
             const login = createMock<NewLogin>({partnerID, partnerUserID});
 
-            mockAPI.write.mockResolvedValue(null);
+            mockAPI.write.mockResolvedValue(undefined);
 
             // When revokeDevice is called
             UserActions.revokeDevice(login, autoGeneratedLogin);
