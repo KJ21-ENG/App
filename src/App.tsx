@@ -2,9 +2,10 @@ import {PortalProvider} from '@gorhom/portal';
 import {setWasmUrl} from '@lottiefiles/dotlottie-react';
 import * as Sentry from '@sentry/react-native';
 import {maybeCompleteAuthSession} from 'expo-web-browser';
-import React from 'react';
+import React, {useEffect} from 'react';
 import {LogBox, View} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import Onyx from 'react-native-onyx';
 import {PickerStateProvider} from 'react-native-picker-select';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
@@ -46,6 +47,7 @@ import useDefaultDragAndDrop from './hooks/useDefaultDragAndDrop';
 import HybridAppHandler from './HybridAppHandler';
 import OnyxUpdateManager from './libs/actions/OnyxUpdateManager';
 import './libs/HybridApp';
+import ONYXKEYS from './ONYXKEYS';
 import {ConciergeSessionProvider} from './pages/inbox/ConciergeSessionContext';
 import './setup/backgroundLocationTrackingTask';
 import './setup/backgroundTask';
@@ -71,12 +73,123 @@ const fill = {flex: 1};
 
 const StrictModeWrapper = CONFIG.USE_REACT_STRICT_MODE_IN_DEV ? React.StrictMode : ({children}: {children: React.ReactElement}) => children;
 
+type Issue94722EventTiming = {
+    name: string;
+    startTime: number;
+    duration: number;
+    processingStart: number;
+    processingEnd: number;
+    interactionID: number;
+    targetLabel: string | null;
+};
+
+type Issue94722AnimationFrameTiming = {
+    startTime: number;
+    nextAnimationFrameTime: number;
+    duration: number;
+};
+
+type Issue94722BenchmarkWindow = Window & {
+    __ISSUE_94722_EVENT_TIMINGS__?: Issue94722EventTiming[];
+    __ISSUE_94722_ANIMATION_FRAME_TIMINGS__?: Issue94722AnimationFrameTiming[];
+    __ISSUE_94722_FIXTURE_READY__?: {contactCount: number; ownerAccountID: number};
+};
+
+function Issue94722BenchmarkHarness() {
+    useEffect(() => {
+        const benchmarkWindow = window as Issue94722BenchmarkWindow;
+        const ownerAccountID = 94722000;
+        const ownerEmail = 'inp.fixture.owner@example.com';
+        const contactCount = 2000;
+        const personalDetails = Object.fromEntries([
+            [ownerAccountID, {accountID: ownerAccountID, login: ownerEmail, displayName: 'INP Fixture Owner'}],
+            ...Array.from({length: contactCount}, (_, index) => {
+                const accountID = ownerAccountID + index + 1;
+                const suffix = String(index + 1).padStart(4, '0');
+                return [accountID, {accountID, login: `inp.contact.${suffix}@example.com`, displayName: `INP Contact ${suffix}`}];
+            }),
+        ]);
+
+        void Promise.all([
+            Onyx.merge(ONYXKEYS.SESSION, {authToken: 'inp-head-to-head-fixture', accountID: ownerAccountID, email: ownerEmail}),
+            Onyx.merge(ONYXKEYS.ACCOUNT, {accountID: ownerAccountID, primaryLogin: ownerEmail}),
+            Onyx.merge(ONYXKEYS.PERSONAL_DETAILS_LIST, personalDetails),
+            Onyx.merge(ONYXKEYS.NETWORK, {isOffline: true}),
+        ]).then(() => {
+            benchmarkWindow.__ISSUE_94722_FIXTURE_READY__ = {contactCount, ownerAccountID};
+        });
+
+        const eventTimings: Issue94722EventTiming[] = [];
+        const animationFrameTimings: Issue94722AnimationFrameTiming[] = [];
+        benchmarkWindow.__ISSUE_94722_EVENT_TIMINGS__ = eventTimings;
+        benchmarkWindow.__ISSUE_94722_ANIMATION_FRAME_TIMINGS__ = animationFrameTimings;
+
+        const isCheckboxTarget = (target: EventTarget | null) => (target instanceof Element ? target.closest('[data-sentry-label="UserListItem-Checkbox"]') : null);
+
+        const handleClick = (event: MouseEvent) => {
+            if (!isCheckboxTarget(event.target)) {
+                return;
+            }
+
+            const startTime = event.timeStamp;
+            requestAnimationFrame((nextAnimationFrameTime) => {
+                animationFrameTimings.push({
+                    startTime,
+                    nextAnimationFrameTime,
+                    duration: nextAnimationFrameTime - startTime,
+                });
+            });
+        };
+
+        window.addEventListener('click', handleClick, true);
+
+        let observer: PerformanceObserver | undefined;
+        try {
+            observer = new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                    const eventEntry = entry as PerformanceEntry & {
+                        processingStart?: number;
+                        processingEnd?: number;
+                        interactionId?: number;
+                        target?: EventTarget | null;
+                    };
+                    const checkboxTarget = isCheckboxTarget(eventEntry.target ?? null);
+                    if (eventEntry.name !== 'click' || !checkboxTarget) {
+                        continue;
+                    }
+
+                    eventTimings.push({
+                        name: eventEntry.name,
+                        startTime: eventEntry.startTime,
+                        duration: eventEntry.duration,
+                        processingStart: eventEntry.processingStart ?? 0,
+                        processingEnd: eventEntry.processingEnd ?? 0,
+                        interactionID: eventEntry.interactionId ?? 0,
+                        targetLabel: checkboxTarget.getAttribute('aria-label'),
+                    });
+                }
+            });
+            observer.observe({type: 'event', buffered: true, durationThreshold: 0} as PerformanceObserverInit);
+        } catch {
+            observer = undefined;
+        }
+
+        return () => {
+            window.removeEventListener('click', handleClick, true);
+            observer?.disconnect();
+        };
+    }, []);
+
+    return null;
+}
+
 function App() {
     useDefaultDragAndDrop();
     OnyxUpdateManager();
 
     return (
         <StrictModeWrapper>
+            <Issue94722BenchmarkHarness />
             <SplashScreenStateContextProvider>
                 <InitialURLContextProvider>
                     <HybridAppHandler />
