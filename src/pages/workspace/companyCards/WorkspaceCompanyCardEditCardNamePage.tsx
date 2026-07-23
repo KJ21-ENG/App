@@ -29,7 +29,7 @@ import {updateCompanyCardName} from '@userActions/CompanyCards';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES, {DYNAMIC_ROUTES} from '@src/ROUTES';
-import type SCREENS from '@src/SCREENS';
+import SCREENS from '@src/SCREENS';
 import INPUT_IDS from '@src/types/form/EditExpensifyCardNameForm';
 import isLoadingOnyxValue from '@src/types/utils/isLoadingOnyxValue';
 
@@ -38,7 +38,7 @@ import React from 'react';
 
 type WorkspaceCompanyCardEditCardNamePageProps = PlatformStackScreenProps<SettingsNavigatorParamList, typeof SCREENS.WORKSPACE.COMPANY_CARD_EDIT_CARD_NAME>;
 
-function WorkspaceCompanyCardEditCardNamePage({route}: WorkspaceCompanyCardEditCardNamePageProps) {
+function WorkspaceCompanyCardEditCardNamePage({route, navigation}: WorkspaceCompanyCardEditCardNamePageProps) {
     const {policyID, cardID, feed} = route.params;
     const workspaceAccountID = useWorkspaceAccountID(policyID);
     const [customCardNames, customCardNamesMetadata] = useOnyx(ONYXKEYS.NVP_EXPENSIFY_COMPANY_CARDS_CUSTOM_NAMES);
@@ -50,8 +50,20 @@ function WorkspaceCompanyCardEditCardNamePage({route}: WorkspaceCompanyCardEditC
     const [cardFeeds, cardFeedsMetadata] = useCardFeeds(policyID);
     const companyFeeds = getCompanyFeeds(cardFeeds);
     const domainOrWorkspaceAccountID = getDomainOrWorkspaceAccountID(workspaceAccountID, companyFeeds[feed]);
-    const backPath = createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_COMPANY_CARD_DETAILS.getRoute(feed, cardID), ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(policyID));
-    const goBackToCardDetails = () => Navigation.goBack(backPath, {compareParams: false});
+    const goBackToCardDetails = () => {
+        const previousRoute = navigation.getState().routes.at(-2);
+        const accountID =
+            previousRoute?.name === SCREENS.WORKSPACE.DYNAMIC_COMPANY_CARD_DETAILS &&
+            previousRoute.params &&
+            'accountID' in previousRoute.params &&
+            typeof previousRoute.params.accountID === 'number'
+                ? previousRoute.params.accountID
+                : undefined;
+        const basePath = accountID === undefined ? ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(policyID) : ROUTES.WORKSPACE_MEMBER_DETAILS.getRoute(policyID, accountID);
+        const backPath = createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_COMPANY_CARD_DETAILS.getRoute(feed, cardID), basePath);
+
+        Navigation.goBack(backPath);
+    };
 
     const [sharedCardCustomNames, sharedCardCustomNamesMetadata] = useOnyx(`${ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER}${domainOrWorkspaceAccountID}`, {
         selector: companyCardCustomNamesSelector,
