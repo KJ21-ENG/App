@@ -26,7 +26,7 @@ import {updateCardTransactionStartDate} from '@userActions/CompanyCards';
 
 import CONST from '@src/CONST';
 import ROUTES, {DYNAMIC_ROUTES} from '@src/ROUTES';
-import type SCREENS from '@src/SCREENS';
+import SCREENS from '@src/SCREENS';
 import type {CompanyCardFeedWithDomainID} from '@src/types/onyx';
 
 import type {ValueOf} from 'type-fest';
@@ -38,7 +38,7 @@ import {View} from 'react-native';
 type DateOption = ValueOf<typeof CONST.COMPANY_CARD.TRANSACTION_START_DATE_OPTIONS>;
 type WorkspaceCompanyCardEditTransactionStartDatePageProps = PlatformStackScreenProps<SettingsNavigatorParamList, typeof SCREENS.WORKSPACE.COMPANY_CARD_EDIT_TRANSACTION_START_DATE>;
 
-function WorkspaceCompanyCardEditTransactionStartDatePage({route}: WorkspaceCompanyCardEditTransactionStartDatePageProps) {
+function WorkspaceCompanyCardEditTransactionStartDatePage({route, navigation}: WorkspaceCompanyCardEditTransactionStartDatePageProps) {
     const {policyID, cardID} = route.params;
     const feedName = decodeURIComponent(route.params.feed) as CompanyCardFeedWithDomainID;
     const bank = getCompanyCardFeed(feedName);
@@ -51,9 +51,16 @@ function WorkspaceCompanyCardEditTransactionStartDatePage({route}: WorkspaceComp
     const [cardFeeds] = useCardFeeds(policyID);
     const companyFeeds = getCompanyFeeds(cardFeeds);
     const domainOrWorkspaceAccountID = getDomainOrWorkspaceAccountID(workspaceAccountID, companyFeeds[feedName]);
-    const backPath = createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_COMPANY_CARD_DETAILS.getRoute(feedName, cardID), ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(policyID));
+    const fallbackBackPath = createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_COMPANY_CARD_DETAILS.getRoute(feedName, cardID), ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(policyID));
+    const goBackToCardDetails = () => {
+        const previousRoute = navigation.getState().routes.at(-2);
+        if (previousRoute?.name === SCREENS.WORKSPACE.DYNAMIC_COMPANY_CARD_DETAILS) {
+            Navigation.goBack();
+            return;
+        }
 
-    const goBackToCardDetails = () => Navigation.goBack(backPath, {compareParams: false});
+        Navigation.goBack(fallbackBackPath);
+    };
 
     const [allBankCards] = useCardsList(feedName);
     const card = allBankCards?.[cardID];
