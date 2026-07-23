@@ -28,7 +28,7 @@ import variables from '@styles/variables';
 
 import CONST from '@src/CONST';
 import {DYNAMIC_ROUTES} from '@src/ROUTES';
-import type SCREENS from '@src/SCREENS';
+import SCREENS from '@src/SCREENS';
 
 import React, {useState} from 'react';
 import {View} from 'react-native';
@@ -37,7 +37,7 @@ import {getExportMenuItem} from './utils';
 
 type DynamicWorkspaceCompanyCardAccountSelectCardProps = PlatformStackScreenProps<SettingsNavigatorParamList, typeof SCREENS.WORKSPACE.DYNAMIC_COMPANY_CARD_EXPORT>;
 
-function DynamicWorkspaceCompanyCardAccountSelectCardPage({route}: DynamicWorkspaceCompanyCardAccountSelectCardProps) {
+function DynamicWorkspaceCompanyCardAccountSelectCardPage({route, navigation}: DynamicWorkspaceCompanyCardAccountSelectCardProps) {
     const {translate} = useLocalize();
     const styles = useThemeStyles();
     const {environmentURL} = useEnvironment();
@@ -80,6 +80,20 @@ function DynamicWorkspaceCompanyCardAccountSelectCardPage({route}: DynamicWorksp
         />
     );
 
+    const goBackToEntryScreen = () => {
+        const previousRoute = navigation.getState().routes.at(-2);
+        const isEntryScreen =
+            previousRoute?.name === SCREENS.WORKSPACE.DYNAMIC_COMPANY_CARD_DETAILS ||
+            previousRoute?.name === SCREENS.WORKSPACE.ACCOUNTING.RILLET_CARD_ACCOUNT_CARD_LIST;
+
+        if (isEntryScreen) {
+            Navigation.goBack();
+            return;
+        }
+
+        Navigation.goBack(backPath);
+    };
+
     const updateExportAccount = ({value}: SelectorType) => {
         if (!exportMenuItem?.exportType) {
             return;
@@ -88,7 +102,7 @@ function DynamicWorkspaceCompanyCardAccountSelectCardPage({route}: DynamicWorksp
         const exportValue = isDefaultSelected ? CONST.COMPANY_CARDS.DEFAULT_EXPORT_TYPE : value;
         setCompanyCardExportAccount(policyID, domainOrWorkspaceAccountID, cardID, exportMenuItem.exportType, exportValue, getCompanyCardFeed(feed));
 
-        Navigation.goBack(backPath);
+        goBackToEntryScreen();
     };
 
     return (
@@ -129,7 +143,7 @@ function DynamicWorkspaceCompanyCardAccountSelectCardPage({route}: DynamicWorksp
                 }}
                 onSelectRow={updateExportAccount}
                 initiallyFocusedOptionKey={exportMenuItem?.data?.find((mode) => mode.isSelected)?.keyForList}
-                onBackButtonPress={() => Navigation.goBack(backPath)}
+                onBackButtonPress={goBackToEntryScreen}
                 headerTitleAlreadyTranslated={exportMenuItem?.description}
                 listEmptyContent={listEmptyContent}
                 connectionName={connectedIntegration}
