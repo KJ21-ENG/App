@@ -1,3 +1,4 @@
+import {clearCompanyCardCSVImportPending} from '@libs/actions/CompanyCards';
 import {filterAmexDirectParentCard, getCompanyCardFeed, getCompanyFeeds, getSelectedFeed, normalizeCardName} from '@libs/CardUtils';
 
 import CONST from '@src/CONST';
@@ -9,6 +10,8 @@ import type {CardFeedsStatusByDomainID, CombinedCardFeeds, CompanyCardFeedWithDo
 import isLoadingOnyxValue from '@src/types/utils/isLoadingOnyxValue';
 
 import type {OnyxCollection, OnyxEntry, ResultMetadata} from 'react-native-onyx';
+
+import {useEffect} from 'react';
 
 import type {CombinedCardFeed} from './useCardFeeds';
 
@@ -43,6 +46,7 @@ type UseCompanyCardsResult = Partial<{
     isNoFeed: boolean;
     isFeedPending: boolean;
     isFeedAdded: boolean;
+    isCSVImportPending: boolean;
 
     onyxMetadata: {
         cardListMetadata: ResultMetadata<WorkspaceCardsList>;
@@ -169,6 +173,9 @@ function useCompanyCards({policyID, feedName: feedNameProp}: UseCompanyCardsProp
 
     const feedName = feedNameProp ?? getSelectedFeed(lastSelectedFeed, allCardFeeds);
     const bankName = feedName ? getCompanyCardFeed(feedName) : undefined;
+    // An invalid collection member ID avoids subscribing to the entire collection before a feed is selected.
+    const pendingCSVImportKey = `${ONYXKEYS.COLLECTION.PENDING_CSV_COMPANY_CARD_IMPORT}${feedName ?? CONST.DEFAULT_MISSING_ID}` as const;
+    const [isCSVImportPendingForSelectedFeed] = useOnyx(pendingCSVImportKey);
 
     const [cardsList, cardListMetadata] = useCardsList(feedName);
 
@@ -177,6 +184,15 @@ function useCompanyCards({policyID, feedName: feedNameProp}: UseCompanyCardsProp
 
     const {cardList, ...assignedCards} = cardsList ?? {};
     const companyCardEntries = buildCompanyCardEntries(selectedFeed?.accountList, cardList, assignedCards, feedName);
+    const hasCompanyCardEntries = companyCardEntries.length > 0;
+    const isCSVImportPending = !!isCSVImportPendingForSelectedFeed && !hasCompanyCardEntries;
+
+    useEffect(() => {
+        if (!isCSVImportPendingForSelectedFeed || !hasCompanyCardEntries || !feedName) {
+            return;
+        }
+        clearCompanyCardCSVImportPending(feedName);
+    }, [feedName, hasCompanyCardEntries, isCSVImportPendingForSelectedFeed]);
 
     const onyxMetadata = {
         cardListMetadata,
@@ -190,7 +206,7 @@ function useCompanyCards({policyID, feedName: feedNameProp}: UseCompanyCardsProp
     const isFeedAdded = !isInitiallyLoadingFeeds && !isFeedPending && !isNoFeed;
 
     if (!policyID) {
-        return {onyxMetadata, isInitiallyLoadingFeeds, isNoFeed, isFeedPending, isFeedAdded};
+        return {onyxMetadata, isInitiallyLoadingFeeds, isNoFeed, isFeedPending, isFeedAdded, isCSVImportPending};
     }
 
     return {
@@ -208,6 +224,7 @@ function useCompanyCards({policyID, feedName: feedNameProp}: UseCompanyCardsProp
         isNoFeed,
         isFeedPending,
         isFeedAdded,
+        isCSVImportPending,
     };
 }
 

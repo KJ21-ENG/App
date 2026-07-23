@@ -15,9 +15,12 @@ import TableSearchBar from './TableSearchBar';
 type TableFilterBarProps = PropsWithChildren<{
     /** Label and accessibility label for the search input. */
     label: string;
+
+    /** Whether to show the filter bar when the table has no data. */
+    shouldShowWhenEmpty?: boolean;
 }>;
 
-export default function TableFilterBar({label, children}: TableFilterBarProps) {
+export default function TableFilterBar({label, shouldShowWhenEmpty = false, children}: TableFilterBarProps) {
     const styles = useThemeStyles();
     const {filterConfig, tableMethods, activeFilters, originalDataLength, shouldUseNarrowTableLayout} = useTableContext();
 
@@ -57,7 +60,7 @@ export default function TableFilterBar({label, children}: TableFilterBarProps) {
         </View>
     );
 
-    if (!originalDataLength) {
+    if (!originalDataLength && !shouldShowWhenEmpty) {
         return null;
     }
 

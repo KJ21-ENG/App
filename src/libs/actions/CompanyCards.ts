@@ -50,7 +50,7 @@ import type {NullishDeep, OnyxEntry, OnyxUpdate} from 'react-native-onyx';
 
 import Onyx from 'react-native-onyx';
 
-import {getImportFailedFinalModal, getImportFinalModalID, getImportFinalModalOnyxData, waitForImportFinalModal} from './ImportSpreadsheet';
+import {getImportFailedFinalModal, getImportResultID, getImportResultOnyxData, waitForImportResult} from './ImportSpreadsheet';
 
 type AddNewCompanyCardFlowData = {
     /** Step to be set in Onyx */
@@ -74,6 +74,8 @@ type ImportCSVCompanyCardsData = {
     workspaceCardFeeds?: OnyxEntry<CardFeeds>;
     existingInstanceID?: string;
 };
+
+type ImportCSVCompanyCardsResult = {status: 'success'} | {status: 'failure'; finalModal: ImportFinalModal};
 
 type OptimisticCompanyCardCSVTransaction = Pick<Transaction, 'transactionID' | 'amount' | 'created' | 'currency' | 'merchant' | 'category' | 'tag' | 'comment' | 'cardName' | 'bank'> & {
     reportID: '0';
@@ -341,6 +343,11 @@ function setWorkspaceCompanyCardTransactionLiability(domainOrWorkspaceAccountID:
     API.write(WRITE_COMMANDS.SET_COMPANY_CARD_TRANSACTION_LIABILITY, parameters, onyxData);
 }
 
+function clearCompanyCardCSVImportPending(feedName: CompanyCardFeedWithDomainID) {
+    const pendingCSVImportKey = `${ONYXKEYS.COLLECTION.PENDING_CSV_COMPANY_CARD_IMPORT}${feedName}` as const;
+    Onyx.set(pendingCSVImportKey, null);
+}
+
 function deleteWorkspaceCompanyCardFeed(
     policyID: string,
     domainOrWorkspaceAccountID: number,
@@ -389,9 +396,8 @@ function deleteWorkspaceCompanyCardFeed(
         },
     ];
 
-    // Card collections only: API onyxData provides SHARED_NVP on success (avoid merge-after-set on that key).
     const successCardUpdates = Object.fromEntries(cardIDs.map((cardID) => [cardID, null]));
-    const successData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.WORKSPACE_CARDS_LIST | typeof ONYXKEYS.CARD_LIST>> = [
+    const successData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.WORKSPACE_CARDS_LIST | typeof ONYXKEYS.CARD_LIST | typeof ONYXKEYS.COLLECTION.PENDING_CSV_COMPANY_CARD_IMPORT>> = [
         {
             onyxMethod: Onyx.METHOD.SET,
             key: `${ONYXKEYS.COLLECTION.WORKSPACE_CARDS_LIST}${domainOrWorkspaceAccountID}_${bankName}`,
@@ -401,6 +407,11 @@ function deleteWorkspaceCompanyCardFeed(
             onyxMethod: Onyx.METHOD.MERGE,
             key: ONYXKEYS.CARD_LIST,
             value: successCardUpdates,
+        },
+        {
+            onyxMethod: Onyx.METHOD.SET,
+            key: `${ONYXKEYS.COLLECTION.PENDING_CSV_COMPANY_CARD_IMPORT}${getCardFeedWithDomainID(bankName, domainOrWorkspaceAccountID)}`,
+            value: null,
         },
     ];
 
@@ -1242,9 +1253,9 @@ function importCSVCompanyCards({
     lastSelectedFeed,
     workspaceCardFeeds,
     existingInstanceID,
-}: ImportCSVCompanyCardsData): Promise<ImportFinalModal> {
+}: ImportCSVCompanyCardsData): Promise<ImportCSVCompanyCardsResult> {
     const feedName = layoutType as CompanyCardFeed;
-    const {csvDataWithGeneratedIDs, normalizedColumnMappings, transactions} = buildOptimisticCompanyCardCSVTransactions(csvData, columnMappings, feedName);
+    const {csvDataWithGeneratedIDs, normalizedColumnMappings} = buildOptimisticCompanyCardCSVTransactions(csvData, columnMappings, feedName);
     // `existingInstanceID` is typed as a string, but for legacy feeds Onyx/NVP can store it as a number.
     // The backend rejects a non-string `instanceID` before parsing the CSV, so coerce it to a string here.
     const instanceID = existingInstanceID ? String(existingInstanceID) : Date.now().toString();
@@ -1266,8 +1277,6 @@ function importCSVCompanyCards({
     const shouldCreateFeed = !existingCompanyCards?.[feedName];
     const shouldSetNickname = !existingNicknames?.[feedName] && !!layoutName;
 
-    const transactionsCount = transactions.length;
-
     const optimisticData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER | typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED>> = [
         {
             onyxMethod: Onyx.METHOD.MERGE,
@@ -1276,18 +1285,17 @@ function importCSVCompanyCards({
         },
     ];
 
-    const importFinalModal: ImportFinalModal = {
-        titleKey: 'spreadsheet.importSuccessfulTitle',
-        promptKey: 'spreadsheet.importCompanyCardTransactionsSuccessfulDescription',
-        promptKeyParams: {
-            transactions: transactionsCount,
-        },
-        pendingMessageKey: 'spreadsheet.importCompanyCardTransactionsPendingMessage',
-    };
-    const importFinalModalID = getImportFinalModalID();
-    const importFinalModalResult = waitForImportFinalModal(importFinalModalID);
+    const importResultID = getImportResultID();
+    const importResult = waitForImportResult(importResultID);
 
-    const successData: Array<OnyxUpdate<typeof ONYXKEYS.IMPORTED_SPREADSHEET>> = [getImportFinalModalOnyxData(importFinalModalID, importFinalModal)];
+    const successData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.PENDING_CSV_COMPANY_CARD_IMPORT | typeof ONYXKEYS.IMPORTED_SPREADSHEET>> = [
+        {
+            onyxMethod: Onyx.METHOD.SET,
+            key: `${ONYXKEYS.COLLECTION.PENDING_CSV_COMPANY_CARD_IMPORT}${feedNameWithDomainID}`,
+            value: true,
+        },
+        getImportResultOnyxData(importResultID, 'success'),
+    ];
     const failureData: Array<OnyxUpdate<typeof ONYXKEYS.COLLECTION.SHARED_NVP_PRIVATE_DOMAIN_MEMBER | typeof ONYXKEYS.COLLECTION.LAST_SELECTED_FEED | typeof ONYXKEYS.IMPORTED_SPREADSHEET>> =
         [
             {
@@ -1295,7 +1303,7 @@ function importCSVCompanyCards({
                 key: `${ONYXKEYS.COLLECTION.LAST_SELECTED_FEED}${policyID}`,
                 value: lastSelectedFeed ?? null,
             },
-            getImportFinalModalOnyxData(importFinalModalID, getImportFailedFinalModal()),
+            getImportResultOnyxData(importResultID, 'failure'),
         ];
 
     if (shouldCreateFeed || shouldSetNickname) {
@@ -1348,11 +1356,12 @@ function importCSVCompanyCards({
         successData,
         failureData,
     })
-        .then(() => importFinalModalResult.promise)
-        .catch(() => {
-            importFinalModalResult.cancel();
-            return getImportFailedFinalModal();
-        });
+        .then(() => importResult.promise)
+        .then(
+            (status): ImportCSVCompanyCardsResult => (status === 'success' ? {status} : {status, finalModal: getImportFailedFinalModal()}),
+            (): ImportCSVCompanyCardsResult => ({status: 'failure', finalModal: getImportFailedFinalModal()}),
+        )
+        .finally(importResult.cancel);
 }
 
 /**
@@ -1431,6 +1440,7 @@ function linkCardFeedToPolicy(domainAccountID: number, policyID: string, feedTyp
 export {
     setWorkspaceCompanyCardFeedName,
     deleteWorkspaceCompanyCardFeed,
+    clearCompanyCardCSVImportPending,
     setWorkspaceCompanyCardTransactionLiability,
     openPolicyCompanyCardsPage,
     openPolicyCompanyCardsFeed,

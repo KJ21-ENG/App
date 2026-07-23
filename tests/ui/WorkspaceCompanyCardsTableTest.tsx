@@ -125,6 +125,7 @@ function buildCompanyCards({
         isNoFeed,
         isFeedPending: false,
         isFeedAdded: !isNoFeed,
+        isCSVImportPending: false,
         onyxMetadata: {
             cardListMetadata: LOADED_METADATA,
             allCardFeedsMetadata: LOADED_METADATA,

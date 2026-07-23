@@ -6133,6 +6133,8 @@ _Aby uzyskać bardziej szczegółowe instrukcje, [odwiedź naszą stronę pomocy
                 setTransactionLiabilityDescription: 'Po włączeniu posiadacze kart mogą usuwać transakcje kartą. Nowe transakcje będą podlegać tej zasadzie.',
                 emptyAddedFeedTitle: 'Brak kart w tym kanale',
                 emptyAddedFeedDescription: 'Upewnij się, że w strumieniu kart Twojego banku znajdują się karty.',
+                csvImportPendingTitle: 'Karty pojawią się za chwilę…',
+                csvImportPendingDescription: 'Poczekaj chwilę — nowe karty i transakcje mogą pojawić się dopiero po kilku minutach.',
                 pendingFeedTitle: `Przeglądamy Twoje zgłoszenie…`,
                 pendingFeedDescription: `Aktualnie sprawdzamy szczegóły Twojego kanału. Gdy skończymy, skontaktujemy się z Tobą przez`,
                 pendingBankTitle: 'Sprawdź okno przeglądarki',

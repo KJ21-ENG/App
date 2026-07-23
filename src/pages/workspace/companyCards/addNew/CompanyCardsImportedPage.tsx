@@ -187,7 +187,7 @@ function CompanyCardsImportedPage({route}: CompanyCardsImportedPageProps) {
             }
         }
         setIsImportingTransactions(true);
-        const importFinalModal = await importCSVCompanyCards({
+        const importResult = await importCSVCompanyCards({
             policyID,
             workspaceAccountID,
             layoutName,
@@ -198,7 +198,13 @@ function CompanyCardsImportedPage({route}: CompanyCardsImportedPageProps) {
             workspaceCardFeeds,
             existingInstanceID: addNewCard?.data?.existingInstanceID,
         });
-        const didShowImportFinalModal = await showImportSpreadsheetConfirmModal(importFinalModal);
+
+        if (importResult.status === 'success') {
+            closeImportPageAndModal();
+            return;
+        }
+
+        const didShowImportFinalModal = await showImportSpreadsheetConfirmModal(importResult.finalModal);
         if (!didShowImportFinalModal) {
             setIsImportingTransactions(false);
             return;

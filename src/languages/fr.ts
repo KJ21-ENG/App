@@ -6206,6 +6206,8 @@ _Pour des instructions plus détaillées, [visitez notre site d’aide](${CONST.
                     'Lorsque cette option est activée, les titulaires de carte peuvent supprimer les transactions de carte. Les nouvelles transactions suivront cette règle.',
                 emptyAddedFeedTitle: 'Aucune carte dans ce flux',
                 emptyAddedFeedDescription: 'Assurez-vous qu’il y a des cartes dans le flux de cartes de votre banque.',
+                csvImportPendingTitle: 'Les cartes apparaîtront dans un instant…',
+                csvImportPendingDescription: 'Veuillez patienter, l’affichage des nouvelles cartes et transactions peut prendre quelques minutes.',
                 pendingFeedTitle: `Nous examinons votre demande...`,
                 pendingFeedDescription: `Nous examinons actuellement les détails de votre flux. Une fois cela terminé, nous vous contacterons via`,
                 pendingBankTitle: 'Vérifiez la fenêtre de votre navigateur',

@@ -6183,6 +6183,8 @@ _Für ausführlichere Anweisungen [besuchen Sie unsere Hilfeseite](${CONST.NETSU
                 setTransactionLiabilityDescription: 'Wenn aktiviert, können Karteninhaber Kartentransaktionen löschen. Neue Transaktionen folgen dieser Regel.',
                 emptyAddedFeedTitle: 'Keine Karten in diesem Feed',
                 emptyAddedFeedDescription: 'Stelle sicher, dass sich Karten im Kartenfeed deiner Bank befinden.',
+                csvImportPendingTitle: 'Karten werden gleich angezeigt…',
+                csvImportPendingDescription: 'Bitte hab einen Moment Geduld. Es kann einige Minuten dauern, bis neue Karten und Transaktionen angezeigt werden.',
                 pendingFeedTitle: `Wir überprüfen Ihre Anfrage …`,
                 pendingFeedDescription: `Wir überprüfen gerade Ihre Feed-Details. Sobald das erledigt ist, melden wir uns bei Ihnen über`,
                 pendingBankTitle: 'Überprüfe dein Browserfenster',

@@ -43,6 +43,8 @@ type ImportTransactionSettings = {
     flipAmountSign?: boolean;
 };
 
+type ImportResultStatus = 'success' | 'failure';
+
 /** Model of imported spreadsheet data */
 type ImportedSpreadsheet = {
     /** Data of the imported spreadsheet */
@@ -81,9 +83,15 @@ type ImportedSpreadsheet = {
     /** Modal to show after a queued import request finishes */
     importFinalModal?: ImportFinalModalUnion | null;
 
+    /** ID for matching an explicit async import result to the request that produced it */
+    importResultID?: string | null;
+
+    /** Explicit result of an async import request */
+    importResultStatus?: ImportResultStatus | null;
+
     /** Whether the final member import modal should explain that restricted roles were replaced with the member role */
     shouldShowMemberRolePermissionWarning?: boolean;
 };
 
 export default ImportedSpreadsheet;
-export type {ImportFinalModalUnion as ImportFinalModal, ImportTransactionSettings};
+export type {ImportFinalModalUnion as ImportFinalModal, ImportResultStatus, ImportTransactionSettings};

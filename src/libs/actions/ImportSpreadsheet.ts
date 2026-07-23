@@ -1,14 +1,20 @@
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
-import type {ImportFinalModal, ImportTransactionSettings} from '@src/types/onyx/ImportedSpreadsheet';
+import type ImportedSpreadsheet from '@src/types/onyx/ImportedSpreadsheet';
+import type {ImportFinalModal, ImportResultStatus, ImportTransactionSettings} from '@src/types/onyx/ImportedSpreadsheet';
 import type {SavedCSVColumnLayoutData} from '@src/types/onyx/SavedCSVColumnLayout';
+
+import type {OnyxEntry} from 'react-native-onyx';
 
 import Onyx from 'react-native-onyx';
 
-type ImportFinalModalResult = {
-    promise: Promise<ImportFinalModal>;
+type PendingImportResult<TResult> = {
+    promise: Promise<TResult>;
     cancel: () => void;
 };
+
+type ImportFinalModalResult = PendingImportResult<ImportFinalModal>;
+type ImportResult = PendingImportResult<ImportResultStatus>;
 
 function setSpreadsheetData(
     data: string[][],
@@ -75,6 +81,8 @@ function closeImportPage(): Promise<void> {
         columns: null,
         importFinalModalID: null,
         importFinalModal: null,
+        importResultID: null,
+        importResultStatus: null,
         shouldShowMemberRolePermissionWarning: null,
         // Clear the import settings so the next import starts fresh
         importTransactionSettings: null,
@@ -103,21 +111,37 @@ function getImportFinalModalOnyxData(importFinalModalID: string, importFinalModa
     };
 }
 
-function waitForImportFinalModal(importFinalModalID: string): ImportFinalModalResult {
+function getImportResultID(): string {
+    return `${Date.now()}-${Math.random()}`;
+}
+
+function getImportResultOnyxData(importResultID: string, importResultStatus: ImportResultStatus) {
+    return {
+        onyxMethod: Onyx.METHOD.MERGE,
+        key: ONYXKEYS.IMPORTED_SPREADSHEET,
+        value: {
+            importResultID,
+            importResultStatus,
+        },
+    };
+}
+
+function waitForImportUpdate<TResult>(getResult: (spreadsheet: OnyxEntry<ImportedSpreadsheet>) => TResult | undefined): PendingImportResult<TResult> {
     let connection: ReturnType<typeof Onyx.connectWithoutView>;
     let isPending = true;
 
-    const promise = new Promise<ImportFinalModal>((resolve) => {
+    const promise = new Promise<TResult>((resolve) => {
         connection = Onyx.connectWithoutView({
             key: ONYXKEYS.IMPORTED_SPREADSHEET,
             callback: (spreadsheet) => {
-                if (!isPending || spreadsheet?.importFinalModalID !== importFinalModalID || !spreadsheet?.importFinalModal) {
+                const result = getResult(spreadsheet);
+                if (!isPending || result === undefined) {
                     return;
                 }
 
                 isPending = false;
                 Onyx.disconnect(connection);
-                resolve(spreadsheet.importFinalModal);
+                resolve(result);
             },
         });
     });
@@ -133,6 +157,14 @@ function waitForImportFinalModal(importFinalModalID: string): ImportFinalModalRe
             Onyx.disconnect(connection);
         },
     };
+}
+
+function waitForImportResult(importResultID: string): ImportResult {
+    return waitForImportUpdate((spreadsheet) => (spreadsheet?.importResultID === importResultID ? (spreadsheet.importResultStatus ?? undefined) : undefined));
+}
+
+function waitForImportFinalModal(importFinalModalID: string): ImportFinalModalResult {
+    return waitForImportUpdate((spreadsheet) => (spreadsheet?.importFinalModalID === importFinalModalID ? (spreadsheet.importFinalModal ?? undefined) : undefined));
 }
 
 function setImportTransactionCardName(cardDisplayName: string): Promise<void> {
@@ -248,4 +280,7 @@ export {
     getImportFinalModalID,
     getImportFinalModalOnyxData,
     waitForImportFinalModal,
+    getImportResultID,
+    getImportResultOnyxData,
+    waitForImportResult,
 };

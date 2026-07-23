@@ -6166,6 +6166,8 @@ _Per istruzioni più dettagliate, [visita il nostro sito di assistenza](${CONST.
                 setTransactionLiabilityDescription: 'Quando è abilitato, i titolari della carta possono eliminare le transazioni della carta. Le nuove transazioni seguiranno questa regola.',
                 emptyAddedFeedTitle: 'Nessuna carta in questo feed',
                 emptyAddedFeedDescription: 'Assicurati che ci siano carte nel flusso di carte della tua banca.',
+                csvImportPendingTitle: 'Le carte appariranno tra un momento…',
+                csvImportPendingDescription: 'Attendi: la visualizzazione di nuove carte e transazioni potrebbe richiedere alcuni minuti.',
                 pendingFeedTitle: `Stiamo esaminando la tua richiesta...`,
                 pendingFeedDescription: `Al momento stiamo esaminando i dettagli del tuo feed. Una volta terminato, ti contatteremo tramite`,
                 pendingBankTitle: 'Controlla la finestra del browser',

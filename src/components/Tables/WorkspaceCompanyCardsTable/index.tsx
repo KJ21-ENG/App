@@ -98,6 +98,7 @@ function WorkspaceCompanyCardsTable({
         isInitiallyLoadingFeeds,
         isNoFeed,
         isFeedPending,
+        isCSVImportPending,
         onyxMetadata: {cardListMetadata, lastSelectedFeedMetadata},
     } = companyCards;
 
@@ -403,14 +404,19 @@ function WorkspaceCompanyCardsTable({
 
             {showCards && (
                 <>
-                    <Table.FilterBar label={translate('workspace.companyCards.findCard')} />
+                    <Table.FilterBar
+                        label={translate('workspace.companyCards.findCard')}
+                        shouldShowWhenEmpty={isCSVImportPending}
+                    />
                     <Table.EmptyState
                         headerMedia={illustrations.LaptopAssignCard}
                         containerStyles={styles.mt5}
                         headerStyles={styles.emptyStateCardIllustrationContainer}
                         headerContentStyles={styles.pendingStateCardIllustration}
-                        title={translate('workspace.moreFeatures.companyCards.emptyAddedFeedTitle')}
-                        subtitle={translate('workspace.moreFeatures.companyCards.emptyAddedFeedDescription')}
+                        title={translate(isCSVImportPending ? 'workspace.moreFeatures.companyCards.csvImportPendingTitle' : 'workspace.moreFeatures.companyCards.emptyAddedFeedTitle')}
+                        subtitle={translate(
+                            isCSVImportPending ? 'workspace.moreFeatures.companyCards.csvImportPendingDescription' : 'workspace.moreFeatures.companyCards.emptyAddedFeedDescription',
+                        )}
                     >
                         {!!shouldShowGBDisclaimer && <Text style={[styles.textMicroSupporting, styles.m5]}>{translate('workspace.companyCards.ukRegulation')}</Text>}
                     </Table.EmptyState>
