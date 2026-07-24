@@ -52,15 +52,13 @@ function WorkspaceCompanyCardEditCardNamePage({route, navigation}: WorkspaceComp
     const domainOrWorkspaceAccountID = getDomainOrWorkspaceAccountID(workspaceAccountID, companyFeeds[feed]);
     const goBackToCardDetails = () => {
         const previousRoute = navigation.getState().routes.at(-2);
-        const accountID =
-            previousRoute?.name === SCREENS.WORKSPACE.DYNAMIC_COMPANY_CARD_DETAILS &&
-            previousRoute.params &&
-            'accountID' in previousRoute.params &&
-            typeof previousRoute.params.accountID === 'number'
-                ? previousRoute.params.accountID
+        const detailsParams =
+            previousRoute?.name === SCREENS.WORKSPACE.DYNAMIC_COMPANY_CARD_DETAILS
+                ? (previousRoute.params as {accountID?: number | string; feed?: typeof feed; cardID?: string} | undefined)
                 : undefined;
-        const basePath = accountID === undefined ? ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(policyID) : ROUTES.WORKSPACE_MEMBER_DETAILS.getRoute(policyID, accountID);
-        const backPath = createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_COMPANY_CARD_DETAILS.getRoute(feed, cardID), basePath);
+        const accountID = detailsParams?.accountID;
+        const basePath = accountID === undefined ? ROUTES.WORKSPACE_COMPANY_CARDS.getRoute(policyID) : ROUTES.WORKSPACE_MEMBER_DETAILS.getRoute(policyID, Number(accountID));
+        const backPath = createDynamicRoute(DYNAMIC_ROUTES.WORKSPACE_COMPANY_CARD_DETAILS.getRoute(detailsParams?.feed ?? feed, detailsParams?.cardID ?? cardID), basePath);
 
         Navigation.goBack(backPath);
     };
