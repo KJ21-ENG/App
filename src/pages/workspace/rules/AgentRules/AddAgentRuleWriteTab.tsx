@@ -86,6 +86,7 @@ function AddAgentRuleWriteTab({onSave}: AddAgentRuleWriteTabProps) {
                     <InputWrapper
                         InputComponent={TextInput}
                         inputID={INPUT_IDS.PROMPT}
+                        type="markdown"
                         label={describeRuleLabel}
                         accessibilityLabel={describeRuleLabel}
                         role={CONST.ROLE.PRESENTATION}

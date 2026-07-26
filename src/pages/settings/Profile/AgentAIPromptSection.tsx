@@ -218,6 +218,7 @@ function AgentAIPromptSection({accountID, parentScrollViewRef}: AgentAIPromptSec
             <OfflineWithFeedback pendingAction={agentPrompt?.pendingAction}>
                 <TextInput
                     ref={inputRef}
+                    type="markdown"
                     label={translate('profilePage.aiPromptSection.prompt')}
                     accessibilityLabel={translate('profilePage.aiPromptSection.prompt')}
                     value={draftPrompt}

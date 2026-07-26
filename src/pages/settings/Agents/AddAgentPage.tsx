@@ -162,6 +162,7 @@ function AddAgentPage({route}: AddAgentPageProps) {
                         <InputWrapper
                             InputComponent={TextInput}
                             inputID={INPUT_IDS.PROMPT}
+                            type="markdown"
                             label={translate('addAgentPage.instructions')}
                             accessibilityLabel={translate('addAgentPage.instructions')}
                             role={CONST.ROLE.PRESENTATION}

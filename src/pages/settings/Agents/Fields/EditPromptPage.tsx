@@ -95,6 +95,7 @@ function EditPromptPage({route}: EditPromptPageProps) {
                     <InputWrapper
                         InputComponent={TextInput}
                         inputID={INPUT_IDS.PROMPT}
+                        type="markdown"
                         label={translate('editAgentPage.instructions')}
                         accessibilityLabel={translate('editAgentPage.instructions')}
                         role={CONST.ROLE.PRESENTATION}
