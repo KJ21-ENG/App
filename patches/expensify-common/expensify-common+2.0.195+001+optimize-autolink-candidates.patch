@@ -1,0 +1,246 @@
+diff --git a/node_modules/expensify-common/dist/ExpensiMark.js b/node_modules/expensify-common/dist/ExpensiMark.js
+index a9e6b04..1a9227b 100644
+--- a/node_modules/expensify-common/dist/ExpensiMark.js
++++ b/node_modules/expensify-common/dist/ExpensiMark.js
+@@ -85,6 +85,100 @@ function replaceTextWithExtras(text, regexp, extras, replacement) {
+     }
+     return text.replace(regexp, replacement);
+ }
++function isAsciiAlphaNumeric(character) {
++    if (!character) {
++        return false;
++    }
++    const code = character.charCodeAt(0);
++    return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
++}
++function isWhitespace(character) {
++    const code = character.charCodeAt(0);
++    return (code >= 9 && code <= 13) ||
++        code === 32 ||
++        code === 160 ||
++        code === 5760 ||
++        (code >= 8192 && code <= 8202) ||
++        code === 8232 ||
++        code === 8233 ||
++        code === 8239 ||
++        code === 8287 ||
++        code === 12288 ||
++        code === 65279;
++}
++function containsPossibleURL(text) {
++    const lowerText = text.toLowerCase();
++    if (lowerText.includes('http://') || lowerText.includes('https://') || lowerText.includes('ftp://') || lowerText.includes('ftps://')) {
++        return true;
++    }
++    for (let index = 1; index < text.length - 1; index++) {
++        if (text[index] === '.' && isAsciiAlphaNumeric(text[index - 1]) && isAsciiAlphaNumeric(text[index + 1])) {
++            return true;
++        }
++    }
++    return false;
++}
++function replaceAutoLinks(parser, regex, text, replacement) {
++    const output = [];
++    const protectedTags = [];
++    let outputStart = 0;
++    let tokenStart = -1;
++    const flushToken = (end) => {
++        if (tokenStart === -1) {
++            return;
++        }
++        const token = text.slice(tokenStart, end);
++        if (containsPossibleURL(token)) {
++            regex.lastIndex = 0;
++            output.push(text.slice(outputStart, tokenStart));
++            output.push(parser.modifyTextForUrlLinks(regex, token, replacement));
++            outputStart = end;
++        }
++        tokenStart = -1;
++    };
++    for (let index = 0; index < text.length; index++) {
++        const character = text[index];
++        if (character === '<') {
++            flushToken(index);
++            const tagEnd = text.indexOf('>', index + 1);
++            if (tagEnd === -1) {
++                break;
++            }
++            const rawTag = text.slice(index + 1, tagEnd).trim();
++            const tagMatch = /^\/?\s*([a-z][a-z0-9-]*)/i.exec(rawTag);
++            const tagName = tagMatch === null || tagMatch === void 0 ? void 0 : tagMatch[1].toLowerCase();
++            if (tagName && tagName !== 'h1') {
++                if (rawTag.startsWith('/')) {
++                    const protectedTagIndex = protectedTags.lastIndexOf(tagName);
++                    if (protectedTagIndex !== -1) {
++                        protectedTags.splice(protectedTagIndex, 1);
++                    }
++                }
++                else if (!rawTag.endsWith('/')) {
++                    protectedTags.push(tagName);
++                }
++            }
++            index = tagEnd;
++            continue;
++        }
++        if (protectedTags.length > 0) {
++            continue;
++        }
++        if (isWhitespace(character)) {
++            flushToken(index);
++            continue;
++        }
++        if (tokenStart === -1) {
++            tokenStart = index;
++        }
++    }
++    flushToken(text.length);
++    if (output.length === 0) {
++        return text;
++    }
++    output.push(text.slice(outputStart));
++    return output.join('');
++}
+ /**
+  * replace block element with '\n' if :
+  * 1. We have text within the element.
+@@ -547,7 +641,7 @@ class ExpensiMark {
+                 name: 'autolink',
+                 process: (textToProcess, replacement) => {
+                     const regex = new RegExp(`(?![^<]*>|[^<>]*<\\/(?!h1>))([_*~]*?)${UrlPatterns.MARKDOWN_URL_REGEX}\\1(?!((?:(?!<a).)+)?<\\/a>|[^<]*(<\\/pre>|<\\/code>))`, 'gi');
+-                    return this.modifyTextForUrlLinks(regex, textToProcess, replacement);
++                    return replaceAutoLinks(this, regex, textToProcess, replacement);
+                 },
+                 replacement: (_extras, _match, g1, g2) => {
+                     const href = str_1.default.sanitizeURL(g2);
+@@ -557,7 +651,7 @@ class ExpensiMark {
+                     const href = str_1.default.sanitizeURL(g2);
+                     return `${g1}<a href="${href}" data-raw-href="${g2}" data-link-variant="auto" target="_blank" rel="noreferrer noopener">${g2}</a>${g1}`;
+                 },
+-                shouldSkipProcessing: (textToCheck) => !textToCheck.includes('.'),
++                shouldSkipProcessing: (textToCheck) => !containsPossibleURL(textToCheck),
+             },
+             {
+                 name: 'quote',
+diff --git a/node_modules/expensify-common/dist/esm/ExpensiMark.js b/node_modules/expensify-common/dist/esm/ExpensiMark.js
+index a193f56..3424fcf 100644
+--- a/node_modules/expensify-common/dist/esm/ExpensiMark.js
++++ b/node_modules/expensify-common/dist/esm/ExpensiMark.js
+@@ -47,6 +47,100 @@ function replaceTextWithExtras(text, regexp, extras, replacement) {
+     }
+     return text.replace(regexp, replacement);
+ }
++function isAsciiAlphaNumeric(character) {
++    if (!character) {
++        return false;
++    }
++    const code = character.charCodeAt(0);
++    return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
++}
++function isWhitespace(character) {
++    const code = character.charCodeAt(0);
++    return (code >= 9 && code <= 13) ||
++        code === 32 ||
++        code === 160 ||
++        code === 5760 ||
++        (code >= 8192 && code <= 8202) ||
++        code === 8232 ||
++        code === 8233 ||
++        code === 8239 ||
++        code === 8287 ||
++        code === 12288 ||
++        code === 65279;
++}
++function containsPossibleURL(text) {
++    const lowerText = text.toLowerCase();
++    if (lowerText.includes('http://') || lowerText.includes('https://') || lowerText.includes('ftp://') || lowerText.includes('ftps://')) {
++        return true;
++    }
++    for (let index = 1; index < text.length - 1; index++) {
++        if (text[index] === '.' && isAsciiAlphaNumeric(text[index - 1]) && isAsciiAlphaNumeric(text[index + 1])) {
++            return true;
++        }
++    }
++    return false;
++}
++function replaceAutoLinks(parser, regex, text, replacement) {
++    const output = [];
++    const protectedTags = [];
++    let outputStart = 0;
++    let tokenStart = -1;
++    const flushToken = (end) => {
++        if (tokenStart === -1) {
++            return;
++        }
++        const token = text.slice(tokenStart, end);
++        if (containsPossibleURL(token)) {
++            regex.lastIndex = 0;
++            output.push(text.slice(outputStart, tokenStart));
++            output.push(parser.modifyTextForUrlLinks(regex, token, replacement));
++            outputStart = end;
++        }
++        tokenStart = -1;
++    };
++    for (let index = 0; index < text.length; index++) {
++        const character = text[index];
++        if (character === '<') {
++            flushToken(index);
++            const tagEnd = text.indexOf('>', index + 1);
++            if (tagEnd === -1) {
++                break;
++            }
++            const rawTag = text.slice(index + 1, tagEnd).trim();
++            const tagMatch = /^\/?\s*([a-z][a-z0-9-]*)/i.exec(rawTag);
++            const tagName = tagMatch?.[1].toLowerCase();
++            if (tagName && tagName !== 'h1') {
++                if (rawTag.startsWith('/')) {
++                    const protectedTagIndex = protectedTags.lastIndexOf(tagName);
++                    if (protectedTagIndex !== -1) {
++                        protectedTags.splice(protectedTagIndex, 1);
++                    }
++                }
++                else if (!rawTag.endsWith('/')) {
++                    protectedTags.push(tagName);
++                }
++            }
++            index = tagEnd;
++            continue;
++        }
++        if (protectedTags.length > 0) {
++            continue;
++        }
++        if (isWhitespace(character)) {
++            flushToken(index);
++            continue;
++        }
++        if (tokenStart === -1) {
++            tokenStart = index;
++        }
++    }
++    flushToken(text.length);
++    if (output.length === 0) {
++        return text;
++    }
++    output.push(text.slice(outputStart));
++    return output.join('');
++}
+ /**
+  * replace block element with '\n' if :
+  * 1. We have text within the element.
+@@ -509,7 +603,7 @@ class ExpensiMark {
+                 name: 'autolink',
+                 process: (textToProcess, replacement) => {
+                     const regex = new RegExp(`(?![^<]*>|[^<>]*<\\/(?!h1>))([_*~]*?)${UrlPatterns.MARKDOWN_URL_REGEX}\\1(?!((?:(?!<a).)+)?<\\/a>|[^<]*(<\\/pre>|<\\/code>))`, 'gi');
+-                    return this.modifyTextForUrlLinks(regex, textToProcess, replacement);
++                    return replaceAutoLinks(this, regex, textToProcess, replacement);
+                 },
+                 replacement: (_extras, _match, g1, g2) => {
+                     const href = Str.sanitizeURL(g2);
+@@ -519,7 +613,7 @@ class ExpensiMark {
+                     const href = Str.sanitizeURL(g2);
+                     return `${g1}<a href="${href}" data-raw-href="${g2}" data-link-variant="auto" target="_blank" rel="noreferrer noopener">${g2}</a>${g1}`;
+                 },
+-                shouldSkipProcessing: (textToCheck) => !textToCheck.includes('.'),
++                shouldSkipProcessing: (textToCheck) => !containsPossibleURL(textToCheck),
+             },
+             {
+                 name: 'quote',

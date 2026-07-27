@@ -1,0 +1,67 @@
+diff --git a/node_modules/@expensify/react-native-live-markdown/lib/commonjs/parseExpensiMark.js b/node_modules/@expensify/react-native-live-markdown/lib/commonjs/parseExpensiMark.js
+index d2095e8..047d9dc 100644
+--- a/node_modules/@expensify/react-native-live-markdown/lib/commonjs/parseExpensiMark.js
++++ b/node_modules/@expensify/react-native-live-markdown/lib/commonjs/parseExpensiMark.js
+@@ -21,7 +21,6 @@ function isJest() {
+ if (__DEV__ && !isWeb() && !isJest() && _htmlEntities.decode.__workletHash === undefined) {
+   throw new Error("[react-native-live-markdown] `parseExpensiMark` requires `html-entities` package to be workletized. Please add `'worklet';` directive at the top of `node_modules/html-entities/lib/index.js` using patch-package. Make sure you've installed `html-entities` version 2.5.3 exactly as otherwise there is no `lib/` directory.");
+ }
+-const MAX_PARSABLE_LENGTH = 4000;
+ function parseMarkdownToHTML(markdown) {
+   const parser = new _expensifyCommon.ExpensiMark();
+   const html = parser.replace(markdown, {
+@@ -234,9 +233,6 @@ function parseTreeToTextAndRanges(tree) {
+   return [text, ranges];
+ }
+ function parseExpensiMark(markdown) {
+-  if (markdown.length > MAX_PARSABLE_LENGTH) {
+-    return [];
+-  }
+   const html = parseMarkdownToHTML(markdown);
+   const tokens = parseHTMLToTokens(html);
+   const tree = parseTokensToTree(tokens);
+diff --git a/node_modules/@expensify/react-native-live-markdown/lib/module/parseExpensiMark.js b/node_modules/@expensify/react-native-live-markdown/lib/module/parseExpensiMark.js
+index 3d1511d..152a959 100644
+--- a/node_modules/@expensify/react-native-live-markdown/lib/module/parseExpensiMark.js
++++ b/node_modules/@expensify/react-native-live-markdown/lib/module/parseExpensiMark.js
+@@ -17,7 +17,6 @@ function isJest() {
+ if (__DEV__ && !isWeb() && !isJest() && decode.__workletHash === undefined) {
+   throw new Error("[react-native-live-markdown] `parseExpensiMark` requires `html-entities` package to be workletized. Please add `'worklet';` directive at the top of `node_modules/html-entities/lib/index.js` using patch-package. Make sure you've installed `html-entities` version 2.5.3 exactly as otherwise there is no `lib/` directory.");
+ }
+-const MAX_PARSABLE_LENGTH = 4000;
+ function parseMarkdownToHTML(markdown) {
+   const parser = new ExpensiMark();
+   const html = parser.replace(markdown, {
+@@ -230,9 +229,6 @@ function parseTreeToTextAndRanges(tree) {
+   return [text, ranges];
+ }
+ function parseExpensiMark(markdown) {
+-  if (markdown.length > MAX_PARSABLE_LENGTH) {
+-    return [];
+-  }
+   const html = parseMarkdownToHTML(markdown);
+   const tokens = parseHTMLToTokens(html);
+   const tree = parseTokensToTree(tokens);
+diff --git a/node_modules/@expensify/react-native-live-markdown/src/parseExpensiMark.ts b/node_modules/@expensify/react-native-live-markdown/src/parseExpensiMark.ts
+index ebb462d..191d877 100644
+--- a/node_modules/@expensify/react-native-live-markdown/src/parseExpensiMark.ts
++++ b/node_modules/@expensify/react-native-live-markdown/src/parseExpensiMark.ts
+@@ -23,8 +23,6 @@ if (__DEV__ && !isWeb() && !isJest() && (decode as WorkletFunction<unknown[], un
+   );
+ }
+ 
+-const MAX_PARSABLE_LENGTH = 4000;
+-
+ type Token = ['TEXT' | 'HTML', string];
+ type StackItem = {tag: string; children: Array<StackItem | string>};
+ 
+@@ -239,9 +237,6 @@ function parseTreeToTextAndRanges(tree: StackItem): [string, MarkdownRange[]] {
+ }
+ 
+ function parseExpensiMark(markdown: string): MarkdownRange[] {
+-  if (markdown.length > MAX_PARSABLE_LENGTH) {
+-    return [];
+-  }
+   const html = parseMarkdownToHTML(markdown);
+   const tokens = parseHTMLToTokens(html);
+   const tree = parseTokensToTree(tokens);
