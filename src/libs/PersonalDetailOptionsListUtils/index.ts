@@ -374,7 +374,7 @@ function getValidOptions(
         const filteringFunction = (option: OptionData) => {
             const searchTermsFound = matchesSearchTerms(option, searchTerms);
 
-            if (!searchTermsFound || !option.reportID) {
+            if (!searchTermsFound || !option.reportID || !option.login) {
                 return false;
             }
 

@@ -650,6 +650,43 @@ describe('PersonalDetailOptionsListUtils', () => {
             expect(results.personalDetails).toEqual(expect.arrayContaining([expect.objectContaining({login: currentUserLogin})]));
         });
 
+        it('should exclude a named, report-backed non-current option without a login', () => {
+            const nonCurrentOption = OPTIONS.options.find((option) => option.accountID === 3) as OptionData;
+            const loginlessOption = {...nonCurrentOption, login: undefined};
+
+            expect(loginlessOption.text).toBe('Spider-Man');
+            expect(loginlessOption.reportID).toBe('2');
+
+            const results = getValidOptions([loginlessOption], currentUserLogin, formatPhoneNumber, 1);
+
+            expect(results.recentOptions).toEqual([]);
+            expect(results.personalDetails).toEqual([]);
+        });
+
+        it('should exclude a report-backed current-user option without a login when includeCurrentUser is false', () => {
+            const currentUserOption = OPTIONS_WITH_SELF_DM.currentUserOption as OptionData;
+            const loginlessCurrentUserOption = {...currentUserOption, login: undefined};
+
+            expect(loginlessCurrentUserOption.reportID).toBe('17');
+
+            const results = getValidOptions([loginlessCurrentUserOption], currentUserLogin, formatPhoneNumber, 1, undefined, {includeCurrentUser: false});
+
+            expect(results.recentOptions).toEqual([]);
+            expect(results.personalDetails).toEqual([]);
+        });
+
+        it('should exclude a report-backed current-user option without a login when includeCurrentUser is true', () => {
+            const currentUserOption = OPTIONS_WITH_SELF_DM.currentUserOption as OptionData;
+            const loginlessCurrentUserOption = {...currentUserOption, login: undefined};
+
+            expect(loginlessCurrentUserOption.reportID).toBe('17');
+
+            const results = getValidOptions([loginlessCurrentUserOption], currentUserLogin, formatPhoneNumber, 1, undefined, {includeCurrentUser: true});
+
+            expect(results.recentOptions).toEqual([]);
+            expect(results.personalDetails).toEqual([]);
+        });
+
         it('should limit recent options when recentMaxElements is provided', () => {
             const results = getValidOptions(OPTIONS.options, currentUserLogin, formatPhoneNumber, 1, undefined, {recentMaxElements: 2});
             expect(results.recentOptions.length).toBe(2);
