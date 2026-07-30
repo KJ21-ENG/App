@@ -183,6 +183,12 @@ jobs:
           adb root > /dev/null 2>&1 || true
           sleep 3
           timeout 60 adb wait-for-device
+          # Suppress error dialogs BEFORE the restart: the zygote bounce leaves
+          # SystemUI briefly unresponsive and the resulting "System UI isn't
+          # responding" ANR dialog would otherwise sit on top of the app in the
+          # stream (and only a tap on "Wait" clears it once shown). The setting
+          # lives in the settings DB, so it survives the restart.
+          adb shell settings put global hide_error_dialogs 1 || true
           adb shell setprop dalvik.vm.heapgrowthlimit 768m
           adb shell setprop dalvik.vm.heapsize 768m
           adb shell stop; sleep 3; adb shell start
@@ -195,9 +201,13 @@ jobs:
           # an "isn't responding" ANR dialog over the app in the stream. Suppress
           # error dialogs outright (headless CI device — nobody reads them) and
           # give the UI time to settle before the app launches.
-          adb shell settings put global hide_error_dialogs 1 || true
           sleep 25
-          adb shell input keyevent KEYCODE_BACK || true
+          # Defensive: if a dialog slipped through before the setting applied,
+          # tap its "Wait" button (KEYCODE_BACK does NOT dismiss ANR dialogs).
+          if adb shell dumpsys window 2>/dev/null | grep -qi "aerr"; then
+            echo "ANR dialog present — dismissing"
+            adb shell input tap 320 1367 || true
+          fi
 
       - name: Wait for driver-provisioned .env (handshake)
         run: |
