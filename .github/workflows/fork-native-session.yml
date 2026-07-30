@@ -253,6 +253,12 @@ jobs:
       - name: Start ws-scrcpy stream UI
         run: |
           set -euxo pipefail
+          # ws-scrcpy's node-pty@0.10.1 native module does not compile against
+          # the runner's default Node 26 headers (run 30558996656) — pin this
+          # step to the Node 20 toolchain setupNode already installed.
+          N20=$(ls -d /opt/hostedtoolcache/node/20.*/x64/bin 2>/dev/null | sort -V | tail -1)
+          if [ -n "$N20" ]; then export PATH="$N20:$PATH"; fi
+          node -v; npm -v
           git clone https://github.com/NetrisTV/ws-scrcpy.git /tmp/ws-scrcpy
           cd /tmp/ws-scrcpy
           # Pinned for reproducible daily use (master @ 2026-07; update deliberately).
