@@ -247,7 +247,16 @@ jobs:
             adb install -r "$APK"
             adb shell monkey -p com.expensify.chat.dev -c android.intent.category.LAUNCHER 1
           fi
-          adb shell pidof com.expensify.chat.dev || { echo "app not running"; adb shell pm list packages | grep -i expensify || true; exit 1; }
+          # Cold start takes a few seconds after the launcher intent (monkey
+          # returns immediately; a bare pidof 0.3 s later raced it — run
+          # 30560900278). Poll up to 60 s, re-firing the intent once midway.
+          launched=0
+          for i in $(seq 1 12); do
+            if adb shell pidof com.expensify.chat.dev > /dev/null 2>&1; then launched=1; break; fi
+            if [ "$i" = "6" ]; then adb shell monkey -p com.expensify.chat.dev -c android.intent.category.LAUNCHER 1 || true; fi
+            sleep 5
+          done
+          if [ "$launched" != "1" ]; then echo "app not running"; adb shell pm list packages | grep -i expensify || true; exit 1; fi
           echo "TIMING[app-running] $(( $(date +%s) - T0 ))s"
 
       - name: Start ws-scrcpy stream UI
