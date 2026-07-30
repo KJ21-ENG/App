@@ -254,10 +254,12 @@ jobs:
         run: |
           set -euxo pipefail
           # ws-scrcpy's node-pty@0.10.1 native module does not compile against
-          # the runner's default Node 26 headers (run 30558996656) — pin this
-          # step to the Node 20 toolchain setupNode already installed.
-          N20=$(ls -d /opt/hostedtoolcache/node/20.*/x64/bin 2>/dev/null | sort -V | tail -1)
-          if [ -n "$N20" ]; then export PATH="$N20:$PATH"; fi
+          # the runner's default Node 26 headers (run 30558996656), and the
+          # toolcache's contents are not guaranteed (run 30560385259). Use a
+          # hermetic pinned Node 18 (ws-scrcpy's own era) for this step only.
+          curl -sfL https://nodejs.org/dist/v18.20.4/node-v18.20.4-linux-x64.tar.xz -o /tmp/node18.tar.xz
+          mkdir -p /tmp/node18 && tar -xJf /tmp/node18.tar.xz -C /tmp/node18 --strip-components=1
+          export PATH="/tmp/node18/bin:$PATH"
           node -v; npm -v
           git clone https://github.com/NetrisTV/ws-scrcpy.git /tmp/ws-scrcpy
           cd /tmp/ws-scrcpy
