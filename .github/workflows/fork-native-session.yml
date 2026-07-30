@@ -140,6 +140,9 @@ jobs:
           AVD_HOME="$HOME/.config/.android/avd"
           [ -d "$AVD_HOME" ] || AVD_HOME="$HOME/.android/avd"
           echo "ANDROID_AVD_HOME=$AVD_HOME" >> "$GITHUB_ENV"
+          # The pixel_7 profile's default 192 MB app heap OOMs loading the dev
+          # Metro bundle (Hermes needed a ~140 MB allocation — session 685151be).
+          echo "hw.heapSize=768" >> "$AVD_HOME/session.avd/config.ini"
           ANDROID_AVD_HOME="$AVD_HOME" nohup "$ANDROID_HOME/emulator/emulator" -avd session -no-window -gpu swiftshader_indirect \
             -no-snapshot -noaudio -no-boot-anim -memory 4096 -cores 2 > /tmp/emulator.log 2>&1 &
           echo "emulator launched in background (pid $!)"
