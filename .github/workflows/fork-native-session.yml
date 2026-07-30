@@ -191,9 +191,13 @@ jobs:
             sleep 5
           done
           echo "heapgrowthlimit now: $(adb shell getprop dalvik.vm.heapgrowthlimit)"
-          # The system UI needs a moment to settle after the zygote restart,
-          # otherwise the first app launch races an unresponsive SystemUI.
-          sleep 20
+          # The zygote restart leaves SystemUI briefly unresponsive, which pops
+          # an "isn't responding" ANR dialog over the app in the stream. Suppress
+          # error dialogs outright (headless CI device — nobody reads them) and
+          # give the UI time to settle before the app launches.
+          adb shell settings put global hide_error_dialogs 1 || true
+          sleep 25
+          adb shell input keyevent KEYCODE_BACK || true
 
       - name: Wait for driver-provisioned .env (handshake)
         run: |
