@@ -114,6 +114,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
+          # Swap headroom: a tier-3 gradle build + emulator peaked past 16 GB
+          # and the runner's memory watchdog SIGTERM'd the build at ~81 min
+          # (run 30538459202). 8 GB of swap absorbs the spikes.
+          sudo fallocate -l 8G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+          free -m | head -3
           # adb/emulator are not on the runner's default PATH.
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
@@ -196,24 +201,37 @@ jobs:
             adb shell monkey -p com.expensify.chat.dev -c android.intent.category.LAUNCHER 1
           else
             echo "fork-cache MISS — trying Rock (S3 remote cache, local-build fallback)"
-            # Tier 2+3: rock downloads by fingerprint, or builds locally
-            # (~45-90 min on this runner). 150-min cap.
-            SENTRY_DISABLE_AUTO_UPLOAD=true timeout 9000 npx rock run:android \
-              --variant developmentDebug --app-id com.expensify.chat.dev --verbose > /tmp/rock-run.log 2>&1
+            # Free the emulator's 4 GB during the build — it is only needed at
+            # install time, and the gradle+kotlin+clang peak plus an idle
+            # emulator is what got the previous build SIGTERM'd.
+            adb emu kill || true
+            sleep 3
+            # Tier 2+3: rock downloads by fingerprint, or BUILDS (no install —
+            # the emulator is down; ~45-90 min on this runner). 150-min cap.
+            SENTRY_DISABLE_AUTO_UPLOAD=true GRADLE_OPTS="-Dorg.gradle.workers.max=3" timeout 9000 npx rock build:android \
+              --variant developmentDebug --verbose > /tmp/rock-run.log 2>&1
             RC=$?
-            grep -iE "remote cache|download|fingerprint|installing|error" /tmp/rock-run.log | tail -30 || true
-            if [ $RC -ne 0 ]; then echo "rock run:android failed rc=$RC"; tail -80 /tmp/rock-run.log; exit 1; fi
-            # Tier-1 upload: cache whatever APK we ended up with for next time.
+            grep -iE "remote cache|download|fingerprint|error" /tmp/rock-run.log | tail -30 || true
+            if [ $RC -ne 0 ]; then echo "rock build:android failed rc=$RC"; tail -80 /tmp/rock-run.log; exit 1; fi
             APK=$(find android/app/build/outputs -name '*.apk' 2>/dev/null | head -1)
             [ -z "$APK" ] && APK=$(find .rock/cache -name '*.apk' 2>/dev/null | head -1)
-            if [ -n "$APK" ]; then
-              (cd "$(dirname "$APK")" && zip -q "/tmp/$ARTIFACT.zip" "$(basename "$APK")")
-              gh release upload rock-cache "/tmp/$ARTIFACT.zip" --repo "$GITHUB_REPOSITORY" --clobber \
-                && echo "uploaded $ARTIFACT.zip to fork rock-cache" \
-                || echo "WARNING: fork-cache upload failed (session continues)"
-            else
-              echo "WARNING: no APK found to upload to the fork cache"
-            fi
+            if [ -z "$APK" ]; then echo "ERROR: build succeeded but no APK found"; exit 1; fi
+            # Tier-1 upload BEFORE anything else can fail: cache it for next time.
+            (cd "$(dirname "$APK")" && zip -q "/tmp/$ARTIFACT.zip" "$(basename "$APK")")
+            gh release upload rock-cache "/tmp/$ARTIFACT.zip" --repo "$GITHUB_REPOSITORY" --clobber \
+              && echo "uploaded $ARTIFACT.zip to fork rock-cache" \
+              || echo "WARNING: fork-cache upload failed (session continues)"
+            # Bring the emulator back and install/launch (mirrors the HIT path).
+            ANDROID_AVD_HOME="$ANDROID_AVD_HOME" nohup "$ANDROID_HOME/emulator/emulator" -avd session -no-window -gpu swiftshader_indirect \
+              -no-snapshot -noaudio -no-boot-anim -memory 4096 -cores 2 > /tmp/emulator2.log 2>&1 &
+            timeout 300 adb wait-for-device
+            for i in $(seq 1 90); do
+              if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then break; fi
+              sleep 5
+            done
+            adb reverse tcp:8081 tcp:8081
+            adb install -r "$APK"
+            adb shell monkey -p com.expensify.chat.dev -c android.intent.category.LAUNCHER 1
           fi
           adb shell pidof com.expensify.chat.dev || { echo "app not running"; adb shell pm list packages | grep -i expensify || true; exit 1; }
           echo "TIMING[app-running] $(( $(date +%s) - T0 ))s"
