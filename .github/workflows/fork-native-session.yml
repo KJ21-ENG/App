@@ -140,9 +140,10 @@ jobs:
           AVD_HOME="$HOME/.config/.android/avd"
           [ -d "$AVD_HOME" ] || AVD_HOME="$HOME/.android/avd"
           echo "ANDROID_AVD_HOME=$AVD_HOME" >> "$GITHUB_ENV"
-          # The pixel_7 profile's default 192 MB app heap OOMs loading the dev
-          # Metro bundle (Hermes needed a ~140 MB allocation — session 685151be).
-          echo "hw.heapSize=768" >> "$AVD_HOME/session.avd/config.ini"
+          # NOTE: the app heap is raised AFTER boot via setprop (see the
+          # "Raise the app heap" step) — config.ini's hw.heapSize/vm.heapSize
+          # are ignored by this system image (verified: dalvik.vm.heapgrowthlimit
+          # stayed at 192m through an AVD-config edit AND emulator -prop flags).
           ANDROID_AVD_HOME="$AVD_HOME" nohup "$ANDROID_HOME/emulator/emulator" -avd session -no-window -gpu swiftshader_indirect \
             -no-snapshot -noaudio -no-boot-anim -memory 4096 -cores 2 > /tmp/emulator.log 2>&1 &
           echo "emulator launched in background (pid $!)"
@@ -169,6 +170,30 @@ jobs:
           fi
           adb devices
           echo "TIMING[emulator-booted] $(( $(date +%s) - T0 ))s"
+
+      - name: Raise the app heap (dev bundle OOMs on the 192 MB default)
+        run: |
+          set -uxo pipefail
+          # Loading the dev Metro bundle needs a ~140 MB contiguous allocation;
+          # the image's 192 MB growth limit OOMs Hermes with
+          # "Failed to allocate ... until OOM, target footprint ..., growth
+          # limit 201326592" (session 685151be). Only a rooted setprop +
+          # zygote restart actually moves it — config.ini and `emulator -prop`
+          # are both ignored by this system image.
+          adb root > /dev/null 2>&1 || true
+          sleep 3
+          timeout 60 adb wait-for-device
+          adb shell setprop dalvik.vm.heapgrowthlimit 768m
+          adb shell setprop dalvik.vm.heapsize 768m
+          adb shell stop; sleep 3; adb shell start
+          for i in $(seq 1 60); do
+            [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+            sleep 5
+          done
+          echo "heapgrowthlimit now: $(adb shell getprop dalvik.vm.heapgrowthlimit)"
+          # The system UI needs a moment to settle after the zygote restart,
+          # otherwise the first app launch races an unresponsive SystemUI.
+          sleep 20
 
       - name: Wait for driver-provisioned .env (handshake)
         run: |
