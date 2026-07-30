@@ -381,7 +381,8 @@ jobs:
           BAGUETTE_URL="https://github.com/tddworks/baguette/releases/download/v0.1.85/baguette_v0.1.85_macOS_arm64.tar.gz"
           if curl -sfL "$BAGUETTE_URL" -o /tmp/baguette.tar.gz; then
             mkdir -p /tmp/baguette && tar -xzf /tmp/baguette.tar.gz -C /tmp/baguette
-            BAGUETTE=$(find /tmp/baguette -name baguette -type f | head -1)
+            # The release binary is named `Baguette` (capital B).
+            BAGUETTE=$(find /tmp/baguette -type f -iname baguette | head -1)
             chmod +x "$BAGUETTE"
           else
             echo "pinned release download failed; falling back to brew (slower)"
