@@ -257,7 +257,15 @@ jobs:
           cd /tmp/ws-scrcpy
           # Pinned for reproducible daily use (master @ 2026-07; update deliberately).
           git checkout 37a169d88905b59bc998ea5f251dd00e813aa17c
-          npm install > /tmp/ws-scrcpy-install.log 2>&1
+          # npm install here has flaked fast (23 s, exit 1, run 30558379141) —
+          # retry once with a clean cache and surface the log on failure.
+          if ! npm install --no-audit --no-fund > /tmp/ws-scrcpy-install.log 2>&1; then
+            echo "npm install failed — first attempt log tail:"; tail -40 /tmp/ws-scrcpy-install.log
+            npm cache clean --force > /dev/null 2>&1 || true
+            if ! npm install --no-audit --no-fund > /tmp/ws-scrcpy-install.log 2>&1; then
+              echo "npm install failed twice — log tail:"; tail -60 /tmp/ws-scrcpy-install.log; exit 1
+            fi
+          fi
           nohup npm start > /tmp/ws-scrcpy.log 2>&1 &
           up=0
           for i in $(seq 1 60); do
