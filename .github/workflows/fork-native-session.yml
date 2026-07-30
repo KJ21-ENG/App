@@ -1,0 +1,411 @@
+# Remote NATIVE-session workflow for the KJ21-ENG/App fork (MC Ops module).
+#
+# This file lives ONLY on the fork's default branch (main) — same rule as
+# fork-checks.yml / fork-dev-server.yml: never on a feature branch, never in a
+# PR to Expensify/App. Deploy/update it with:
+#   expensify-mission-control/tools/deploy-fork-dev-workflow.sh (native variant)
+#
+# One dispatch = one interactive device session for a branch:
+#   android: ubuntu-latest + KVM emulator + ws-scrcpy web UI on :8000
+#   ios:     macos-latest + iOS Simulator + baguette web UI on :8421
+#
+# The app binary resolves through a THREE-TIER cache (fastest first):
+#   1. the fork's `rock-cache` release, keyed by exact Rock fingerprint
+#      (self-populated; survives Expensify outages; ~seconds to download);
+#   2. Rock's own remote cache (Expensify's public S3 — observed returning
+#      AccessDenied to anonymous reads on 2026-07-30, hence tier 1);
+#   3. a local build (slow: ~45-90 min Android / ~1.5-2.5 h iOS on free
+#      runners) whose product is then UPLOADED to tier 1, so each fingerprint
+#      pays the build cost at most once.
+# Metro runs next to the device, so JS edits synced by the MC driver (mutagen)
+# hot-reload into the streamed device.
+#
+# Handshake sentinels with the MC session driver (mirrors fork-dev-server.yml):
+#   /tmp/env-provisioned  (driver -> runner: local .env uploaded; Metro may start)
+#   /tmp/stream-ready     (runner -> driver: stream UI answering on its port)
+#   /tmp/stop-session     (driver -> runner: graceful shutdown requested)
+#
+# The driver forwards <session port> -> localhost:<stream port> over sshd:2222
+# and shows http://localhost:<session port>/… as the session URL.
+name: Fork native session
+run-name: 'native: ${{ inputs.platform }} ${{ inputs.branch }} @ ${{ inputs.sha }} tag=${{ inputs.tag }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Fork branch being hosted (used for the scratch ref + concurrency group)
+        required: true
+        type: string
+      sha:
+        description: Exact commit to check out (reachable via the fork-dev/<branch> scratch ref)
+        required: true
+        type: string
+      platform:
+        description: android | ios
+        required: true
+        type: string
+      ssh_pubkey:
+        description: Public key appended to the runner's authorized_keys for sshd :2222
+        required: true
+        type: string
+      slug:
+        description: Tailnet-safe session slug; the runner joins as gh-dev-<slug>
+        required: true
+        type: string
+      tag:
+        description: Opaque dispatch tag used by the driver to locate this run
+        required: false
+        default: ''
+        type: string
+
+# contents:write so sessions can upload freshly-built artifacts to the
+# fork's rock-cache release (tier 1 of the artifact cache).
+permissions:
+  contents: write
+
+# Re-dispatching the same platform+branch supersedes the older session for it.
+concurrency:
+  group: fork-native-${{ inputs.platform }}-${{ inputs.branch }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+
+jobs:
+  android:
+    name: Android emulator session
+    if: ${{ inputs.platform == 'android' }}
+    runs-on: ubuntu-latest
+    # Clean end before the 6h hard job kill (350 min = 5h50m).
+    timeout-minutes: 350
+    steps:
+      - name: Timer start
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          hostname: gh-dev-${{ inputs.slug }}
+          args: --ssh
+
+      - name: Start OpenSSH on :2222
+        run: |
+          set -euxo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ inputs.ssh_pubkey }}" >> ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+          sudo ssh-keygen -A
+          sudo mkdir -p /run/sshd
+          # Tailscale SSH owns :22 once --ssh is active, so real sshd is on :2222.
+          sudo /usr/sbin/sshd -p 2222
+          echo "TIMING[sshd] $(( $(date +%s) - T0 ))s"
+
+      - name: Enable KVM and launch emulator early (boots during npm ci)
+        run: |
+          set -euxo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+          # adb/emulator are not on the runner's default PATH.
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          SDK="$ANDROID_HOME/cmdline-tools/latest/bin"
+          yes | "$SDK/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$SDK/sdkmanager" --install emulator platform-tools "system-images;android-35;google_apis;x86_64" > /tmp/sdkmanager.log 2>&1
+          echo "TIMING[sdk-install] $(( $(date +%s) - T0 ))s"
+          echo no | "$SDK/avdmanager" create avd -n session -k "system-images;android-35;google_apis;x86_64" -d pixel_7 --force
+          # New cmdline-tools write AVDs to ~/.config/.android/avd but the
+          # emulator searches $ANDROID_AVD_HOME → ~/.android/avd (spike finding:
+          # "Unknown AVD name [session]"). Point both at the real location.
+          AVD_HOME="$HOME/.config/.android/avd"
+          [ -d "$AVD_HOME" ] || AVD_HOME="$HOME/.android/avd"
+          echo "ANDROID_AVD_HOME=$AVD_HOME" >> "$GITHUB_ENV"
+          ANDROID_AVD_HOME="$AVD_HOME" nohup "$ANDROID_HOME/emulator/emulator" -avd session -no-window -gpu swiftshader_indirect \
+            -no-snapshot -noaudio -no-boot-anim -memory 4096 -cores 2 > /tmp/emulator.log 2>&1 &
+          echo "emulator launched in background (pid $!)"
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Wait for emulator boot
+        run: |
+          set -uxo pipefail
+          echo "TIMING[npm-ci-done] $(( $(date +%s) - T0 ))s"
+          # Bounded: a crashed emulator must fail the step, not hang it (the
+          # unbounded wait-for-device hid the AVD-path bug in the spike).
+          if ! timeout 300 adb wait-for-device; then
+            echo "ERROR: adb never saw the emulator"; tail -50 /tmp/emulator.log; exit 1
+          fi
+          booted=0
+          for i in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then booted=1; break; fi
+            sleep 5
+          done
+          if [ "$booted" != "1" ]; then
+            echo "ERROR: emulator did not finish booting"; tail -50 /tmp/emulator.log; exit 1
+          fi
+          adb devices
+          echo "TIMING[emulator-booted] $(( $(date +%s) - T0 ))s"
+
+      - name: Wait for driver-provisioned .env (handshake)
+        run: |
+          set -uxo pipefail
+          # The driver uploads the Mac's .env (verbatim — no port rewrite for
+          # native sessions) over ssh:2222 then touches /tmp/env-provisioned.
+          # Metro's babel env plugin reads .env at bundle time, so wait for it
+          # BEFORE starting Metro. Degraded fallback: proceed without .env.
+          for i in $(seq 1 60); do
+            [ -f /tmp/env-provisioned ] && break
+            sleep 5
+          done
+          if [ -f .env ]; then
+            echo "driver-provisioned .env present"
+          else
+            echo "WARNING: no .env after 5 min — Metro will bundle with repo defaults."
+          fi
+
+      - name: Start Metro
+        run: |
+          set -euxo pipefail
+          nohup npx rock start > /tmp/metro.log 2>&1 &
+          adb reverse tcp:8081 tcp:8081
+
+      - name: Install app (fork cache → Rock/S3 → local build + upload)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uxo pipefail
+          FP=$(npx rock fingerprint -p android 2>/dev/null | grep -oE '\b[0-9a-f]{40}\b' | head -1)
+          ARTIFACT="rock-android-developmentDebug-${FP}"
+          echo "fingerprint=$FP artifact=$ARTIFACT"
+
+          # Tier 1: the fork's rock-cache release.
+          if gh release download rock-cache --repo "$GITHUB_REPOSITORY" --pattern "$ARTIFACT.zip" --dir /tmp/fork-cache 2>/dev/null; then
+            echo "fork-cache HIT"
+            mkdir -p /tmp/fork-app && unzip -oq "/tmp/fork-cache/$ARTIFACT.zip" -d /tmp/fork-app
+            APK=$(find /tmp/fork-app -name '*.apk' | head -1)
+            adb install -r "$APK"
+            adb shell monkey -p com.expensify.chat.dev -c android.intent.category.LAUNCHER 1
+          else
+            echo "fork-cache MISS — trying Rock (S3 remote cache, local-build fallback)"
+            # Tier 2+3: rock downloads by fingerprint, or builds locally
+            # (~45-90 min on this runner). 150-min cap.
+            SENTRY_DISABLE_AUTO_UPLOAD=true timeout 9000 npx rock run:android \
+              --variant developmentDebug --app-id com.expensify.chat.dev --verbose > /tmp/rock-run.log 2>&1
+            RC=$?
+            grep -iE "remote cache|download|fingerprint|installing|error" /tmp/rock-run.log | tail -30 || true
+            if [ $RC -ne 0 ]; then echo "rock run:android failed rc=$RC"; tail -80 /tmp/rock-run.log; exit 1; fi
+            # Tier-1 upload: cache whatever APK we ended up with for next time.
+            APK=$(find android/app/build/outputs -name '*.apk' 2>/dev/null | head -1)
+            [ -z "$APK" ] && APK=$(find .rock/cache -name '*.apk' 2>/dev/null | head -1)
+            if [ -n "$APK" ]; then
+              (cd "$(dirname "$APK")" && zip -q "/tmp/$ARTIFACT.zip" "$(basename "$APK")")
+              gh release upload rock-cache "/tmp/$ARTIFACT.zip" --repo "$GITHUB_REPOSITORY" --clobber \
+                && echo "uploaded $ARTIFACT.zip to fork rock-cache" \
+                || echo "WARNING: fork-cache upload failed (session continues)"
+            else
+              echo "WARNING: no APK found to upload to the fork cache"
+            fi
+          fi
+          adb shell pidof com.expensify.chat.dev || { echo "app not running"; adb shell pm list packages | grep -i expensify || true; exit 1; }
+          echo "TIMING[app-running] $(( $(date +%s) - T0 ))s"
+
+      - name: Start ws-scrcpy stream UI
+        run: |
+          set -euxo pipefail
+          git clone https://github.com/NetrisTV/ws-scrcpy.git /tmp/ws-scrcpy
+          cd /tmp/ws-scrcpy
+          # Pinned for reproducible daily use (master @ 2026-07; update deliberately).
+          git checkout 37a169d88905b59bc998ea5f251dd00e813aa17c
+          npm install > /tmp/ws-scrcpy-install.log 2>&1
+          nohup npm start > /tmp/ws-scrcpy.log 2>&1 &
+          up=0
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8000 > /dev/null 2>&1; then up=1; break; fi
+            sleep 5
+          done
+          if [ "$up" != "1" ]; then echo "ws-scrcpy did not come up"; tail -50 /tmp/ws-scrcpy.log; exit 1; fi
+          echo "TIMING[stream-ready] $(( $(date +%s) - T0 ))s"
+          touch /tmp/stream-ready
+
+      - name: Keep session alive until stop or timeout
+        run: |
+          set -uxo pipefail
+          free -m | head -3
+          df -h / | tail -1
+          echo "Session live: ws-scrcpy on :8000 (forwarded by the MC driver)."
+          while true; do
+            if [ -f /tmp/stop-session ]; then echo "stop-session sentinel seen; shutting down."; break; fi
+            sleep 15
+          done
+
+  ios:
+    name: iOS simulator session
+    if: ${{ inputs.platform == 'ios' }}
+    runs-on: macos-latest
+    timeout-minutes: 350
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - name: Timer start
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          hostname: gh-dev-${{ inputs.slug }}
+          args: --ssh
+
+      - name: Start OpenSSH on :2222
+        run: |
+          set -euxo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ inputs.ssh_pubkey }}" >> ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+          sudo ssh-keygen -A || true
+          sudo /usr/sbin/sshd -p 2222
+          echo "TIMING[sshd] $(( $(date +%s) - T0 ))s"
+
+      - name: Verify Xcode and boot simulator early (boots during npm ci)
+        run: |
+          set -euxo pipefail
+          if [ ! -d "$DEVELOPER_DIR" ]; then
+            echo "WARNING: $DEVELOPER_DIR missing; available Xcodes:"; ls /Applications | grep -i xcode
+            LATEST=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+            echo "DEVELOPER_DIR=$LATEST/Contents/Developer" >> "$GITHUB_ENV"
+            export DEVELOPER_DIR="$LATEST/Contents/Developer"
+          fi
+          UDID=$(xcrun simctl list devices available --json | \
+            /usr/bin/python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; phones=[x for v in d.values() for x in v if x["name"].startswith("iPhone")]; print(phones[0]["udid"] if phones else "")')
+          if [ -z "$UDID" ]; then echo "ERROR: no available iPhone simulator"; xcrun simctl list devices; exit 1; fi
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl list devices available | grep "$UDID"
+          xcrun simctl boot "$UDID" || true
+          echo "TIMING[sim-boot-started] $(( $(date +%s) - T0 ))s"
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Wait for simulator boot
+        run: |
+          set -euxo pipefail
+          echo "TIMING[npm-ci-done] $(( $(date +%s) - T0 ))s"
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          echo "TIMING[sim-booted] $(( $(date +%s) - T0 ))s"
+
+      - name: Wait for driver-provisioned .env (handshake)
+        run: |
+          set -uxo pipefail
+          for i in $(seq 1 60); do
+            [ -f /tmp/env-provisioned ] && break
+            sleep 5
+          done
+          if [ -f .env ]; then
+            echo "driver-provisioned .env present"
+          else
+            echo "WARNING: no .env after 5 min — Metro will bundle with repo defaults."
+          fi
+
+      - name: Start Metro
+        run: |
+          set -euxo pipefail
+          nohup npx rock start > /tmp/metro.log 2>&1 &
+          echo "metro started"
+
+      - name: Install app (fork cache → Rock/S3 → local build + upload)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uxo pipefail
+          FP=$(npx rock fingerprint -p ios 2>/dev/null | grep -oE '\b[0-9a-f]{40}\b' | head -1)
+          ARTIFACT="rock-ios-simulator-DebugDevelopment-${FP}"
+          echo "fingerprint=$FP artifact=$ARTIFACT"
+
+          # Tier 1: the fork's rock-cache release.
+          if gh release download rock-cache --repo "$GITHUB_REPOSITORY" --pattern "$ARTIFACT.zip" --dir /tmp/fork-cache 2>/dev/null; then
+            echo "fork-cache HIT"
+            mkdir -p /tmp/fork-app && unzip -oq "/tmp/fork-cache/$ARTIFACT.zip" -d /tmp/fork-app
+            APP=$(find /tmp/fork-app -name '*.app' -maxdepth 3 | head -1)
+            xcrun simctl install "$SIM_UDID" "$APP"
+            xcrun simctl launch "$SIM_UDID" com.expensify.chat.dev
+          else
+            echo "fork-cache MISS — trying Rock (S3 remote cache, local-build fallback)"
+            # Tier 2+3: rock downloads by fingerprint, or builds locally
+            # (~1.5-2.5 h on this 3-core runner). 200-min cap.
+            npx rock run:ios --configuration DebugDevelopment --scheme "New Expensify Dev" \
+              --device "$SIM_UDID" --verbose > /tmp/rock-run.log 2>&1 &
+            RPID=$!
+            for i in $(seq 1 2400); do
+              kill -0 $RPID 2>/dev/null || break
+              sleep 5
+            done
+            if kill -0 $RPID 2>/dev/null; then
+              echo "rock run:ios timed out"; kill $RPID || true; tail -80 /tmp/rock-run.log; exit 1
+            fi
+            wait $RPID; RC=$?
+            grep -iE "remote cache|download|fingerprint|installing|launching|error" /tmp/rock-run.log | tail -30 || true
+            if [ $RC -ne 0 ]; then echo "rock run:ios failed rc=$RC"; tail -100 /tmp/rock-run.log; exit 1; fi
+            # Tier-1 upload: cache the built simulator .app for next time.
+            APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name 'New Expensify Dev.app' -path '*DebugDevelopment-iphonesimulator*' 2>/dev/null | head -1)
+            [ -z "$APP" ] && APP=$(find .rock/cache -type d -name '*.app' 2>/dev/null | head -1)
+            if [ -n "$APP" ]; then
+              (cd "$(dirname "$APP")" && zip -qry "/tmp/$ARTIFACT.zip" "$(basename "$APP")")
+              gh release upload rock-cache "/tmp/$ARTIFACT.zip" --repo "$GITHUB_REPOSITORY" --clobber \
+                && echo "uploaded $ARTIFACT.zip to fork rock-cache" \
+                || echo "WARNING: fork-cache upload failed (session continues)"
+            else
+              echo "WARNING: no .app found to upload to the fork cache"
+            fi
+          fi
+          xcrun simctl listapps "$SIM_UDID" 2>/dev/null | grep -q com.expensify.chat.dev || { echo "app not installed"; exit 1; }
+          echo "TIMING[app-running] $(( $(date +%s) - T0 ))s"
+
+      - name: Start baguette stream UI
+        run: |
+          set -euxo pipefail
+          # Pinned release for reproducible daily use; update deliberately.
+          BAGUETTE_URL="https://github.com/tddworks/baguette/releases/download/v0.1.85/baguette_v0.1.85_macOS_arm64.tar.gz"
+          if curl -sfL "$BAGUETTE_URL" -o /tmp/baguette.tar.gz; then
+            mkdir -p /tmp/baguette && tar -xzf /tmp/baguette.tar.gz -C /tmp/baguette
+            BAGUETTE=$(find /tmp/baguette -name baguette -type f | head -1)
+            chmod +x "$BAGUETTE"
+          else
+            echo "pinned release download failed; falling back to brew (slower)"
+            brew install baguette
+            BAGUETTE=baguette
+          fi
+          "$BAGUETTE" --version || true
+          nohup "$BAGUETTE" serve > /tmp/baguette.log 2>&1 &
+          up=0
+          for i in $(seq 1 36); do
+            if curl -sfL http://127.0.0.1:8421/simulators > /dev/null 2>&1; then up=1; break; fi
+            sleep 5
+          done
+          if [ "$up" != "1" ]; then echo "baguette did not come up"; tail -60 /tmp/baguette.log; exit 1; fi
+          echo "TIMING[stream-ready] $(( $(date +%s) - T0 ))s"
+          touch /tmp/stream-ready
+
+      - name: Keep session alive until stop or timeout
+        run: |
+          set -uxo pipefail
+          vm_stat | head -5
+          df -h / | tail -1
+          echo "Session live: baguette on :8421 (forwarded by the MC driver)."
+          while true; do
+            if [ -f /tmp/stop-session ]; then echo "stop-session sentinel seen; shutting down."; break; fi
+            sleep 15
+          done
