@@ -114,11 +114,18 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
+          # Disk headroom: the root disk has only ~20-25 GB free and a tier-3
+          # gradle build needs most of it. Drop the biggest preinstalled
+          # bundles we never use (~27 GB back).
+          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /usr/local/.ghcup 2>/dev/null || true
           # Swap headroom: a tier-3 gradle build + emulator peaked past 16 GB
           # and the runner's memory watchdog SIGTERM'd the build at ~81 min
-          # (run 30538459202). 8 GB of swap absorbs the spikes.
-          sudo fallocate -l 8G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+          # (run 30538459202). 8 GB of swap absorbs the spikes — on /mnt (the
+          # runner's larger scratch disk), NOT the root disk the build needs.
+          SWAPDIR=/mnt; [ -d /mnt ] && sudo test -w /mnt || SWAPDIR=""
+          sudo fallocate -l 8G ${SWAPDIR}/swapfile && sudo chmod 600 ${SWAPDIR}/swapfile && sudo mkswap ${SWAPDIR}/swapfile && sudo swapon ${SWAPDIR}/swapfile
           free -m | head -3
+          df -h / /mnt 2>/dev/null | tail -2
           # adb/emulator are not on the runner's default PATH.
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
@@ -208,11 +215,18 @@ jobs:
             sleep 3
             # Tier 2+3: rock downloads by fingerprint, or BUILDS (no install —
             # the emulator is down; ~45-90 min on this runner). 150-min cap.
+            df -h / | tail -1; free -m | head -2
             SENTRY_DISABLE_AUTO_UPLOAD=true GRADLE_OPTS="-Dorg.gradle.workers.max=3" timeout 9000 npx rock build:android \
               --variant developmentDebug --verbose > /tmp/rock-run.log 2>&1
             RC=$?
+            df -h / | tail -1; free -m | head -2
             grep -iE "remote cache|download|fingerprint|error" /tmp/rock-run.log | tail -30 || true
-            if [ $RC -ne 0 ]; then echo "rock build:android failed rc=$RC"; tail -80 /tmp/rock-run.log; exit 1; fi
+            if [ $RC -ne 0 ]; then
+              echo "rock build:android failed rc=$RC"
+              tail -100 /tmp/rock-run.log
+              echo "--- dmesg tail (OOM forensics) ---"; sudo dmesg 2>/dev/null | tail -20 || true
+              exit 1
+            fi
             APK=$(find android/app/build/outputs -name '*.apk' 2>/dev/null | head -1)
             [ -z "$APK" ] && APK=$(find .rock/cache -name '*.apk' 2>/dev/null | head -1)
             if [ -z "$APK" ]; then echo "ERROR: build succeeded but no APK found"; exit 1; fi
