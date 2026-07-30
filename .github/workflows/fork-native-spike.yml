@@ -1,0 +1,291 @@
+# SPIKE — remote native-session feasibility probe for the KJ21-ENG/App fork.
+#
+# Validates the two streaming stacks that the future fork-native-session.yml
+# (MC Ops "native session" kind) will use, on real free GitHub runners:
+#   android: ubuntu-latest + KVM emulator + Rock S3 APK + Metro + ws-scrcpy (:8000)
+#   ios:     macos-latest + simctl + Rock S3 .app + Metro + baguette (:8421)
+#
+# Same invariants as fork-dev-server.yml: lives ONLY on fork main, dispatch-only,
+# joins the tailnet, real sshd on :2222 for Mac-side ssh -L. Instrumented with
+# TIMING[...] lines so the production workflow inherits measured budgets.
+# Sentinels: /tmp/stream-ready (runner up) and /tmp/stop-session (Mac requests end).
+name: Fork native spike
+run-name: 'native-spike: ${{ inputs.platform }} @ ${{ inputs.sha }} tag=${{ inputs.tag }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: android | ios
+        required: true
+        type: string
+      sha:
+        description: Commit to check out (reachable via the fork-native-spike scratch branch)
+        required: true
+        type: string
+      ssh_pubkey:
+        description: Public key for sshd :2222
+        required: true
+        type: string
+      tag:
+        description: Opaque dispatch tag
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-native-spike-${{ inputs.platform }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+
+jobs:
+  android:
+    name: Android emulator spike
+    if: ${{ inputs.platform == 'android' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Timer start
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          hostname: gh-native-spike-android
+          args: --ssh
+
+      - name: Start OpenSSH on :2222
+        run: |
+          set -euxo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ inputs.ssh_pubkey }}" >> ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+          sudo ssh-keygen -A
+          sudo mkdir -p /run/sshd
+          sudo /usr/sbin/sshd -p 2222
+          echo "TIMING[sshd] $(( $(date +%s) - T0 ))s"
+
+      - name: Enable KVM and launch emulator early (boots during npm ci)
+        run: |
+          set -euxo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+          SDK="$ANDROID_HOME/cmdline-tools/latest/bin"
+          yes | "$SDK/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$SDK/sdkmanager" --install emulator platform-tools "system-images;android-35;google_apis;x86_64" > /tmp/sdkmanager.log 2>&1
+          echo "TIMING[sdk-install] $(( $(date +%s) - T0 ))s"
+          echo no | "$SDK/avdmanager" create avd -n session -k "system-images;android-35;google_apis;x86_64" -d pixel_7 --force
+          nohup "$ANDROID_HOME/emulator/emulator" -avd session -no-window -gpu swiftshader_indirect \
+            -no-snapshot -noaudio -no-boot-anim -memory 4096 -cores 2 > /tmp/emulator.log 2>&1 &
+          echo "emulator launched in background (pid $!)"
+          echo "TIMING[emulator-launched] $(( $(date +%s) - T0 ))s"
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Wait for emulator boot
+        run: |
+          set -uxo pipefail
+          echo "TIMING[npm-ci-done] $(( $(date +%s) - T0 ))s"
+          adb wait-for-device
+          booted=0
+          for i in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then booted=1; break; fi
+            sleep 5
+          done
+          if [ "$booted" != "1" ]; then
+            echo "ERROR: emulator did not finish booting"; tail -50 /tmp/emulator.log; exit 1
+          fi
+          adb devices
+          echo "TIMING[emulator-booted] $(( $(date +%s) - T0 ))s"
+
+      - name: Start Metro
+        run: |
+          set -euxo pipefail
+          nohup npx rock start > /tmp/metro.log 2>&1 &
+          adb reverse tcp:8081 tcp:8081
+
+      - name: Rock fingerprint (cache-hit forensics)
+        run: |
+          set -uxo pipefail
+          npx rock fingerprint -p android || true
+
+      - name: Install app via Rock remote cache
+        run: |
+          set -uxo pipefail
+          SENTRY_DISABLE_AUTO_UPLOAD=true timeout 1500 npx rock run:android \
+            --variant developmentDebug --app-id com.expensify.chat.dev --verbose > /tmp/rock-run.log 2>&1
+          RC=$?
+          grep -iE "remote cache|download|fingerprint|installing|error" /tmp/rock-run.log | tail -30 || true
+          if [ $RC -ne 0 ]; then echo "rock run:android failed rc=$RC"; tail -80 /tmp/rock-run.log; exit 1; fi
+          adb shell pidof com.expensify.chat.dev || { echo "app not running"; adb shell pm list packages | grep -i expensify || true; exit 1; }
+          echo "TIMING[app-running] $(( $(date +%s) - T0 ))s"
+
+      - name: Start ws-scrcpy
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/NetrisTV/ws-scrcpy.git /tmp/ws-scrcpy
+          cd /tmp/ws-scrcpy
+          npm install > /tmp/ws-scrcpy-install.log 2>&1
+          nohup npm start > /tmp/ws-scrcpy.log 2>&1 &
+          up=0
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8000 > /dev/null 2>&1; then up=1; break; fi
+            sleep 5
+          done
+          if [ "$up" != "1" ]; then echo "ws-scrcpy did not come up"; tail -50 /tmp/ws-scrcpy.log; exit 1; fi
+          echo "TIMING[stream-ready] $(( $(date +%s) - T0 ))s"
+          touch /tmp/stream-ready
+
+      - name: Report and keep alive
+        run: |
+          set -uxo pipefail
+          free -m | head -3
+          df -h / | tail -1
+          echo "Stream: forward :8000 -> http://localhost:8000  (ws-scrcpy)"
+          while true; do
+            if [ -f /tmp/stop-session ]; then echo "stop-session seen"; break; fi
+            sleep 15
+          done
+
+  ios:
+    name: iOS simulator spike
+    if: ${{ inputs.platform == 'ios' }}
+    runs-on: macos-latest
+    timeout-minutes: 75
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - name: Timer start
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          hostname: gh-native-spike-ios
+          args: --ssh
+
+      - name: Start OpenSSH on :2222
+        run: |
+          set -euxo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ inputs.ssh_pubkey }}" >> ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+          sudo ssh-keygen -A || true
+          sudo /usr/sbin/sshd -p 2222
+          echo "TIMING[sshd] $(( $(date +%s) - T0 ))s"
+
+      - name: Verify Xcode and boot simulator early (boots during npm ci)
+        run: |
+          set -euxo pipefail
+          if [ ! -d "$DEVELOPER_DIR" ]; then
+            echo "WARNING: $DEVELOPER_DIR missing; available Xcodes:"; ls /Applications | grep -i xcode
+            LATEST=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+            echo "DEVELOPER_DIR=$LATEST/Contents/Developer" >> "$GITHUB_ENV"
+            export DEVELOPER_DIR="$LATEST/Contents/Developer"
+          fi
+          xcrun simctl list runtimes | tail -5
+          UDID=$(xcrun simctl list devices available --json | \
+            /usr/bin/python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; phones=[x for v in d.values() for x in v if x["name"].startswith("iPhone")]; print(phones[0]["udid"] if phones else "")')
+          if [ -z "$UDID" ]; then echo "ERROR: no available iPhone simulator"; xcrun simctl list devices; exit 1; fi
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl list devices available | grep "$UDID"
+          xcrun simctl boot "$UDID" || true
+          echo "TIMING[sim-boot-started] $(( $(date +%s) - T0 ))s"
+
+      - name: Setup Node
+        uses: ./.github/actions/composite/setupNode
+
+      - name: Wait for simulator boot
+        run: |
+          set -euxo pipefail
+          echo "TIMING[npm-ci-done] $(( $(date +%s) - T0 ))s"
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          echo "TIMING[sim-booted] $(( $(date +%s) - T0 ))s"
+
+      - name: Start Metro
+        run: |
+          set -euxo pipefail
+          nohup npx rock start > /tmp/metro.log 2>&1 &
+          echo "metro started"
+
+      - name: Rock fingerprint (cache-hit forensics)
+        run: |
+          set -uxo pipefail
+          npx rock fingerprint -p ios || true
+
+      - name: Install app via Rock remote cache
+        run: |
+          set -uxo pipefail
+          npx rock run:ios --configuration DebugDevelopment --scheme "New Expensify Dev" \
+            --device "$SIM_UDID" --verbose > /tmp/rock-run.log 2>&1 &
+          RPID=$!
+          for i in $(seq 1 360); do
+            kill -0 $RPID 2>/dev/null || break
+            sleep 5
+          done
+          if kill -0 $RPID 2>/dev/null; then
+            echo "rock run:ios timed out after 30 min"; kill $RPID || true; tail -80 /tmp/rock-run.log; exit 1
+          fi
+          wait $RPID; RC=$?
+          grep -iE "remote cache|download|fingerprint|installing|launching|error" /tmp/rock-run.log | tail -30 || true
+          if [ $RC -ne 0 ]; then echo "rock run:ios failed rc=$RC"; tail -100 /tmp/rock-run.log; exit 1; fi
+          xcrun simctl listapps "$SIM_UDID" 2>/dev/null | grep -q com.expensify.chat.dev || { echo "app not installed"; exit 1; }
+          xcrun simctl io "$SIM_UDID" screenshot /tmp/sim.png && ls -la /tmp/sim.png
+          echo "TIMING[app-running] $(( $(date +%s) - T0 ))s"
+
+      - name: Start baguette
+        run: |
+          set -euxo pipefail
+          TARBALL_URL=$(curl -sf https://api.github.com/repos/tddworks/baguette/releases/latest | \
+            /usr/bin/python3 -c 'import json,sys; a=json.load(sys.stdin)["assets"]; print([x["browser_download_url"] for x in a if x["name"].endswith("macOS_arm64.tar.gz")][0])') || TARBALL_URL=""
+          if [ -n "$TARBALL_URL" ]; then
+            curl -sfL "$TARBALL_URL" -o /tmp/baguette.tar.gz
+            mkdir -p /tmp/baguette && tar -xzf /tmp/baguette.tar.gz -C /tmp/baguette
+            BAGUETTE=$(find /tmp/baguette -name baguette -type f | head -1)
+            chmod +x "$BAGUETTE"
+          else
+            echo "release download failed; falling back to brew (slower)"
+            brew install baguette
+            BAGUETTE=baguette
+          fi
+          "$BAGUETTE" --version || true
+          nohup "$BAGUETTE" serve > /tmp/baguette.log 2>&1 &
+          up=0
+          for i in $(seq 1 36); do
+            if curl -sfL http://127.0.0.1:8421/simulators > /dev/null 2>&1; then up=1; break; fi
+            sleep 5
+          done
+          if [ "$up" != "1" ]; then echo "baguette did not come up"; tail -60 /tmp/baguette.log; exit 1; fi
+          echo "TIMING[stream-ready] $(( $(date +%s) - T0 ))s"
+          touch /tmp/stream-ready
+
+      - name: Report and keep alive
+        run: |
+          set -uxo pipefail
+          vm_stat | head -5
+          df -h / | tail -1
+          echo "Stream: forward :8421 -> http://localhost:8421/simulators  (baguette)"
+          while true; do
+            if [ -f /tmp/stop-session ]; then echo "stop-session seen"; break; fi
+            sleep 15
+          done
