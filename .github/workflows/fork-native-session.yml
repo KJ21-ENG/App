@@ -226,11 +226,23 @@ jobs:
             echo "WARNING: no .env after 5 min — Metro will bundle with repo defaults."
           fi
 
-      - name: Start Metro
+      - name: Start Metro and warm the bundle
         run: |
           set -euxo pipefail
           nohup npx rock start > /tmp/metro.log 2>&1 &
           adb reverse tcp:8081 tcp:8081
+          # Warm Metro's first bundle BEFORE the app launches. Building the
+          # ~11k-module dev bundle takes ~35 s, and an app that launches into a
+          # cold Metro hits its connect timeout and shows the "Could not connect
+          # to development server" RedBox — every session started with one until
+          # this step existed. Requesting the bundle blocks until it is built.
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null "http://127.0.0.1:8081/status" && break
+            sleep 2
+          done
+          time curl -s -o /dev/null -w "bundle warm: %{http_code}\n" --max-time 900 \
+            "http://127.0.0.1:8081/index.bundle?platform=android&dev=true&minify=false" || \
+            echo "WARNING: bundle warm failed; the app may show a RedBox until it reloads"
 
       - name: Install app (fork cache → Rock/S3 → local build + upload)
         env:
@@ -421,11 +433,23 @@ jobs:
             echo "WARNING: no .env after 5 min — Metro will bundle with repo defaults."
           fi
 
-      - name: Start Metro
+      - name: Start Metro and warm the bundle
         run: |
           set -euxo pipefail
           nohup npx rock start > /tmp/metro.log 2>&1 &
           echo "metro started"
+          # Warm Metro's first bundle BEFORE the app launches. Building the
+          # ~11k-module dev bundle takes ~35 s, and an app that launches into a
+          # cold Metro hits its connect timeout and shows the "Could not connect
+          # to development server" RedBox — every session started with one until
+          # this step existed. Requesting the bundle blocks until it is built.
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null "http://127.0.0.1:8081/status" && break
+            sleep 2
+          done
+          time curl -s -o /dev/null -w "bundle warm: %{http_code}\n" --max-time 900 \
+            "http://127.0.0.1:8081/index.bundle?platform=ios&dev=true&minify=false" || \
+            echo "WARNING: bundle warm failed; the app may show a RedBox until it reloads"
 
       - name: Install app (fork cache → Rock/S3 → local build + upload)
         env:
