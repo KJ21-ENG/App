@@ -269,8 +269,10 @@ jobs:
               echo "--- dmesg tail (OOM forensics) ---"; sudo dmesg 2>/dev/null | tail -20 || true
               exit 1
             fi
-            APK=$(find android/app/build/outputs -name '*.apk' 2>/dev/null | head -1)
-            [ -z "$APK" ] && APK=$(find .rock/cache -name '*.apk' 2>/dev/null | head -1)
+            APK=$(find android/app/build/outputs -name '*.apk' 2>/dev/null | head -1 || true)
+            if [ -z "$APK" ]; then
+              APK=$(find .rock/cache -name '*.apk' 2>/dev/null | head -1 || true)
+            fi
             if [ -z "$APK" ]; then echo "ERROR: build succeeded but no APK found"; exit 1; fi
             # Tier-1 upload BEFORE anything else can fail: cache it for next time.
             (cd "$(dirname "$APK")" && zip -q "/tmp/$ARTIFACT.zip" "$(basename "$APK")")
@@ -438,7 +440,7 @@ jobs:
           if gh release download rock-cache --repo "$GITHUB_REPOSITORY" --pattern "$ARTIFACT.zip" --dir /tmp/fork-cache 2>/dev/null; then
             echo "fork-cache HIT"
             mkdir -p /tmp/fork-app && unzip -oq "/tmp/fork-cache/$ARTIFACT.zip" -d /tmp/fork-app
-            APP=$(find /tmp/fork-app -name '*.app' -maxdepth 3 | head -1)
+            APP=$(find /tmp/fork-app -name '*.app' -maxdepth 3 2>/dev/null | head -1 || true)
             xcrun simctl install "$SIM_UDID" "$APP"
             xcrun simctl launch "$SIM_UDID" com.expensify.chat.dev
           else
@@ -459,8 +461,13 @@ jobs:
             grep -iE "remote cache|download|fingerprint|installing|launching|error" /tmp/rock-run.log | tail -30 || true
             if [ $RC -ne 0 ]; then echo "rock run:ios failed rc=$RC"; tail -100 /tmp/rock-run.log; exit 1; fi
             # Tier-1 upload: cache the built simulator .app for next time.
-            APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name 'New Expensify Dev.app' -path '*DebugDevelopment-iphonesimulator*' 2>/dev/null | head -1)
-            [ -z "$APP" ] && APP=$(find .rock/cache -type d -name '*.app' 2>/dev/null | head -1)
+            # NOTE: steps run under `bash -e` and we set pipefail, so a find
+            # that matches nothing (exit 1) would kill the step even though the
+            # app is already installed and launched. `|| true` on every find.
+            APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name 'New Expensify Dev.app' -path '*DebugDevelopment-iphonesimulator*' 2>/dev/null | head -1 || true)
+            if [ -z "$APP" ]; then
+              APP=$(find .rock/cache -type d -name '*.app' 2>/dev/null | head -1 || true)
+            fi
             if [ -n "$APP" ]; then
               (cd "$(dirname "$APP")" && zip -qry "/tmp/$ARTIFACT.zip" "$(basename "$APP")")
               gh release upload rock-cache "/tmp/$ARTIFACT.zip" --repo "$GITHUB_REPOSITORY" --clobber \
