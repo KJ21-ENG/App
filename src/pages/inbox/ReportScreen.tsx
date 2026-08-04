@@ -22,6 +22,7 @@ import SCREENS from '@src/SCREENS';
 import type {ViewStyle} from 'react-native';
 
 import {PortalHost} from '@gorhom/portal';
+import {useIsFocused} from '@react-navigation/native';
 import React from 'react';
 import {View} from 'react-native';
 
@@ -77,6 +78,7 @@ function ReportScreenEditMessageProvider({reportID, children}: ReportScreenEditM
 
 function ReportScreen({route, navigation, shouldDeferReportActions = false}: ReportScreenProps) {
     const styles = useThemeStyles();
+    const isFocused = useIsFocused();
     const reportIDFromRoute = getNonEmptyStringOnyxID(route.params?.reportID);
     const {isInNarrowPaneModal} = useResponsiveLayout();
     const {currentReportID: currentReportIDValue} = useCurrentReportIDState();
@@ -118,7 +120,7 @@ function ReportScreen({route, navigation, shouldDeferReportActions = false}: Rep
                         <ScreenWrapper
                             navigation={navigation}
                             style={screenWrapperStyle}
-                            shouldEnableKeyboardAvoidingView={isTopMostReportId || isInNarrowPaneModal}
+                            shouldEnableKeyboardAvoidingView={isFocused && (isTopMostReportId || isInNarrowPaneModal)}
                             testID={`report-screen-${reportIDFromRoute}`}
                         >
                             {!shouldDeferNonEssentials && (
