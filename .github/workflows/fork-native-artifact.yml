@@ -134,10 +134,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ACTUAL=$(npx rock fingerprint -p android --raw 2>/dev/null | tr -d '[:space:]')
+          FINGERPRINT_SOURCES=$(mktemp "$RUNNER_TEMP/native-fingerprint-sources.XXXXXXXXXX")
+          trap 'rm -f "$FINGERPRINT_SOURCES"' EXIT
+          ACTUAL=$(npx rock fingerprint -p android --raw 2>"$FINGERPRINT_SOURCES" | tr -d '[:space:]')
           [[ "$ACTUAL" =~ ^[0-9a-f]{40}$ ]]
           if [ "$ACTUAL" != "$INPUT_FINGERPRINT" ]; then
             printf 'fingerprint mismatch: expected=%s actual=%s\n' "$INPUT_FINGERPRINT" "$ACTUAL" >&2
+            node -e 'const fs = require("node:fs"); const {sources = []} = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.error(JSON.stringify(sources.map(({type, key, hash}) => ({type, key, hash})), null, 2));' "$FINGERPRINT_SOURCES"
             exit 1
           fi
       - name: Build Android artifact
@@ -271,10 +274,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ACTUAL=$(npx rock fingerprint -p ios --raw 2>/dev/null | tr -d '[:space:]')
+          FINGERPRINT_SOURCES=$(mktemp "$RUNNER_TEMP/native-fingerprint-sources.XXXXXXXXXX")
+          trap 'rm -f "$FINGERPRINT_SOURCES"' EXIT
+          ACTUAL=$(npx rock fingerprint -p ios --raw 2>"$FINGERPRINT_SOURCES" | tr -d '[:space:]')
           [[ "$ACTUAL" =~ ^[0-9a-f]{40}$ ]]
           if [ "$ACTUAL" != "$INPUT_FINGERPRINT" ]; then
             printf 'fingerprint mismatch: expected=%s actual=%s\n' "$INPUT_FINGERPRINT" "$ACTUAL" >&2
+            node -e 'const fs = require("node:fs"); const {sources = []} = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.error(JSON.stringify(sources.map(({type, key, hash}) => ({type, key, hash})), null, 2));' "$FINGERPRINT_SOURCES"
             exit 1
           fi
       - name: Build iOS simulator artifact
