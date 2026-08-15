@@ -124,8 +124,19 @@ jobs:
         run: |
           set -euo pipefail
           java -version
-      - name: Setup Node and dependencies
-        uses: ./.github/actions/composite/setupNode
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install exact Node dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_VERSION=$(node -p 'require("./package.json").engines.npm')
+          [[ "$NPM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          NPM_CONFIG_ROOT=$(mktemp -d "$RUNNER_TEMP/native-npm-config.XXXXXXXXXX")
+          trap 'rm -rf "$NPM_CONFIG_ROOT"' EXIT
+          touch "$NPM_CONFIG_ROOT/user.npmrc" "$NPM_CONFIG_ROOT/global.npmrc"
+          env npm_config_userconfig="$NPM_CONFIG_ROOT/user.npmrc" npm_config_globalconfig="$NPM_CONFIG_ROOT/global.npmrc" npm_config_cache="$RUNNER_TEMP/native-npm-cache" npm_config_audit=false npm_config_fund=false npm_config_update_notifier=false npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
       - name: Free runner disk
         run: |
           sudo rm -rf /usr/local/lib/android/sdk/ndk /opt/hostedtoolcache/CodeQL || true
@@ -251,8 +262,19 @@ jobs:
           if (actual !== process.env.INPUT_BUILD_IDENTITY) throw new Error('build identity does not match canonical build traits');
           if (traits.platform !== process.env.INPUT_PLATFORM || traits.fingerprint !== process.env.INPUT_FINGERPRINT || traits.toolchain !== process.env.INPUT_TOOLCHAIN) throw new Error('build traits disagree with workflow inputs');
           NODE
-      - name: Setup Node and dependencies
-        uses: ./.github/actions/composite/setupNode
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install exact Node dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_VERSION=$(node -p 'require("./package.json").engines.npm')
+          [[ "$NPM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          NPM_CONFIG_ROOT=$(mktemp -d "$RUNNER_TEMP/native-npm-config.XXXXXXXXXX")
+          trap 'rm -rf "$NPM_CONFIG_ROOT"' EXIT
+          touch "$NPM_CONFIG_ROOT/user.npmrc" "$NPM_CONFIG_ROOT/global.npmrc"
+          env npm_config_userconfig="$NPM_CONFIG_ROOT/user.npmrc" npm_config_globalconfig="$NPM_CONFIG_ROOT/global.npmrc" npm_config_cache="$RUNNER_TEMP/native-npm-cache" npm_config_audit=false npm_config_fund=false npm_config_update_notifier=false npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
       - name: Select requested Xcode toolchain
         shell: bash
         run: |
