@@ -134,8 +134,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ACTUAL=$(npx rock fingerprint -p android 2>/dev/null | grep -oE '\b[0-9a-f]{40}\b' | head -1)
-          test "$ACTUAL" = "$INPUT_FINGERPRINT"
+          ACTUAL=$(npx rock fingerprint -p android --raw 2>/dev/null | tr -d '[:space:]')
+          [[ "$ACTUAL" =~ ^[0-9a-f]{40}$ ]]
+          if [ "$ACTUAL" != "$INPUT_FINGERPRINT" ]; then
+            printf 'fingerprint mismatch: expected=%s actual=%s\n' "$INPUT_FINGERPRINT" "$ACTUAL" >&2
+            exit 1
+          fi
       - name: Build Android artifact
         env:
           GRADLE_OPTS: -Dorg.gradle.workers.max=3
@@ -267,8 +271,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ACTUAL=$(npx rock fingerprint -p ios 2>/dev/null | grep -oE '\b[0-9a-f]{40}\b' | head -1)
-          test "$ACTUAL" = "$INPUT_FINGERPRINT"
+          ACTUAL=$(npx rock fingerprint -p ios --raw 2>/dev/null | tr -d '[:space:]')
+          [[ "$ACTUAL" =~ ^[0-9a-f]{40}$ ]]
+          if [ "$ACTUAL" != "$INPUT_FINGERPRINT" ]; then
+            printf 'fingerprint mismatch: expected=%s actual=%s\n' "$INPUT_FINGERPRINT" "$ACTUAL" >&2
+            exit 1
+          fi
       - name: Build iOS simulator artifact
         run: npx rock build:ios --configuration DebugDevelopment --scheme 'New Expensify Dev' --destination simulator --verbose
       - name: Stage artifact and provenance
