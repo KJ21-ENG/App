@@ -1,0 +1,331 @@
+# Build-only native artifact producer for the persistent Mission Control bench.
+# It never starts Metro, Tailscale, SSH, Mutagen, a simulator/emulator, or a
+# long-lived interactive session. Inputs are checked against the exact checkout
+# before the artifact and provenance manifest are uploaded.
+name: Fork native artifact
+run-name: "native-artifact: tag=${{ inputs.tag }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: android or ios
+        required: true
+        type: choice
+        options: [android, ios]
+      sha:
+        description: Exact source commit available on the fork
+        required: true
+        type: string
+      fingerprint:
+        description: Expected Rock native fingerprint
+        required: true
+        type: string
+      build_identity:
+        description: Mission Control extended build identity
+        required: true
+        type: string
+      build_traits_json:
+        description: Canonical versioned build-traits JSON
+        required: true
+        type: string
+      artifact_name:
+        description: Content-addressed artifact name
+        required: true
+        type: string
+      toolchain:
+        description: Canonical runner and native toolchain identity trait
+        required: true
+        type: string
+      xcode_version:
+        description: Xcode application selector for iOS only
+        required: false
+        default: ""
+        type: string
+      tag:
+        description: Mission Control request correlation tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  SENTRY_DISABLE_AUTO_UPLOAD: "true"
+  INPUT_PLATFORM: ${{ inputs.platform }}
+  INPUT_SHA: ${{ inputs.sha }}
+  INPUT_FINGERPRINT: ${{ inputs.fingerprint }}
+  INPUT_BUILD_IDENTITY: ${{ inputs.build_identity }}
+  INPUT_BUILD_TRAITS_JSON: ${{ inputs.build_traits_json }}
+  INPUT_ARTIFACT_NAME: ${{ inputs.artifact_name }}
+  INPUT_TOOLCHAIN: ${{ inputs.toolchain }}
+  INPUT_XCODE_VERSION: ${{ inputs.xcode_version }}
+  INPUT_TAG: ${{ inputs.tag }}
+
+jobs:
+  android:
+    if: inputs.platform == 'android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 165
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: KJ21-ENG/App
+          ref: ${{ env.INPUT_SHA }}
+          persist-credentials: false
+      - name: Validate immutable inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$INPUT_PLATFORM" == "android" ]]
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$INPUT_FINGERPRINT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$INPUT_BUILD_IDENTITY" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$INPUT_ARTIFACT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$ ]]
+          [[ "$INPUT_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] # tag {1,128}
+          [[ "$INPUT_TOOLCHAIN" == "ubuntu-24.04-app-pinned-java-android-sdk" ]]
+          [[ -z "$INPUT_XCODE_VERSION" ]]
+          test "$(git rev-parse HEAD)" = "$INPUT_SHA"
+      - name: Recompute build identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto = require('crypto');
+          const traits = JSON.parse(process.env.INPUT_BUILD_TRAITS_JSON || '');
+          const expectedKeys = ['appId','architecture','configuration','destination','fingerprint','metroPort','mode','nativeEnvironmentSha256','platform','scheme','signing','toolchain','version'];
+          if (!traits || traits.version !== 1 || Object.keys(traits).sort().join(',') !== expectedKeys.sort().join(',')) throw new Error('invalid canonical build traits');
+          const stable = (value) => {
+            if (Array.isArray(value)) return value.map(stable);
+            if (value && typeof value === 'object') {
+              return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+            }
+            return value;
+          };
+          const actual = crypto.createHash('sha256').update(JSON.stringify(stable(traits))).digest('hex');
+          if (actual !== process.env.INPUT_BUILD_IDENTITY) throw new Error('build identity does not match canonical build traits');
+          if (traits.platform !== process.env.INPUT_PLATFORM || traits.fingerprint !== process.env.INPUT_FINGERPRINT || traits.toolchain !== process.env.INPUT_TOOLCHAIN) throw new Error('build traits disagree with workflow inputs');
+          NODE
+      - name: Read pinned Java version
+        id: java
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .java-version
+          version=$(tr -d '[:space:]' < .java-version)
+          [[ "$version" =~ ^[0-9]+([.][0-9]+){0,3}$ ]]
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.java.outputs.version }}
+      - name: Verify pinned Java
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -version
+      - name: Setup Node and dependencies
+        uses: ./.github/actions/composite/setupNode
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/local/lib/android/sdk/ndk /opt/hostedtoolcache/CodeQL || true
+          df -h /
+      - name: Verify fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL=$(npx rock fingerprint -p android 2>/dev/null | grep -oE '\b[0-9a-f]{40}\b' | head -1)
+          test "$ACTUAL" = "$INPUT_FINGERPRINT"
+      - name: Build Android artifact
+        env:
+          GRADLE_OPTS: -Dorg.gradle.workers.max=3
+        run: npx rock build:android --variant developmentDebug --verbose
+      - name: Stage artifact and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACT="rock-android-developmentDebug-$INPUT_FINGERPRINT"
+          ARTIFACT_ROOT=".rock/cache/remote-build/$ARTIFACT"
+          test -d "$ARTIFACT_ROOT"
+          mapfile -t APKS < <(find "$ARTIFACT_ROOT" -type f -name '*.apk' -print)
+          test "${#APKS[@]}" -eq 1
+          APK="${APKS[0]}"
+          test -f "$APK"
+          test ! -L "$APK"
+          test -s "$APK"
+          aapt2 dump badging "$APK" | grep -Fq "package: name='com.expensify.chat.dev'"
+          apksigner verify --verbose "$APK"
+          STAGING_DIR=$(mktemp -d "$RUNNER_TEMP/native-artifact-stage.XXXXXXXXXX")
+          export STAGING_DIR
+          test -d "$STAGING_DIR"
+          test ! -L "$STAGING_DIR"
+          test -z "$(find "$STAGING_DIR" -mindepth 1 -print -quit)"
+          printf 'STAGING_DIR=%s\n' "$STAGING_DIR" >> "$GITHUB_ENV"
+          install -m 0600 "$APK" "$STAGING_DIR/app.apk"
+          ARTIFACT_SHA256=$(shasum -a 256 "$STAGING_DIR/app.apk" | cut -d ' ' -f 1)
+          export ARTIFACT_SHA256
+          node -e '
+            const fs = require("node:fs");
+            const manifest = {
+              schemaVersion: 1,
+              platform: process.env.INPUT_PLATFORM,
+              sourceSha: process.env.INPUT_SHA.toLowerCase(),
+              fingerprint: process.env.INPUT_FINGERPRINT,
+              buildIdentity: process.env.INPUT_BUILD_IDENTITY,
+              artifactName: process.env.INPUT_ARTIFACT_NAME,
+              artifactSha256: process.env.ARTIFACT_SHA256,
+              configuration: "developmentDebug",
+              destination: "emulator",
+              appId: "com.expensify.chat.dev",
+              tag: process.env.INPUT_TAG,
+              correlationId: process.env.INPUT_TAG,
+              workflowSha: process.env.GITHUB_SHA.toLowerCase(),
+              toolchain: process.env.INPUT_TOOLCHAIN,
+            };
+            fs.writeFileSync(`${process.env.STAGING_DIR}/manifest.json`, `${JSON.stringify(manifest)}\n`, {encoding: "utf8", flag: "wx", mode: 0o600});
+          '
+          test -f "$STAGING_DIR/app.apk"
+          test ! -L "$STAGING_DIR/app.apk"
+          test -s "$STAGING_DIR/app.apk"
+          test -f "$STAGING_DIR/manifest.json"
+          test ! -L "$STAGING_DIR/manifest.json"
+          test -s "$STAGING_DIR/manifest.json"
+          test -z "$(find "$STAGING_DIR" -type l -print -quit)"
+          test "$(find "$STAGING_DIR" -mindepth 1 -maxdepth 1 -type f -print | wc -l | tr -d ' ')" -eq 2
+          test "$(find "$STAGING_DIR" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" -eq 2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.INPUT_ARTIFACT_NAME }}
+          path: ${{ env.STAGING_DIR }}/
+          if-no-files-found: error
+          retention-days: 30
+
+  ios:
+    if: inputs.platform == 'ios'
+    runs-on: macos-15
+    timeout-minutes: 210
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: KJ21-ENG/App
+          ref: ${{ env.INPUT_SHA }}
+          persist-credentials: false
+      - name: Validate immutable inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$INPUT_PLATFORM" == "ios" ]]
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$INPUT_FINGERPRINT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$INPUT_BUILD_IDENTITY" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$INPUT_ARTIFACT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$ ]]
+          [[ "$INPUT_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] # tag {1,128}
+          [[ "$INPUT_TOOLCHAIN" =~ ^macos-15-xcode-[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?$ ]] # toolchain {1,64}
+          [[ "$INPUT_XCODE_VERSION" =~ ^[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?$ ]]
+          [[ "$INPUT_TOOLCHAIN" == "macos-15-xcode-$INPUT_XCODE_VERSION" ]]
+          test "$(git rev-parse HEAD)" = "$INPUT_SHA"
+      - name: Recompute build identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto = require('crypto');
+          const traits = JSON.parse(process.env.INPUT_BUILD_TRAITS_JSON || '');
+          const expectedKeys = ['appId','architecture','configuration','destination','fingerprint','metroPort','mode','nativeEnvironmentSha256','platform','scheme','signing','toolchain','version'];
+          if (!traits || traits.version !== 1 || Object.keys(traits).sort().join(',') !== expectedKeys.sort().join(',')) throw new Error('invalid canonical build traits');
+          const stable = (value) => {
+            if (Array.isArray(value)) return value.map(stable);
+            if (value && typeof value === 'object') {
+              return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+            }
+            return value;
+          };
+          const actual = crypto.createHash('sha256').update(JSON.stringify(stable(traits))).digest('hex');
+          if (actual !== process.env.INPUT_BUILD_IDENTITY) throw new Error('build identity does not match canonical build traits');
+          if (traits.platform !== process.env.INPUT_PLATFORM || traits.fingerprint !== process.env.INPUT_FINGERPRINT || traits.toolchain !== process.env.INPUT_TOOLCHAIN) throw new Error('build traits disagree with workflow inputs');
+          NODE
+      - name: Setup Node and dependencies
+        uses: ./.github/actions/composite/setupNode
+      - name: Select requested Xcode toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          requested="/Applications/Xcode_${INPUT_XCODE_VERSION}.app/Contents/Developer"
+          if [ ! -d "$requested" ]; then
+            echo "ERROR: requested Xcode toolchain is unavailable" >&2
+            exit 1
+          fi
+          printf 'DEVELOPER_DIR=%s\n' "$requested" >> "$GITHUB_ENV"
+      - name: Verify Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+          test "$(xcodebuild -version | sed -n 's/^Xcode //p')" = "$INPUT_XCODE_VERSION"
+      - name: Verify fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL=$(npx rock fingerprint -p ios 2>/dev/null | grep -oE '\b[0-9a-f]{40}\b' | head -1)
+          test "$ACTUAL" = "$INPUT_FINGERPRINT"
+      - name: Build iOS simulator artifact
+        run: npx rock build:ios --configuration DebugDevelopment --scheme 'New Expensify Dev' --destination simulator --verbose
+      - name: Stage artifact and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACT="rock-ios-simulator-DebugDevelopment-$INPUT_FINGERPRINT"
+          ARTIFACT_ROOT=".rock/cache/remote-build/$ARTIFACT"
+          test -d "$ARTIFACT_ROOT"
+          APP_LIST=$(find "$ARTIFACT_ROOT" -maxdepth 2 -type d -name 'New Expensify Dev.app' -print)
+          test "$(printf '%s\n' "$APP_LIST" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1
+          APP="$APP_LIST"
+          test -d "$APP"
+          test ! -L "$APP"
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$APP/Info.plist")" = 'com.expensify.chat.dev'
+          STAGING_DIR=$(mktemp -d "$RUNNER_TEMP/native-artifact-stage.XXXXXXXXXX")
+          export STAGING_DIR
+          test -d "$STAGING_DIR"
+          test ! -L "$STAGING_DIR"
+          test -z "$(find "$STAGING_DIR" -mindepth 1 -print -quit)"
+          printf 'STAGING_DIR=%s\n' "$STAGING_DIR" >> "$GITHUB_ENV"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$STAGING_DIR/app.zip"
+          ARTIFACT_SHA256=$(shasum -a 256 "$STAGING_DIR/app.zip" | cut -d ' ' -f 1)
+          export ARTIFACT_SHA256
+          node -e '
+            const fs = require("node:fs");
+            const manifest = {
+              schemaVersion: 1,
+              platform: process.env.INPUT_PLATFORM,
+              sourceSha: process.env.INPUT_SHA.toLowerCase(),
+              fingerprint: process.env.INPUT_FINGERPRINT,
+              buildIdentity: process.env.INPUT_BUILD_IDENTITY,
+              artifactName: process.env.INPUT_ARTIFACT_NAME,
+              artifactSha256: process.env.ARTIFACT_SHA256,
+              configuration: "DebugDevelopment",
+              destination: "simulator",
+              scheme: "New Expensify Dev",
+              appId: "com.expensify.chat.dev",
+              tag: process.env.INPUT_TAG,
+              correlationId: process.env.INPUT_TAG,
+              workflowSha: process.env.GITHUB_SHA.toLowerCase(),
+              toolchain: process.env.INPUT_TOOLCHAIN,
+            };
+            fs.writeFileSync(`${process.env.STAGING_DIR}/manifest.json`, `${JSON.stringify(manifest)}\n`, {encoding: "utf8", flag: "wx", mode: 0o600});
+          '
+          test -f "$STAGING_DIR/app.zip"
+          test ! -L "$STAGING_DIR/app.zip"
+          test -s "$STAGING_DIR/app.zip"
+          test -f "$STAGING_DIR/manifest.json"
+          test ! -L "$STAGING_DIR/manifest.json"
+          test -s "$STAGING_DIR/manifest.json"
+          test -z "$(find "$STAGING_DIR" -type l -print -quit)"
+          test "$(find "$STAGING_DIR" -mindepth 1 -maxdepth 1 -type f -print | wc -l | tr -d ' ')" -eq 2
+          test "$(find "$STAGING_DIR" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" -eq 2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.INPUT_ARTIFACT_NAME }}
+          path: ${{ env.STAGING_DIR }}/
+          if-no-files-found: error
+          retention-days: 30
