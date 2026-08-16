@@ -126,7 +126,7 @@ jobs:
           java -version
       - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
       - name: Install exact Node dependencies
         shell: bash
         run: |
@@ -171,8 +171,15 @@ jobs:
           test -f "$APK"
           test ! -L "$APK"
           test -s "$APK"
-          aapt2 dump badging "$APK" | grep -Fq "package: name='com.expensify.chat.dev'"
-          apksigner verify --verbose "$APK"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$SDK_ROOT"
+          mapfile -t BUILD_TOOLS < <(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d -print | sort -V)
+          test "${#BUILD_TOOLS[@]}" -gt 0
+          LATEST_BUILD_TOOLS="${BUILD_TOOLS[${#BUILD_TOOLS[@]}-1]}"
+          test -x "$LATEST_BUILD_TOOLS/aapt2"
+          test -x "$LATEST_BUILD_TOOLS/apksigner"
+          "$LATEST_BUILD_TOOLS/aapt2" dump badging "$APK" | grep -Fq "package: name='com.expensify.chat.dev'"
+          "$LATEST_BUILD_TOOLS/apksigner" verify --verbose "$APK"
           STAGING_DIR=$(mktemp -d "$RUNNER_TEMP/native-artifact-stage.XXXXXXXXXX")
           export STAGING_DIR
           test -d "$STAGING_DIR"
@@ -264,7 +271,7 @@ jobs:
           NODE
       - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
       - name: Install exact Node dependencies
         shell: bash
         run: |
