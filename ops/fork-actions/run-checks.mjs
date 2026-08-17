@@ -28,7 +28,7 @@ const SAFE_PATH = /^[A-Za-z0-9._/@+-]+$/u;
 
 const CHECKS = {
   typecheck: { label: "Full typecheck", command: ["npm", "run", "typecheck"] },
-  lint: { label: "Exact changed-file lint", command: ["./scripts/lint.sh"] },
+  lint: { label: "Exact changed-file lint", command: ["npm", "run", "lint", "--"] },
   format: { label: "Formatting policy", command: ["npm", "run", "fmt"] },
   "react-compiler": { label: "Changed-file React Compiler compliance", command: ["npm", "run", "react-compiler-compliance-check", "--", "check"] },
   jest: { label: "Validated targeted Jest", command: ["npm", "run", "test", "--", "--runInBand"] }
