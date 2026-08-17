@@ -5,13 +5,23 @@ type ReplaceableValue = Record<string, unknown> | unknown[] | string | number | 
  * @param oldVal the value to search for
  * @param newVal the replacement value
  */
-function deepReplaceKeysAndValues<T extends ReplaceableValue>(target: T, oldVal: string, newVal: string): T {
+function deepReplaceKeysAndValues(target: Record<string, unknown>, oldVal: string, newVal: string): Record<string, unknown>;
+function deepReplaceKeysAndValues(target: Record<string, unknown> | undefined, oldVal: string, newVal: string): Record<string, unknown> | undefined;
+function deepReplaceKeysAndValues(target: unknown[], oldVal: string, newVal: string): unknown[];
+function deepReplaceKeysAndValues(target: string, oldVal: string, newVal: string): string;
+function deepReplaceKeysAndValues<T extends number | boolean | undefined | null>(target: T, oldVal: string, newVal: string): T;
+function deepReplaceKeysAndValues(target: ReplaceableValue, oldVal: string, newVal: string): ReplaceableValue;
+function deepReplaceKeysAndValues(target: ReplaceableValue, oldVal: string, newVal: string): unknown {
+    return replaceKeysAndValues(target, oldVal, newVal);
+}
+
+function replaceKeysAndValues(target: unknown, oldVal: string, newVal: string): unknown {
     if (!target) {
         return target;
     }
 
     if (typeof target === 'string') {
-        return target.replace(oldVal, newVal) as T;
+        return target.replace(oldVal, newVal);
     }
 
     if (typeof target !== 'object') {
@@ -19,7 +29,7 @@ function deepReplaceKeysAndValues<T extends ReplaceableValue>(target: T, oldVal:
     }
 
     if (Array.isArray(target)) {
-        return target.map((item) => deepReplaceKeysAndValues(item as T, oldVal, newVal)) as T;
+        return target.map((item) => replaceKeysAndValues(item, oldVal, newVal));
     }
 
     const newObj: Record<string, unknown> = {};
@@ -32,7 +42,7 @@ function deepReplaceKeysAndValues<T extends ReplaceableValue>(target: T, oldVal:
         }
 
         if (typeof val === 'object') {
-            newObj[newKey] = deepReplaceKeysAndValues(val as T, oldVal, newVal);
+            newObj[newKey] = replaceKeysAndValues(val, oldVal, newVal);
             continue;
         }
 
@@ -49,7 +59,7 @@ function deepReplaceKeysAndValues<T extends ReplaceableValue>(target: T, oldVal:
         newObj[newKey] = val;
     }
 
-    return newObj as T;
+    return newObj;
 }
 
 export default deepReplaceKeysAndValues;
