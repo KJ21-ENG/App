@@ -175,7 +175,7 @@ function LHNOptionsList({style, contentContainerStyles, data, onSelectRow, optio
                     onScroll={onScroll}
                     initialScrollIndex={initialScrollIndex}
                     maintainVisibleContentPosition={{disabled: true}}
-                    drawDistance={250}
+                    drawDistance={platform === CONST.PLATFORM.ANDROID ? 1000 : 250}
                     removeClippedSubviews
                 />
             </LHNTooltipContextProvider>

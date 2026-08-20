@@ -2,6 +2,7 @@ import type {SearchListItem} from '@components/Search/SearchList/ListItem/types'
 
 import {FlashList} from '@shopify/flash-list';
 import React, {useCallback} from 'react';
+import {Platform} from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import type BaseSearchListProps from './types';
@@ -44,7 +45,7 @@ function BaseSearchList({
             onViewableItemsChanged={onViewableItemsChanged}
             onLayout={onLayout}
             removeClippedSubviews
-            drawDistance={250}
+            drawDistance={Platform.OS === 'android' ? 1000 : 250}
             contentContainerStyle={contentContainerStyle}
             maintainVisibleContentPosition={{disabled: true}}
             stickyHeaderIndices={stickyHeaderIndices}
