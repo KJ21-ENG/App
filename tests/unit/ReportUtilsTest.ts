@@ -172,6 +172,7 @@ import {
     isAllowedToApproveExpenseReport,
     isArchivedNonExpenseReport,
     isArchivedReport,
+    isExportInProgress,
     isChatUsedForOnboarding,
     isClosedExpenseReportWithNoExpenses,
     isConciergeChatReport,
@@ -22320,6 +22321,69 @@ describe('ReportUtils', () => {
                 },
             ]);
             expect(hasExportError(reportActions, report)).toBe(false);
+        });
+    });
+
+    describe('isExportInProgress', () => {
+        const pendingExportAction = createMock<ReportAction>({
+            actionName: CONST.REPORT.ACTIONS.TYPE.EXPORTED_TO_INTEGRATION,
+            reportActionID: '1',
+            created: '2026-08-22 10:00:00.000',
+            pendingAction: CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD,
+            automatic: false,
+        });
+
+        it('returns true for a pending manual export action', () => {
+            expect(isExportInProgress([pendingExportAction])).toBe(true);
+        });
+
+        it('returns true for a pending automatic export action', () => {
+            expect(isExportInProgress([{...pendingExportAction, automatic: true}])).toBe(true);
+        });
+
+        it('returns false when the pending export action has an error', () => {
+            expect(isExportInProgress([{...pendingExportAction, errors: {'2026-08-22 10:00:01.000': 'Export failed'}}])).toBe(false);
+        });
+
+        it('returns true when a new pending export is newer than an old failure', () => {
+            const oldIntegrationResult = createMock<ReportAction>({
+                actionName: CONST.REPORT.ACTIONS.TYPE.INTEGRATIONS_MESSAGE,
+                reportActionID: '2',
+                created: '2026-08-22 09:59:59.000',
+                originalMessage: {result: {success: false, reconciled: false}},
+            });
+
+            expect(isExportInProgress([oldIntegrationResult, pendingExportAction])).toBe(true);
+        });
+
+        it('returns false when a newer non-reconciled integration result supersedes the pending export', () => {
+            const integrationResult = createMock<ReportAction>({
+                actionName: CONST.REPORT.ACTIONS.TYPE.INTEGRATIONS_MESSAGE,
+                reportActionID: '2',
+                created: '2026-08-22 10:00:01.000',
+                originalMessage: {result: {success: false, reconciled: false}},
+            });
+
+            expect(isExportInProgress([pendingExportAction, integrationResult])).toBe(false);
+        });
+
+        it('returns false after a successful export clears the pending action', () => {
+            expect(isExportInProgress([{...pendingExportAction, pendingAction: null}])).toBe(false);
+        });
+
+        it('ignores a newer reconciled integration message', () => {
+            const reconciledMessage = createMock<ReportAction>({
+                actionName: CONST.REPORT.ACTIONS.TYPE.INTEGRATIONS_MESSAGE,
+                reportActionID: '2',
+                created: '2026-08-22 10:00:01.000',
+                originalMessage: {result: {success: true, reconciled: true}},
+            });
+
+            expect(isExportInProgress([pendingExportAction, reconciledMessage])).toBe(true);
+        });
+
+        it('returns false when there is no export action', () => {
+            expect(isExportInProgress([])).toBe(false);
         });
     });
 

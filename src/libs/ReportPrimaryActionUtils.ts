@@ -43,6 +43,7 @@ import {
     isClosedReport as isClosedReportUtils,
     isCurrentUserSubmitter,
     isExpenseReport as isExpenseReportUtils,
+    isExportInProgress as isExportInProgressUtil,
     isExported as isExportedUtil,
     isHoldCreator,
     isInvoiceReport as isInvoiceReportUtils,
@@ -298,13 +299,14 @@ function isExportAction(report: Report, currentUserLogin: string, policy?: Polic
     }
 
     const syncEnabled = hasIntegrationAutoSync(policy, connectedIntegration);
+    const isExportInProgress = isExportInProgressUtil(reportActions);
     const isExported = isExportedUtil(reportActions, report);
-    if (isExported) {
+    if (isExported && !isExportInProgress) {
         return false;
     }
 
     const hasExportError = hasExportErrorUtil(reportActions, report);
-    if (syncEnabled && !hasExportError) {
+    if (syncEnabled && !hasExportError && !isExportInProgress) {
         return false;
     }
 

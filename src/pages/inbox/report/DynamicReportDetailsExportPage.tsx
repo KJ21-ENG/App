@@ -18,7 +18,7 @@ import {exportToIntegration, markAsManuallyExported} from '@libs/actions/Report'
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackScreenProps} from '@libs/Navigation/PlatformStackNavigation/types';
 import type {ReportDetailsNavigatorParamList} from '@libs/Navigation/types';
-import {canBeExported as canBeExportedUtil, getIntegrationIcon, isExported as isExportedUtil} from '@libs/ReportUtils';
+import {canBeExported as canBeExportedUtil, getIntegrationIcon, isExported as isExportedUtil, isExportInProgress as isExportInProgressUtil} from '@libs/ReportUtils';
 
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
@@ -64,10 +64,14 @@ function DynamicReportDetailsExportPage({route}: DynamicReportDetailsExportPageP
     const iconToDisplay = getIntegrationIcon(connectionName, expensifyIcons, policy);
     const canBeExported = canBeExportedUtil(report);
     const isExported = isExportedUtil(reportActions, report);
+    const isExportInProgress = isExportInProgressUtil(reportActions);
     const connectionNameFriendly = getAccountingIntegrationDisplayName(policy, connectionName, translate);
 
     const confirmExport = useCallback(
         (type: ExportType) => {
+            if (isExportInProgress) {
+                return;
+            }
             if (type === CONST.REPORT.EXPORT_OPTIONS.EXPORT_TO_INTEGRATION) {
                 exportToIntegration(reportID, connectionName, policy);
             } else if (type === CONST.REPORT.EXPORT_OPTIONS.MARK_AS_EXPORTED) {
@@ -75,7 +79,7 @@ function DynamicReportDetailsExportPage({route}: DynamicReportDetailsExportPageP
             }
             Navigation.dismissModal();
         },
-        [connectionName, policy, reportID],
+        [connectionName, isExportInProgress, policy, reportID],
     );
 
     const showExportAgainModal = useCallback(
@@ -103,7 +107,7 @@ function DynamicReportDetailsExportPage({route}: DynamicReportDetailsExportPageP
                     type: CONST.ICON_TYPE_AVATAR,
                 },
             ],
-            isDisabled: !canBeExported,
+            isDisabled: !canBeExported || isExportInProgress,
             keyForList: CONST.REPORT.EXPORT_OPTIONS.EXPORT_TO_INTEGRATION,
         },
         {
@@ -154,6 +158,9 @@ function DynamicReportDetailsExportPage({route}: DynamicReportDetailsExportPageP
             title="common.export"
             connectionName={connectionName}
             onSelectRow={({value}) => {
+                if (isExportInProgress) {
+                    return;
+                }
                 if (isExported) {
                     showExportAgainModal(value);
                 } else {

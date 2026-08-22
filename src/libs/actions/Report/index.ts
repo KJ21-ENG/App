@@ -158,6 +158,7 @@ import {
     isConciergeChatReport,
     isCurrentUserSubmitter,
     isExpenseReport,
+    isExportInProgress,
     isGroupChat as isGroupChatReportUtils,
     isHiddenForCurrentUser,
     isInvoiceReport,
@@ -6387,6 +6388,11 @@ function setGroupDraft(newGroupDraft: Partial<NewGroupChatDraft>) {
 }
 
 function exportToIntegration(reportID: string, connectionName: ConnectionName, policy: OnyxEntry<Policy>) {
+    const reportActions = allReportActions?.[`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportID}`];
+    if (isExportInProgress(reportActions)) {
+        return;
+    }
+
     const action = buildOptimisticExportIntegrationAction(connectionName, false, getExportLabelForConnection(connectionName, policy));
     const optimisticReportActionID = action.reportActionID;
     const previousExportedValue = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${reportID}`]?.isExportedToIntegration;

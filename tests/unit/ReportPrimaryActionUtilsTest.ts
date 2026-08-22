@@ -1092,6 +1092,51 @@ describe('getPrimaryAction', () => {
         ).toBe(CONST.REPORT.PRIMARY_ACTIONS.EXPORT_TO_ACCOUNTING);
     });
 
+    it('should keep EXPORT TO ACCOUNTING selected during the optimistic manual export transition', async () => {
+        const report = createMock<Report>({
+            reportID: REPORT_ID,
+            type: CONST.REPORT.TYPE.EXPENSE,
+            ownerAccountID: CURRENT_USER_ACCOUNT_ID,
+            statusNum: CONST.REPORT.STATUS_NUM.CLOSED,
+            isExportedToIntegration: true,
+        });
+        const policy = createMock<Policy>({
+            connections: {
+                netsuite: {
+                    config: {export: {exporter: CURRENT_USER_EMAIL}},
+                },
+            },
+        });
+        const transaction = createMock<Transaction>({reportID: REPORT_ID});
+        const reportActions = createMock<ReportAction[]>([
+            {
+                actionName: CONST.REPORT.ACTIONS.TYPE.EXPORTED_TO_INTEGRATION,
+                reportActionID: '1',
+                created: '2026-08-22 10:00:00.000',
+                pendingAction: CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD,
+                originalMessage: {inProgress: true},
+            },
+        ]);
+
+        jest.mocked(getValidConnectedIntegration).mockReturnValue('netsuite');
+
+        expect(
+            getReportPrimaryAction({
+                currentUserLogin: CURRENT_USER_EMAIL,
+                currentUserAccountID: CURRENT_USER_ACCOUNT_ID,
+                report,
+                ownerLogin: '',
+                chatReport,
+                reportTransactions: [transaction],
+                reportActions,
+                violations: {},
+                bankAccountList: {},
+                policy,
+                isChatReportArchived: false,
+            }),
+        ).toBe(CONST.REPORT.PRIMARY_ACTIONS.EXPORT_TO_ACCOUNTING);
+    });
+
     it('should return EXPORT TO ACCOUNTING for admin who is not the preferred exporter', async () => {
         const report = createMock<Report>({
             reportID: REPORT_ID,

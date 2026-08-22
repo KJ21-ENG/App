@@ -13299,6 +13299,35 @@ function isExported(reportActions: OnyxEntry<ReportActions> | ReportAction[], re
     return lastSuccessfulExportCreated > lastResetCreated;
 }
 
+/**
+ * Checks whether the latest export action is still waiting for the export request to finish.
+ * A newer integration error supersedes the optimistic export action, while reconciled
+ * integration messages are informational and do not end an export in progress.
+ */
+function isExportInProgress(reportActions: OnyxEntry<ReportActions> | ReportAction[]): boolean {
+    if (!reportActions) {
+        return false;
+    }
+
+    const reportActionList = Array.isArray(reportActions) ? reportActions : Object.values(reportActions);
+    const latestPendingExportAction = reportActionList
+        .filter((action) => isExportIntegrationAction(action) && action.pendingAction === CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD)
+        .sort((firstAction, secondAction) => secondAction.created.localeCompare(firstAction.created))
+        .at(0);
+
+    if (!latestPendingExportAction || Object.keys(latestPendingExportAction.errors ?? {}).length > 0) {
+        return false;
+    }
+
+    return !reportActionList.some(
+        (action) =>
+            isIntegrationMessageAction(action) &&
+            action.created >= latestPendingExportAction.created &&
+            !getOriginalMessage(action)?.result?.reconciled &&
+            Object.keys(action.errors ?? {}).length === 0,
+    );
+}
+
 function hasExportError(reportActions: OnyxEntry<ReportActions> | ReportAction[], report?: OnyxEntry<Report>) {
     if (report?.hasExportError) {
         return true;
@@ -14512,6 +14541,7 @@ export {
     getIntegrationIcon,
     canBeExported,
     isExported,
+    isExportInProgress,
     hasExportError,
     hasOnlyNonReimbursableTransactions,
     getReportLastMessage,

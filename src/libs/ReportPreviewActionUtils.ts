@@ -1,5 +1,5 @@
 import CONST from '@src/CONST';
-import type {BankAccountList, Policy, Report, ReportMetadata, Transaction, TransactionViolation} from '@src/types/onyx';
+import type {BankAccountList, Policy, Report, ReportAction, ReportMetadata, Transaction, TransactionViolation} from '@src/types/onyx';
 
 import type {OnyxCollection, OnyxEntry} from 'react-native-onyx';
 import type {ValueOf} from 'type-fest';
@@ -26,6 +26,7 @@ import {
     isClosedReport,
     isCurrentUserSubmitter,
     isExpenseReport,
+    isExportInProgress,
     isInvoiceReport,
     isIOUReport,
     isOpenReport,
@@ -184,7 +185,7 @@ function canPay(
     return invoiceReceiverPolicy?.role === CONST.POLICY.ROLE.ADMIN && reimbursableSpend > 0;
 }
 
-function canExport(report: Report, currentUserLogin: string, policy?: Policy) {
+function canExport(report: Report, currentUserLogin: string, policy?: Policy, reportActions?: ReportAction[]) {
     const isExpense = isExpenseReport(report);
     const isExporter = policy ? isPreferredExporter(policy, currentUserLogin) : false;
     const isReimbursed = isSettled(report);
@@ -197,13 +198,14 @@ function canExport(report: Report, currentUserLogin: string, policy?: Policy) {
         return false;
     }
 
+    const exportInProgress = isExportInProgress(reportActions);
     const isExported = report.isExportedToIntegration ?? false;
-    if (isExported) {
+    if (isExported && !exportInProgress) {
         return false;
     }
 
     const hasExportError = hasExportErrorUtil(undefined, report);
-    if (syncEnabled && !hasExportError) {
+    if (syncEnabled && !hasExportError && !exportInProgress) {
         return false;
     }
 
@@ -230,6 +232,7 @@ function getReportPreviewAction({
     violationsData,
     reportMetadata,
     ownerLogin,
+    reportActions,
 }: {
     isReportArchived: boolean;
     currentUserAccountID: number;
@@ -246,6 +249,7 @@ function getReportPreviewAction({
     violationsData?: OnyxCollection<TransactionViolation[]>;
     reportMetadata: OnyxEntry<ReportMetadata>;
     ownerLogin: string | undefined;
+    reportActions?: ReportAction[];
 }): ValueOf<typeof CONST.REPORT.REPORT_PREVIEW_ACTIONS> {
     if (!report) {
         return CONST.REPORT.REPORT_PREVIEW_ACTIONS.VIEW;
@@ -277,7 +281,7 @@ function getReportPreviewAction({
     if (canPay(report, isReportArchived, currentUserAccountID, currentUserLogin, bankAccountList, transactions, policy, invoiceReceiverPolicy)) {
         return CONST.REPORT.REPORT_PREVIEW_ACTIONS.PAY;
     }
-    if (canExport(report, currentUserLogin, policy)) {
+    if (canExport(report, currentUserLogin, policy, reportActions)) {
         return CONST.REPORT.REPORT_PREVIEW_ACTIONS.EXPORT_TO_ACCOUNTING;
     }
 
