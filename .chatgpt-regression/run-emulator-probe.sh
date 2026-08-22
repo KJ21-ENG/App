@@ -15,23 +15,44 @@ nohup "$ANDROID_SDK_ROOT/emulator/emulator" \
   -no-boot-anim \
   -no-snapshot \
   -wipe-data \
+  -accel on \
   -gpu swiftshader_indirect \
   -camera-back none \
   -camera-front none \
   -memory 4096 \
   > "$EVIDENCE/emulator-console.txt" 2>&1 &
-echo $! > "$EVIDENCE/emulator.pid"
+EMULATOR_PID=$!
+echo "$EMULATOR_PID" > "$EVIDENCE/emulator.pid"
 
-adb wait-for-device
+sleep 8
+if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+  echo 'Emulator exited during startup.' >&2
+  cat "$EVIDENCE/emulator-console.txt" >&2 || true
+  exit 1
+fi
+
+if ! timeout 180 adb wait-for-device; then
+  echo 'Timed out waiting for an ADB device.' >&2
+  ps -ef > "$EVIDENCE/processes-on-boot-timeout.txt" || true
+  cat "$EVIDENCE/emulator-console.txt" >&2 || true
+  exit 1
+fi
+
 booted=''
-for attempt in $(seq 1 180); do
+for attempt in $(seq 1 120); do
   booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
   if [ "$booted" = '1' ]; then
     break
   fi
   sleep 2
 done
-test "$booted" = '1'
+if [ "$booted" != '1' ]; then
+  echo 'ADB connected, but Android did not finish booting.' >&2
+  adb shell getprop > "$EVIDENCE/getprop-on-boot-timeout.txt" 2>&1 || true
+  cat "$EVIDENCE/emulator-console.txt" >&2 || true
+  exit 1
+fi
+
 adb shell input keyevent 82 || true
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
