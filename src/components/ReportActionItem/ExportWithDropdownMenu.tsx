@@ -110,7 +110,7 @@ function ExportWithDropdownMenu({
     }, [canBeExported, connectionName, connectionNameFriendly, iconToDisplay, isExportInProgress, report?.policyID, translate]);
 
     const handleExport = (exportType: ReportExportType) => {
-        if (!reportID || isExportInProgress) {
+        if (!reportID) {
             return;
         }
         if (exportType === CONST.REPORT.EXPORT_OPTIONS.EXPORT_TO_INTEGRATION) {
@@ -136,9 +136,6 @@ function ExportWithDropdownMenu({
             shouldAlwaysShowDropdownMenu
             anchorAlignment={dropdownAnchorAlignment}
             onPress={(_, value) => {
-                if (isExportInProgress) {
-                    return;
-                }
                 if (isExported) {
                     showConfirmModal({
                         title: translate('workspace.exportAgainModal.title'),
