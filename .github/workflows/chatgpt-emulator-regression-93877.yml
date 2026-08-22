@@ -1,27 +1,24 @@
-name: Build exact PR head Android APK for emulator regression
+name: Build exact-head emulator APK by bundle replacement
 
 on:
   push:
     branches:
       - chatgpt/emulator-regression-93877
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  bundle-and-apk:
+  repack-exact-head-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 120
     env:
       STANDALONE_NEW_DOT: "true"
       SENTRY_DISABLE_AUTO_UPLOAD: "true"
       IS_HYBRID_APP: "false"
       ENV: adhoc
+      EXACT_HEAD: 78ef1215915a659779791df28c40111a64fd83bb
     steps:
       - name: Checkout exact upstream PR head
         uses: actions/checkout@v4
@@ -35,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "78ef1215915a659779791df28c40111a64fd83bb"
+          test "$(git rev-parse HEAD)" = "$EXACT_HEAD"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -47,7 +44,7 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Set up exact npm and dependencies
+      - name: Install exact npm and project dependencies
         shell: bash
         run: |
           set -euo pipefail
@@ -64,77 +61,201 @@ jobs:
           cp .env.staging .env.adhoc
           sed -i 's/ENVIRONMENT=staging/ENVIRONMENT=adhoc/' .env.adhoc
 
-      - name: Install exact Android build dependencies
+      - name: Build exact Metro and Hermes bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENTRY_FILE="$(node -e "require('expo/scripts/resolveAppEntry')" "$PWD" android absolute)"
+          mkdir -p /tmp/exact-head/assets
+          npx rock bundle \
+            --platform android \
+            --dev false \
+            --entry-file "$ENTRY_FILE" \
+            --bundle-output /tmp/exact-head/index.android.bundle \
+            --assets-dest /tmp/exact-head/assets \
+            --reset-cache
+
+          HERMESC="$(find node_modules/react-native -type f -path '*/linux64-bin/hermesc' -print -quit)"
+          test -n "$HERMESC"
+          chmod +x "$HERMESC"
+          "$HERMESC" -O -emit-binary -out /tmp/exact-head/index.android.bundle.hbc /tmp/exact-head/index.android.bundle
+
+          printf '%s\n' "$EXACT_HEAD" > /tmp/exact-head/EXACT_HEAD_SHA.txt
+          file /tmp/exact-head/index.android.bundle /tmp/exact-head/index.android.bundle.hbc
+          ls -lh /tmp/exact-head/index.android.bundle /tmp/exact-head/index.android.bundle.hbc
+
+      - name: Find latest official Android ad-hoc shell for PR 93877
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/official-shell
+          curl -fsSL \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/Expensify/App/issues/93877/comments?per_page=100&page=1' \
+            > /tmp/official-shell/comments-1.json
+          curl -fsSL \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/Expensify/App/issues/93877/comments?per_page=100&page=2' \
+            > /tmp/official-shell/comments-2.json
+
+          jq -s '
+            add
+            | map(select(.body | contains("rock-android-Adhoc-")))
+            | sort_by(.created_at)
+            | last
+          ' /tmp/official-shell/comments-1.json /tmp/official-shell/comments-2.json \
+            > /tmp/official-shell/latest-comment.json
+
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import re
+
+          root = pathlib.Path('/tmp/official-shell')
+          comment = json.loads((root / 'latest-comment.json').read_text())
+          if not comment:
+              raise SystemExit('No official Android ad-hoc build comment found')
+          body = comment.get('body', '')
+          urls = re.findall(
+              r'https://ad-hoc-expensify-cash\.s3\.[^\s|)]+/rock-artifacts/ad-hoc/rock-android-Adhoc-[^\s|)]+/index\.html',
+              body,
+          )
+          if not urls:
+              raise SystemExit('Official Android ad-hoc index URL was not found in latest build comment')
+          (root / 'index-url.txt').write_text(urls[0] + '\n')
+          (root / 'shell-comment-metadata.txt').write_text(
+              f"comment_id={comment.get('id')}\n"
+              f"created_at={comment.get('created_at')}\n"
+              f"html_url={comment.get('html_url')}\n"
+              f"index_url={urls[0]}\n"
+          )
+          print((root / 'shell-comment-metadata.txt').read_text())
+          PY
+
+      - name: Download official APK shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html.parser
+          import pathlib
+          import re
+          import urllib.parse
+          import urllib.request
+
+          root = pathlib.Path('/tmp/official-shell')
+          index_url = (root / 'index-url.txt').read_text().strip()
+          request = urllib.request.Request(index_url, headers={'User-Agent': 'exact-head-regression-builder'})
+          with urllib.request.urlopen(request, timeout=60) as response:
+              page = response.read().decode('utf-8', errors='replace')
+          (root / 'index.html').write_text(page)
+
+          candidates = re.findall(r'''(?:href|src)=["']([^"']+\.apk(?:\?[^"']*)?)["']''', page, flags=re.I)
+          if not candidates:
+              candidates = re.findall(r'''https?://[^\s"']+\.apk(?:\?[^\s"']*)?''', page, flags=re.I)
+          if not candidates:
+              raise SystemExit('No APK URL found in official ad-hoc index page')
+
+          apk_url = urllib.parse.urljoin(index_url, candidates[0])
+          (root / 'apk-url.txt').write_text(apk_url + '\n')
+          print(f'Downloading APK shell from {apk_url}')
+          request = urllib.request.Request(apk_url, headers={'User-Agent': 'exact-head-regression-builder'})
+          with urllib.request.urlopen(request, timeout=300) as response, open(root / 'official-shell.apk', 'wb') as output:
+              while True:
+                  chunk = response.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  output.write(chunk)
+          PY
+          file /tmp/official-shell/official-shell.apk
+          ls -lh /tmp/official-shell/official-shell.apk
+
+      - name: Replace bundled JavaScript while preserving APK entry metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import copy
+          import pathlib
+          import zipfile
+
+          root = pathlib.Path('/tmp/official-shell')
+          source_apk = root / 'official-shell.apk'
+          output_apk = root / 'unsigned-exact-head.apk'
+          text_bundle = pathlib.Path('/tmp/exact-head/index.android.bundle')
+          hermes_bundle = pathlib.Path('/tmp/exact-head/index.android.bundle.hbc')
+
+          with zipfile.ZipFile(source_apk, 'r') as source:
+              bundle_names = [name for name in source.namelist() if name.endswith('index.android.bundle')]
+              if len(bundle_names) != 1:
+                  raise SystemExit(f'Expected one index.android.bundle entry, found: {bundle_names}')
+              bundle_name = bundle_names[0]
+              old_bundle = source.read(bundle_name)
+              old_info = source.getinfo(bundle_name)
+
+              # Ad-hoc release builds use Hermes. Fall back to the text bundle only if the shell is text-based.
+              use_hermes = not old_bundle.startswith((b'var ', b'!function', b'(function', b'__d('))
+              replacement = hermes_bundle.read_bytes() if use_hermes else text_bundle.read_bytes()
+              bundle_format = 'hermes' if use_hermes else 'metro-text'
+
+              with zipfile.ZipFile(output_apk, 'w', allowZip64=True) as target:
+                  for info in source.infolist():
+                      if info.filename.upper().startswith('META-INF/'):
+                          continue
+                      cloned = copy.copy(info)
+                      data = replacement if info.filename == bundle_name else source.read(info.filename)
+                      target.writestr(cloned, data, compress_type=info.compress_type)
+
+          (root / 'bundle-replacement-metadata.txt').write_text(
+              f'bundle_entry={bundle_name}\n'
+              f'bundle_format={bundle_format}\n'
+              f'old_bundle_size={len(old_bundle)}\n'
+              f'new_bundle_size={len(replacement)}\n'
+              f'old_compression={old_info.compress_type}\n'
+          )
+          print((root / 'bundle-replacement-metadata.txt').read_text())
+          PY
+          file /tmp/official-shell/unsigned-exact-head.apk
+          ls -lh /tmp/official-shell/unsigned-exact-head.apk
+
+      - name: Align and sign exact-head APK
         shell: bash
         run: |
           set -euo pipefail
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;36.0.0" \
-            "ndk;27.1.12297006"
-          test -f "$ANDROID_SDK_ROOT/ndk/27.1.12297006/source.properties"
-          printf 'sdk.dir=%s\nndk.dir=%s\n' \
-            "$ANDROID_SDK_ROOT" \
-            "$ANDROID_SDK_ROOT/ndk/27.1.12297006" \
-            > android/local.properties
-          "$SDKMANAGER" --list_installed | grep -E 'platforms;android-36|build-tools;36.0.0|ndk;27.1.12297006'
+          "$SDKMANAGER" 'build-tools;36.0.0' 'platform-tools'
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
+          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          "$ZIPALIGN" -p -f 4 \
+            /tmp/official-shell/unsigned-exact-head.apk \
+            /tmp/official-shell/aligned-exact-head.apk
+          "$APKSIGNER" sign \
+            --ks android/app/debug.keystore \
+            --ks-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --key-pass pass:android \
+            --out /tmp/official-shell/Expensify-93877-78ef121-emulator.apk \
+            /tmp/official-shell/aligned-exact-head.apk
+          "$APKSIGNER" verify --verbose --print-certs \
+            /tmp/official-shell/Expensify-93877-78ef121-emulator.apk \
+            | tee /tmp/official-shell/apksigner-verification.txt
+          sha256sum /tmp/official-shell/Expensify-93877-78ef121-emulator.apk \
+            | tee /tmp/official-shell/APK_SHA256SUM.txt
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build exact native APK and inject exact-head bundle
-        id: rock-build
-        continue-on-error: true
-        uses: callstackincubator/android@4cedf4d9b5c167452c96fe67233577e0fde9a025
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          SENTRY_DISABLE_AUTO_UPLOAD: "true"
-          IS_HYBRID_APP: "false"
-          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.1.12297006
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.1.12297006
-        with:
-          variant: Adhoc
-          aab: false
-          sign: true
-          re-sign: true
-          ad-hoc: true
-          setup-java: false
-          keystore-file: android/app/debug.keystore
-          keystore-store-file: debug.keystore
-          keystore-store-password: android
-          keystore-key-alias: androiddebugkey
-          keystore-key-password: android
-          keystore-path: app/debug.keystore
-          comment-bot: false
-          custom-identifier: exact-78ef121
-          rock-build-extra-params: '--extra-params "-PreactNativeArchitectures=x86_64 --profile"'
-
-      - name: Collect APK candidates and diagnostics
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/exact-apk-candidates
-          find android .rock -type f -name '*.apk' -print -exec cp -v '{}' /tmp/exact-apk-candidates/ \; 2>/dev/null || true
-          printf 'rock_step_outcome=%s\n' '${{ steps.rock-build.outcome }}' > /tmp/exact-apk-candidates/BUILD_STATUS.txt
-          printf 'exact_head=%s\n' '78ef1215915a659779791df28c40111a64fd83bb' >> /tmp/exact-apk-candidates/BUILD_STATUS.txt
-          find /tmp/exact-apk-candidates -maxdepth 1 -type f -printf '%f %s bytes\n'
-
-      - name: Upload APK candidates
-        if: always()
+      - name: Upload exact-head emulator APK
         uses: actions/upload-artifact@v4
         with:
-          name: exact-head-android-apk-candidates-v2
-          path: /tmp/exact-apk-candidates
-          if-no-files-found: warn
+          name: expensify-93877-78ef121-emulator-apk
+          path: |
+            /tmp/official-shell/Expensify-93877-78ef121-emulator.apk
+            /tmp/official-shell/APK_SHA256SUM.txt
+            /tmp/official-shell/apksigner-verification.txt
+            /tmp/official-shell/bundle-replacement-metadata.txt
+            /tmp/official-shell/shell-comment-metadata.txt
+            /tmp/exact-head/EXACT_HEAD_SHA.txt
           compression-level: 0
           retention-days: 3
