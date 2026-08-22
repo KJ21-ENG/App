@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - chatgpt/emulator-regression-93877
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -139,7 +142,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import html.parser
           import pathlib
           import re
           import urllib.parse
@@ -195,7 +197,6 @@ jobs:
               old_bundle = source.read(bundle_name)
               old_info = source.getinfo(bundle_name)
 
-              # Ad-hoc release builds use Hermes. Fall back to the text bundle only if the shell is text-based.
               use_hermes = not old_bundle.startswith((b'var ', b'!function', b'(function', b'__d('))
               replacement = hermes_bundle.read_bytes() if use_hermes else text_bundle.read_bytes()
               bundle_format = 'hermes' if use_hermes else 'metro-text'
