@@ -1,3 +1,4 @@
+# Retry with bounded emulator startup diagnostics.
 name: Temporary PR 93877 Android emulator probe
 
 on:
