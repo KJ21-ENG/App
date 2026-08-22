@@ -82,7 +82,7 @@ function ExportWithDropdownMenu({
     const dropdownOptions: Array<DropdownOption<ReportExportType>> = useMemo(() => {
         const optionTemplate = {
             icon: iconToDisplay,
-            disabled: !canBeExported || isExportInProgress,
+            disabled: !canBeExported,
             displayInDefaultIconColor: true,
             iconWidth: variables.iconSizeMenuItem,
             iconHeight: variables.iconSizeMenuItem,
@@ -105,7 +105,9 @@ function ExportWithDropdownMenu({
             options.sort((method) => (method.value === exportMethod ? -1 : 0));
         }
         return options;
-    }, [canBeExported, connectionName, connectionNameFriendly, exportMethods, iconToDisplay, isExportInProgress, report?.policyID, styles.integrationIcon, translate]);
+        // We do not include exportMethods not to re-render the component when the preferred export method changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canBeExported, iconToDisplay, connectionName, connectionNameFriendly, report?.policyID, translate]);
 
     const handleExport = (exportType: ReportExportType) => {
         if (!reportID) {
