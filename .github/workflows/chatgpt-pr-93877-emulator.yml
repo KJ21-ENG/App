@@ -1,4 +1,4 @@
-# Diagnostic: capture seeded and post-launch OnyxDB files at the first authentication gate.
+# Hybrid identity seed: preserve synthetic Onyx through OldDot -> NewDot startup.
 name: Temporary PR 93877 Android table regression
 
 on:
