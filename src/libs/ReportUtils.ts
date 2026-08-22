@@ -13310,10 +13310,12 @@ function isExportInProgress(reportActions: OnyxEntry<ReportActions> | ReportActi
     }
 
     const reportActionList = Array.isArray(reportActions) ? reportActions : Object.values(reportActions);
-    const latestPendingExportAction = reportActionList
-        .filter((action) => isExportIntegrationAction(action) && action.pendingAction === CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD)
-        .sort((firstAction, secondAction) => secondAction.created.localeCompare(firstAction.created))
-        .at(0);
+    const latestPendingExportAction = reportActionList.reduce<ReportAction | undefined>((latestAction, action) => {
+        if (!isExportIntegrationAction(action) || action.pendingAction !== CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD) {
+            return latestAction;
+        }
+        return !latestAction || action.created > latestAction.created ? action : latestAction;
+    }, undefined);
 
     if (!latestPendingExportAction || Object.keys(latestPendingExportAction.errors ?? {}).length > 0) {
         return false;

@@ -6388,7 +6388,7 @@ function setGroupDraft(newGroupDraft: Partial<NewGroupChatDraft>) {
 }
 
 function exportToIntegration(reportID: string, connectionName: ConnectionName, policy: OnyxEntry<Policy>) {
-    const reportActions = allReportActions?.[`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportID}`];
+    const reportActions = getAllReportActions(reportID);
     if (isExportInProgress(reportActions)) {
         return;
     }

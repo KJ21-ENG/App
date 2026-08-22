@@ -1101,6 +1101,7 @@ describe('getPrimaryAction', () => {
             isExportedToIntegration: true,
         });
         const policy = createMock<Policy>({
+            type: CONST.POLICY.TYPE.CORPORATE,
             connections: {
                 netsuite: {
                     config: {export: {exporter: CURRENT_USER_EMAIL}},
