@@ -1,11 +1,17 @@
 import {act, render, screen} from '@testing-library/react-native';
-import React from 'react';
-import type {OnyxEntry} from 'react-native-onyx';
-import Onyx from 'react-native-onyx';
+
 import ReportWelcomeText from '@components/ReportWelcomeText';
+
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {PersonalDetails, Policy, Report} from '@src/types/onyx';
+
+import type ReactNative from 'react-native';
+import type {OnyxEntry} from 'react-native-onyx';
+
+import React from 'react';
+import Onyx from 'react-native-onyx';
+
 import waitForBatchedUpdatesWithAct from '../utils/waitForBatchedUpdatesWithAct';
 
 jest.mock('@hooks/useLocalize', () =>
@@ -34,6 +40,9 @@ jest.mock('@hooks/useThemeStyles', () =>
 
 jest.mock('@libs/Navigation/Navigation', () => ({
     getReportRHPActiveRoute: jest.fn(() => ''),
+    getActiveRoute: jest.fn(() => ''),
+    getActiveRouteWithoutParams: jest.fn(() => ''),
+    isNavigationReady: jest.fn(() => Promise.resolve()),
     navigate: jest.fn(),
 }));
 
@@ -56,9 +65,7 @@ jest.mock('@hooks/usePreferredPolicy', () =>
 jest.mock('@hooks/useReportIsArchived', () => jest.fn(() => false));
 
 jest.mock('@components/RenderHTML', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const ReactNative = require('react-native') as {Text: React.ComponentType<{children?: React.ReactNode}>};
-    const {Text} = ReactNative;
+    const {Text} = jest.requireActual<typeof ReactNative>('react-native');
     function MockRenderHTML({html}: {html: string}) {
         return <Text>{html}</Text>;
     }
@@ -162,7 +169,7 @@ describe('ReportWelcomeText', () => {
         expect(screen.getByText('Expensify')).toBeTruthy();
     });
 
-    it('uses personal details from Onyx via useMappedPersonalDetails', async () => {
+    it('uses personal details from Onyx', async () => {
         const report: Report = {
             reportID: '5',
             type: CONST.REPORT.TYPE.CHAT,

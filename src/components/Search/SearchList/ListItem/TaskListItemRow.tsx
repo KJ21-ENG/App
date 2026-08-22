@@ -1,15 +1,14 @@
-import React from 'react';
-import type {StyleProp, ViewStyle} from 'react-native';
-import {View} from 'react-native';
 import Avatar from '@components/Avatar';
 import Badge from '@components/Badge';
-import Button from '@components/Button';
+import Button from '@components/ButtonComposed';
 import Icon from '@components/Icon';
 import {useSession} from '@components/OnyxListItemProvider';
 import TextWithTooltip from '@components/TextWithTooltip';
+
 import useHasOutstandingChildTask from '@hooks/useHasOutstandingChildTask';
 import {useMemoizedLazyExpensifyIcons} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
+import useOnyx from '@hooks/useOnyx';
 import useParentReport from '@hooks/useParentReport';
 import useParentReportAction from '@hooks/useParentReportAction';
 import useReportIsArchived from '@hooks/useReportIsArchived';
@@ -17,14 +16,26 @@ import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useStyleUtils from '@hooks/useStyleUtils';
 import useTheme from '@hooks/useTheme';
 import useThemeStyles from '@hooks/useThemeStyles';
+
 import {callFunctionIfActionIsAllowed} from '@libs/actions/Session';
 import {canActionTask, completeTask} from '@libs/actions/Task';
+
 import variables from '@styles/variables';
+
 import CONST from '@src/CONST';
+import ONYXKEYS from '@src/ONYXKEYS';
 import type {Report} from '@src/types/onyx';
+
+import type {StyleProp, ViewStyle} from 'react-native';
+
+import {delegateEmailSelector} from '@selectors/Account';
+import React from 'react';
+import {View} from 'react-native';
+
+import type {TaskListItemType} from './types';
+
 import AvatarWithTextCell from './AvatarWithTextCell';
 import DateCell from './DateCell';
-import type {TaskListItemType} from './types';
 import UserInfoCell from './UserInfoCell';
 
 type TaskListItemRowProps = {
@@ -79,6 +90,7 @@ function ActionCell({taskItem, isLargeScreenWidth}: TaskCellProps) {
     const isParentReportArchived = useReportIsArchived(parentReport?.reportID);
     const hasOutstandingChildTask = useHasOutstandingChildTask(taskItem.report);
     const parentReportAction = useParentReportAction(taskItem.report);
+    const [delegateEmail] = useOnyx(ONYXKEYS.ACCOUNT, {selector: delegateEmailSelector});
     const isTaskActionable = canActionTask(taskItem.report, parentReportAction, session?.accountID, parentReport, isParentReportArchived);
     const isTaskCompleted = taskItem.statusNum === CONST.REPORT.STATUS_NUM.APPROVED && taskItem.stateNum === CONST.REPORT.STATE_NUM.APPROVED;
 
@@ -102,15 +114,16 @@ function ActionCell({taskItem, isLargeScreenWidth}: TaskCellProps) {
 
     return (
         <Button
-            small
-            success
-            text={translate('task.action')}
+            size={CONST.BUTTON_SIZE.SMALL}
+            variant={CONST.BUTTON_VARIANT.SUCCESS}
             style={[styles.w100]}
             isDisabled={!isTaskActionable}
             onPress={callFunctionIfActionIsAllowed(() => {
-                completeTask(taskItem as Report, parentReport?.hasOutstandingChildTask ?? false, hasOutstandingChildTask, parentReportAction, taskItem.reportID);
+                completeTask(taskItem as Report, parentReport?.hasOutstandingChildTask ?? false, hasOutstandingChildTask, parentReportAction, delegateEmail, taskItem.reportID);
             })}
-        />
+        >
+            <Button.Text>{translate('task.action')}</Button.Text>
+        </Button>
     );
 }
 
@@ -183,7 +196,7 @@ function TaskListItemRow({item, containerStyle, showTooltip}: TaskListItemRowPro
                         {!!item.assignee.accountID && (
                             <Avatar
                                 imageStyles={[styles.alignSelfCenter]}
-                                size={CONST.AVATAR_SIZE.MID_SUBSCRIPT}
+                                size={CONST.AVATAR_SIZE.XXX_SMALL}
                                 source={item.assignee.avatar}
                                 name={item.formattedAssignee}
                                 type={CONST.ICON_TYPE_AVATAR}

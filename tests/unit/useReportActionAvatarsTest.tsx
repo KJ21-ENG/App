@@ -1,10 +1,15 @@
 import {renderHook} from '@testing-library/react-native';
-import Onyx from 'react-native-onyx';
+
 import OnyxListItemProvider from '@components/OnyxListItemProvider';
 import useReportActionAvatars from '@components/ReportActionAvatars/useReportActionAvatars';
+
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {PersonalDetailsList} from '@src/types/onyx';
+import type ReportActionName from '@src/types/onyx/ReportActionName';
+
+import Onyx from 'react-native-onyx';
+
 import createRandomPolicy from '../utils/collections/policies';
 import createRandomReportAction from '../utils/collections/reportActions';
 import {createAdminRoom, createAnnounceRoom, createInvoiceReport, createInvoiceRoom, createRegularChat} from '../utils/collections/reports';
@@ -43,17 +48,17 @@ describe('useReportActionAvatars', () => {
 
         test.each(
             Object.values(CONST.REPORT.ACTIONS.TYPE)
-                .reduce((result, cur) => {
+                .reduce<ReportActionName[]>((result, cur) => {
                     if (typeof cur === 'object') {
                         result.push(...Object.values(cur));
                     } else {
                         result.push(cur);
                     }
                     return result;
-                }, [] as string[])
-                .map((value) => [value === CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW, value]),
+                }, [])
+                .map((value) => [value === CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW, value] as const),
         )('With an invoice report, isWorkspaceActor should be %s when the actionName is "%s"', async (expected, actionName) => {
-            const reportAction = {...mockReportAction, actionName: actionName as typeof CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT};
+            const reportAction = {...mockReportAction, actionName};
             await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportAction.reportActionID}`, {[reportAction.reportActionID]: reportAction});
 
             const {
@@ -146,6 +151,75 @@ describe('useReportActionAvatars', () => {
             // Same bug as admin room: useNearestReportAvatars falls through to getIcons(policyRoom) → workspace icon.
             // Proves the fix must cover all policy room types, not just admin rooms.
             expect(data.avatars.at(0)?.type).toBe(CONST.ICON_TYPE_WORKSPACE);
+        });
+    });
+
+    describe('derived parent preview action', () => {
+        const chatReportID = 9100;
+        const iouReportID = 9101;
+        const previewActionID = '9102';
+
+        beforeEach(async () => {
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${chatReportID}`, {
+                ...createRegularChat(chatReportID, [1, 2]),
+                reportID: String(chatReportID),
+            });
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${iouReportID}`, {
+                ...createInvoiceReport(iouReportID),
+                reportID: String(iouReportID),
+                type: CONST.REPORT.TYPE.IOU,
+                chatReportID: String(chatReportID),
+                parentReportActionID: previewActionID,
+                ownerAccountID: 1,
+                managerID: 2,
+            });
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${chatReportID}`, {
+                [previewActionID]: {
+                    ...createRandomReportAction(Number(previewActionID)),
+                    reportActionID: previewActionID,
+                    actionName: CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW,
+                    childReportID: String(iouReportID),
+                    childLastActorAccountID: 1,
+                    childOwnerAccountID: 1,
+                    childManagerAccountID: 2,
+                },
+            });
+            await waitForBatchedUpdates();
+        });
+
+        afterEach(() => {
+            Onyx.clear();
+        });
+
+        test('updates derived parent preview action without a refresh', async () => {
+            const iouReport = {
+                ...createInvoiceReport(iouReportID),
+                reportID: String(iouReportID),
+                type: CONST.REPORT.TYPE.IOU,
+                chatReportID: String(chatReportID),
+                parentReportActionID: previewActionID,
+                ownerAccountID: 1,
+                managerID: 2,
+            };
+
+            const {result} = renderHook(() => useReportActionAvatars({report: iouReport, action: undefined}), {wrapper});
+
+            expect(result.current.source.action?.childLastActorAccountID).toBe(1);
+
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${chatReportID}`, {
+                [previewActionID]: {
+                    ...createRandomReportAction(Number(previewActionID)),
+                    reportActionID: previewActionID,
+                    actionName: CONST.REPORT.ACTIONS.TYPE.REPORT_PREVIEW,
+                    childReportID: String(iouReportID),
+                    childLastActorAccountID: 2,
+                    childOwnerAccountID: 1,
+                    childManagerAccountID: 2,
+                },
+            });
+            await waitForBatchedUpdates();
+
+            expect(result.current.source.action?.childLastActorAccountID).toBe(2);
         });
     });
 });

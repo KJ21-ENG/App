@@ -11536,11 +11536,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const core = __importStar(__nccwpck_require__(2186));
 const ActionUtils_1 = __nccwpck_require__(6981);
 const CONST_1 = __importDefault(__nccwpck_require__(9873));
 const GithubUtils_1 = __importDefault(__nccwpck_require__(9296));
 const isEmptyObject_1 = __nccwpck_require__(6497);
+const core = __importStar(__nccwpck_require__(2186));
 const DEFAULT_PAYLOAD = {
     owner: CONST_1.default.GITHUB_OWNER,
     repo: CONST_1.default.APP_REPO,
@@ -11718,16 +11718,10 @@ const CONST = {
         INTERNAL_QA: 'InternalQA',
         HELP_WANTED: 'Help Wanted',
         CP_STAGING: 'CP Staging',
+        DAILY: 'Daily',
     },
     STATE: {
         OPEN: 'open',
-    },
-    COMMENT: {
-        TYPE_BOT: 'Bot',
-        NAME_MELVIN_BOT: 'melvin-bot[bot]',
-        NAME_MELVIN_USER: 'MelvinBot',
-        NAME_CODEX: 'chatgpt-codex-connector',
-        NAME_GITHUB_ACTIONS: 'github-actions',
     },
     ACTIONS: {
         CREATED: 'created',
@@ -11764,8 +11758,14 @@ const CONST = {
     MOBILE_EXPENSIFY_URL: `https://github.com/${GIT_CONST.GITHUB_OWNER}/${GIT_CONST.MOBILE_EXPENSIFY_REPO}`,
     NO_ACTION: 'NO_ACTION',
     ACTION_EDIT: 'ACTION_EDIT',
-    ACTION_REQUIRED: 'ACTION_REQUIRED',
-    ACTION_HIDE_DUPLICATE: 'ACTION_HIDE_DUPLICATE',
+    /**
+     * What a comment on a Help Wanted issue is trying to do, for comments that don't follow the proposal template.
+     */
+    INTENT: {
+        NOT_AN_ATTEMPT: 'NOT_AN_ATTEMPT',
+        GENUINE_ATTEMPT: 'GENUINE_ATTEMPT',
+        SPAM: 'SPAM',
+    },
 };
 exports["default"] = CONST;
 
@@ -11814,7 +11814,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-/* eslint-disable @typescript-eslint/naming-convention, import/no-import-module-exports */
+/* eslint-disable @typescript-eslint/naming-convention */
 const core = __importStar(__nccwpck_require__(2186));
 const utils_1 = __nccwpck_require__(3030);
 const plugin_paginate_rest_1 = __nccwpck_require__(4193);
@@ -11902,11 +11902,11 @@ class GithubUtils {
     /**
      * Fetch all pull requests given a list of PR numbers.
      */
-    static fetchAllPullRequests(pullRequestNumbers) {
+    static fetchAllPullRequests(pullRequestNumbers, repo = CONST_1.default.APP_REPO) {
         const oldestPR = pullRequestNumbers.sort((a, b) => a - b).at(0);
         return this.paginate(this.octokit.pulls.list, {
             owner: CONST_1.default.GITHUB_OWNER,
-            repo: CONST_1.default.APP_REPO,
+            repo,
             state: 'all',
             sort: 'created',
             direction: 'desc',
@@ -11987,6 +11987,20 @@ class GithubUtils {
             issue_number: number,
             body: messageBody,
         });
+    }
+    /**
+     * Collapse a comment as spam. Only exposed over GraphQL, and unlike rewriting the body it leaves the
+     * original text intact and can be undone from the UI.
+     */
+    static minimizeCommentAsSpam(commentNodeID) {
+        console.log(`Minimizing comment ${commentNodeID} as spam`);
+        return this.graphql(`mutation($subjectId: ID!) {
+                minimizeComment(input: {subjectId: $subjectId, classifier: SPAM}) {
+                    minimizedComment {
+                        isMinimized
+                    }
+                }
+            }`, { subjectId: commentNodeID });
     }
     /**
      * Get the most recent workflow run for the given New Expensify workflow.

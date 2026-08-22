@@ -1,34 +1,36 @@
-import React, {useRef} from 'react';
-import {View} from 'react-native';
-import NavigationTabBar from '@components/Navigation/NavigationTabBar';
 import NAVIGATION_TABS from '@components/Navigation/NavigationTabBar/NAVIGATION_TABS';
 import QuickCreationActionsBar from '@components/Navigation/QuickCreationActionsBar';
+import TabBarBottomContent from '@components/Navigation/TabBarBottomContent';
 import TopBar from '@components/Navigation/TopBar';
 import ReceiptScanDropZone from '@components/ReceiptScanDropZone';
 import ScreenWrapper from '@components/ScreenWrapper';
 import ScrollView from '@components/ScrollView';
-import useConfirmReadyToOpenApp from '@hooks/useConfirmReadyToOpenApp';
+
 import useDocumentTitle from '@hooks/useDocumentTitle';
 import useLocalize from '@hooks/useLocalize';
 import useOnyx from '@hooks/useOnyx';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
-import usePreloadFullScreenNavigators from '@libs/Navigation/AppNavigator/usePreloadFullScreenNavigators';
+
 import variables from '@styles/variables';
+
 import ONYXKEYS from '@src/ONYXKEYS';
-import AnnouncementSection from './AnnouncementSection';
-import AssignedCardsSection from './AssignedCardsSection';
+
+import React, {useRef} from 'react';
+import {View} from 'react-native';
+
 import DiscoverSection from './DiscoverSection';
 import ForYouSection from './ForYouSection';
 import FreeTrialSection from './FreeTrialSection';
 import GettingStartedSection from './GettingStartedSection';
-import SpendOverTimeSection from './SpendOverTimeSection';
+import InsightsSection from './InsightsSection';
+import RecentlyAddedSection from './RecentlyAddedSection';
 import TimeSensitiveSection from './TimeSensitiveSection';
 import UpcomingTravelSection from './UpcomingTravelSection';
+import YourSpendSection from './YourSpendSection';
 
 function HomePage() {
     const {shouldUseNarrowLayout} = useResponsiveLayout();
-    const shouldDisplayLHB = !shouldUseNarrowLayout;
     const styles = useThemeStyles();
     const {translate} = useLocalize();
     useDocumentTitle(translate('common.home'));
@@ -36,13 +38,6 @@ function HomePage() {
     const [isLoadingReportData = false] = useOnyx(ONYXKEYS.IS_LOADING_REPORT_DATA);
     const isForYouLoading = !!(isLoadingApp || isLoadingReportData);
     const receiptDropTargetRef = useRef<View>(null);
-
-    // This hook signals that the app is ready to be opened after HomePage mounts
-    // to make sure everything loads properly
-    useConfirmReadyToOpenApp();
-
-    // This hook preloads the screens of adjacent tabs to make changing tabs faster.
-    usePreloadFullScreenNavigators();
 
     return (
         <View style={styles.flex1}>
@@ -55,14 +50,8 @@ function HomePage() {
                     shouldShowOfflineIndicatorInWideScreen
                     testID="HomePage"
                     enableEdgeToEdgeBottomSafeAreaPadding={false}
-                    bottomContent={
-                        shouldUseNarrowLayout && (
-                            <NavigationTabBar
-                                selectedTab={NAVIGATION_TABS.HOME}
-                                shouldShowFloatingButtons
-                            />
-                        )
-                    }
+                    bottomContent={<TabBarBottomContent selectedTab={NAVIGATION_TABS.HOME} />}
+                    bottomContentStyle={styles.overflowVisible}
                 >
                     <TopBar
                         breadcrumbLabel={translate('common.home')}
@@ -73,7 +62,11 @@ function HomePage() {
                         contentContainerStyle={styles.homePageContentContainer}
                         addBottomSafeAreaPadding
                     >
-                        {!shouldUseNarrowLayout && <QuickCreationActionsBar />}
+                        {!shouldUseNarrowLayout && (
+                            <View style={styles.centeredContentWidthLimiter}>
+                                <QuickCreationActionsBar />
+                            </View>
+                        )}
                         <View style={styles.homePageMainLayout(shouldUseNarrowLayout)}>
                             {/* Widgets handle their own visibility and may return null to avoid duplicating visibility logic here */}
                             {shouldUseNarrowLayout ? (
@@ -83,31 +76,36 @@ function HomePage() {
                                     <GettingStartedSection />
                                     <ForYouSection />
                                     <UpcomingTravelSection />
-                                    <AssignedCardsSection />
-                                    <SpendOverTimeSection />
+                                    <YourSpendSection />
+                                    <RecentlyAddedSection />
+                                    <InsightsSection />
                                     <DiscoverSection />
-                                    <AnnouncementSection />
                                 </>
                             ) : (
                                 <>
-                                    <View style={styles.homePageLeftColumn}>
+                                    <View
+                                        testID="homePageLeftColumn"
+                                        style={styles.homePageLeftColumn}
+                                    >
                                         <TimeSensitiveSection />
-                                        <ForYouSection />
-                                        <SpendOverTimeSection />
-                                        <DiscoverSection />
-                                    </View>
-                                    <View style={styles.homePageRightColumn}>
-                                        <FreeTrialSection />
                                         <GettingStartedSection />
+                                        <ForYouSection />
+                                        <InsightsSection />
+                                    </View>
+                                    <View
+                                        testID="homePageRightColumn"
+                                        style={styles.homePageRightColumn}
+                                    >
+                                        <FreeTrialSection />
+                                        <YourSpendSection />
+                                        <RecentlyAddedSection />
                                         <UpcomingTravelSection />
-                                        <AssignedCardsSection />
-                                        <AnnouncementSection />
+                                        <DiscoverSection />
                                     </View>
                                 </>
                             )}
                         </View>
                     </ScrollView>
-                    {shouldDisplayLHB && <NavigationTabBar selectedTab={NAVIGATION_TABS.HOME} />}
                 </ScreenWrapper>
             </View>
             <ReceiptScanDropZone

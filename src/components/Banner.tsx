@@ -1,15 +1,20 @@
-import React, {memo} from 'react';
-import type {StyleProp, TextStyle, ViewStyle} from 'react-native';
-import {View} from 'react-native';
 import {useMemoizedLazyExpensifyIcons} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
 import useStyleUtils from '@hooks/useStyleUtils';
 import useTheme from '@hooks/useTheme';
 import useThemeStyles from '@hooks/useThemeStyles';
+
 import getButtonState from '@libs/getButtonState';
+
 import CONST from '@src/CONST';
 import type IconAsset from '@src/types/utils/IconAsset';
-import Button from './Button';
+
+import type {StyleProp, TextStyle, ViewStyle} from 'react-native';
+
+import React, {memo} from 'react';
+import {View} from 'react-native';
+
+import Button from './ButtonComposed';
 import Hoverable from './Hoverable';
 import Icon from './Icon';
 import PressableWithFeedback from './Pressable/PressableWithFeedback';
@@ -53,6 +58,9 @@ type BannerProps = {
 
     /** Callback called when pressing the button */
     onButtonPress?: () => void;
+
+    /** Custom action content rendered in the right side of the banner. Overrides the configured `shouldShowButton` when provided. */
+    children?: React.ReactNode;
 };
 
 function Banner({
@@ -64,6 +72,7 @@ function Banner({
     onButtonPress,
     containerStyles,
     textStyles,
+    children,
     shouldRenderHTML = false,
     shouldShowIcon = false,
     shouldShowCloseButton = false,
@@ -118,14 +127,16 @@ function Banner({
                                     </Text>
                                 ))}
                         </View>
-                        {shouldShowButton && (
-                            <Button
-                                success
-                                style={[styles.ph3]}
-                                text={translate('common.chatNow')}
-                                onPress={onButtonPress}
-                            />
-                        )}
+                        {children ??
+                            (shouldShowButton && (
+                                <Button
+                                    variant={CONST.BUTTON_VARIANT.SUCCESS}
+                                    style={[styles.ph3]}
+                                    onPress={onButtonPress}
+                                >
+                                    <Button.Text>{translate('common.chatNow')}</Button.Text>
+                                </Button>
+                            ))}
                         {shouldShowCloseButton && !!onClose && (
                             <Tooltip text={translate('common.close')}>
                                 <PressableWithFeedback

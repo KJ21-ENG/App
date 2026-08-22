@@ -1,17 +1,32 @@
-import React from 'react';
+import {useRowSelection} from '@components/Search/SearchSelectionProvider';
 import BaseListItem from '@components/SelectionList/ListItem/BaseListItem';
 import type {ListItem} from '@components/SelectionList/types';
-import useAnimatedHighlightStyle from '@hooks/useAnimatedHighlightStyle';
+
+import useOnyx from '@hooks/useOnyx';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useStyleUtils from '@hooks/useStyleUtils';
 import useTheme from '@hooks/useTheme';
 import useThemeStyles from '@hooks/useThemeStyles';
+
 import FS from '@libs/Fullstory';
+
 import variables from '@styles/variables';
+
 import ONYXKEYS from '@src/ONYXKEYS';
-import TaskListItemRow from './TaskListItemRow';
+import type {ReportAttributesDerivedValue} from '@src/types/onyx';
+
+import type {OnyxEntry} from 'react-native-onyx';
+
+import React from 'react';
+
 import type {TaskListItemProps, TaskListItemType} from './types';
 
+import TaskListItemRow from './TaskListItemRow';
+
+/**
+ * A task row in search results showing date, title, description, creator, assignee,
+ * and a complete/completed badge action.
+ */
 function TaskListItem<TItem extends ListItem>({
     item,
     isFocused,
@@ -27,21 +42,28 @@ function TaskListItem<TItem extends ListItem>({
 }: TaskListItemProps<TItem>) {
     const taskItem = item as unknown as TaskListItemType;
     const parentReport = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${taskItem?.parentReportID}`];
+    const parentReportID = taskItem?.parentReportID;
+    const [liveParentReportAttributeName] = useOnyx(ONYXKEYS.DERIVED.REPORT_ATTRIBUTES, {
+        selector: (value: OnyxEntry<ReportAttributesDerivedValue>) => (parentReportID ? value?.reports?.[parentReportID]?.reportName : undefined),
+    });
+    const liveTaskItem: TaskListItemType =
+        liveParentReportAttributeName && liveParentReportAttributeName !== taskItem.parentReportName ? {...taskItem, parentReportName: liveParentReportAttributeName} : taskItem;
     const styles = useThemeStyles();
     const StyleUtils = useStyleUtils();
     const theme = useTheme();
 
     const {isLargeScreenWidth} = useResponsiveLayout();
+    const {isSelected} = useRowSelection(item.keyForList);
 
     const listItemPressableStyle = [
         styles.selectionListPressableItemWrapper,
         styles.pv3,
         styles.ph3,
-        // Removing background style because they are added to the parent OpacityView via animatedHighlightStyle
+        // Background is applied on the parent wrapper, so keep this transparent
         styles.bgTransparent,
-        item.isSelected && styles.activeComponentBG,
+        isSelected && styles.activeComponentBG,
         styles.mh0,
-        isLargeScreenWidth && StyleUtils.getSearchTableRowPressableStyle(!!isLastItem, item.isSelected, {vertical: variables.tableRowPaddingVertical}),
+        isLargeScreenWidth && StyleUtils.getSearchTableRowPressableStyle(!!isLastItem, isSelected, {vertical: variables.tableRowPaddingVertical}),
     ];
 
     const listItemWrapperStyle = [
@@ -49,14 +71,6 @@ function TaskListItem<TItem extends ListItem>({
         styles.userSelectNone,
         isLargeScreenWidth ? {...styles.flexRow, ...styles.justifyContentBetween, ...styles.alignItemsCenter} : {...styles.flexColumn, ...styles.alignItemsStretch},
     ];
-
-    const animatedHighlightStyle = useAnimatedHighlightStyle({
-        borderRadius: StyleUtils.getSearchTableHighlightBorderRadius(isLargeScreenWidth),
-        shouldHighlight: item?.shouldAnimateInHighlight ?? false,
-        highlightColor: theme.messageHighlightBG,
-        backgroundColor: theme.highlightBG,
-        shouldApplyOtherStyles: !isLargeScreenWidth,
-    });
 
     const fsClass = FS.getChatFSClass(parentReport);
 
@@ -76,12 +90,16 @@ function TaskListItem<TItem extends ListItem>({
             onFocus={onFocus}
             onLongPressRow={onLongPressRow}
             shouldSyncFocus={shouldSyncFocus}
-            hoverStyle={item.isSelected && styles.activeComponentBG}
-            pressableWrapperStyle={[styles.mh5, animatedHighlightStyle, isLargeScreenWidth && isLastItem && [styles.searchTableBottomRadius, styles.overflowHidden]]}
+            hoverStyle={isSelected && styles.activeComponentBG}
+            pressableWrapperStyle={[
+                styles.mh5,
+                {backgroundColor: theme.highlightBG, ...(!isLargeScreenWidth && {borderRadius: StyleUtils.getSearchTableHighlightBorderRadius(isLargeScreenWidth)})},
+                isLargeScreenWidth && isLastItem && [styles.tableBottomRadius, styles.overflowHidden],
+            ]}
             forwardedFSClass={fsClass}
         >
             <TaskListItemRow
-                item={taskItem}
+                item={liveTaskItem}
                 showTooltip={showTooltip}
             />
         </BaseListItem>

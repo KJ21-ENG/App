@@ -1,16 +1,22 @@
-import type {OnyxKey, OnyxUpdate} from 'react-native-onyx';
-import Onyx from 'react-native-onyx';
-// eslint-disable-next-line no-restricted-syntax -- this is required to allow mocking
 import * as API from '@libs/API';
-import type {WriteCommand} from '@libs/API/types';
 import {WRITE_COMMANDS} from '@libs/API/types';
 import {getMicroSecondOnyxErrorWithTranslationKey} from '@libs/ErrorUtils';
+import {isRecord} from '@libs/ObjectUtils';
+
 import CONST from '@src/CONST';
-import {updateQuickbooksOnlineSyncReimbursedReports} from '@src/libs/actions/connections/QuickbooksOnline';
+import {
+    updateQuickbooksOnlineFxExpenseAccount,
+    updateQuickbooksOnlineSyncReimbursedReports,
+    updateQuickbooksOnlineTravelBillingPayableAccount,
+} from '@src/libs/actions/connections/QuickbooksOnline';
 import ONYXKEYS from '@src/ONYXKEYS';
-import type {Policy as PolicyType} from '@src/types/onyx';
+import type {Errors} from '@src/types/onyx/OnyxCommon';
 import type {QBOConnectionConfig} from '@src/types/onyx/Policy';
-import type {AnyOnyxData} from '@src/types/onyx/Request';
+
+import type {NullishDeep, OnyxKey, OnyxUpdate} from 'react-native-onyx';
+
+import Onyx from 'react-native-onyx';
+
 import waitForBatchedUpdates from '../../utils/waitForBatchedUpdates';
 
 jest.mock('@libs/API');
@@ -21,19 +27,51 @@ const writeSpy = jest.spyOn(API, 'write');
 const MOCK_POLICY_ID = 'MOCK_POLICY_ID';
 const MOCK_ACCOUNT_ID = 'account-123';
 const MOCK_OLD_ACCOUNT_ID = 'account-456';
-const MOCK_ONYX_ERROR = {key: 'error'};
+const MOCK_ONYX_ERROR: Errors = {key: 'error'};
 
-function getQuickBooksConfig<TKey extends OnyxKey>(update?: OnyxUpdate<TKey>): QBOConnectionConfig | undefined {
-    if (!update || typeof update.value !== 'object' || update.value === null) {
+type QuickBooksConfigUpdate = Pick<
+    Partial<NullishDeep<QBOConnectionConfig>>,
+    'collectionAccountID' | 'reimbursementAccountID' | 'travelInvoicingPayableAccountID' | 'fxExpenseAccount' | 'pendingFields' | 'errorFields'
+>;
+
+function isQuickBooksConfigUpdate(value: unknown): value is QuickBooksConfigUpdate {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        (value.collectionAccountID === undefined || value.collectionAccountID === null || typeof value.collectionAccountID === 'string') &&
+        (value.reimbursementAccountID === undefined || value.reimbursementAccountID === null || typeof value.reimbursementAccountID === 'string') &&
+        (value.travelInvoicingPayableAccountID === undefined || value.travelInvoicingPayableAccountID === null || typeof value.travelInvoicingPayableAccountID === 'string') &&
+        (value.fxExpenseAccount === undefined || value.fxExpenseAccount === null || typeof value.fxExpenseAccount === 'string') &&
+        (value.pendingFields === undefined ||
+            value.pendingFields === null ||
+            (isRecord(value.pendingFields) &&
+                Object.values(value.pendingFields).every((field) => field === null || Object.values(CONST.RED_BRICK_ROAD_PENDING_ACTION).some((action) => action === field)))) &&
+        (value.errorFields === undefined ||
+            value.errorFields === null ||
+            (isRecord(value.errorFields) &&
+                Object.values(value.errorFields).every(
+                    (error) => error === undefined || error === null || (isRecord(error) && Object.values(error).every((message) => message === null || typeof message === 'string')),
+                )))
+    );
+}
+
+function getQuickBooksConfig<TKey extends OnyxKey>(update?: OnyxUpdate<TKey>): QuickBooksConfigUpdate | undefined {
+    const value: unknown = update?.value;
+    if (!isRecord(value) || !isRecord(value.connections)) {
         return undefined;
     }
 
-    const policyData = update.value as Pick<PolicyType, 'connections'>;
-    const connection = policyData.connections?.[CONST.POLICY.CONNECTIONS.NAME.QBO];
-    return connection?.config;
+    const connection = value.connections[CONST.POLICY.CONNECTIONS.NAME.QBO];
+    if (!isRecord(connection) || !('config' in connection) || !isQuickBooksConfigUpdate(connection.config)) {
+        return undefined;
+    }
+
+    return connection.config;
 }
 
-function getRequiredQuickBooksConfig<TKey extends OnyxKey>(update?: OnyxUpdate<TKey>): QBOConnectionConfig {
+function getRequiredQuickBooksConfig<TKey extends OnyxKey>(update?: OnyxUpdate<TKey>): QuickBooksConfigUpdate {
     const config = getQuickBooksConfig(update);
     if (!config) {
         throw new Error('QuickBooks config is missing from the provided Onyx update');
@@ -41,13 +79,13 @@ function getRequiredQuickBooksConfig<TKey extends OnyxKey>(update?: OnyxUpdate<T
     return config;
 }
 
-function getFirstWriteCall(): {command: WriteCommand; onyxData?: AnyOnyxData} {
+function getFirstWriteCall() {
     const call = writeSpy.mock.calls.at(0);
     if (!call) {
         throw new Error('API.write was not called');
     }
-    const [command, , onyxData] = call;
-    return {command, onyxData};
+    const [command, params, onyxData] = call;
+    return {command, params, onyxData};
 }
 
 describe('actions/connections/QuickbooksOnline', () => {
@@ -59,7 +97,7 @@ describe('actions/connections/QuickbooksOnline', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        (getMicroSecondOnyxErrorWithTranslationKey as jest.Mock).mockReturnValue(MOCK_ONYX_ERROR);
+        jest.mocked(getMicroSecondOnyxErrorWithTranslationKey).mockReturnValue(MOCK_ONYX_ERROR);
         return Onyx.clear().then(waitForBatchedUpdates);
     });
 
@@ -149,14 +187,97 @@ describe('actions/connections/QuickbooksOnline', () => {
         });
 
         it('handles null setting values', () => {
-            const nullSettingValue = null as unknown as QBOConnectionConfig[Extract<typeof CONST.QUICKBOOKS_CONFIG.COLLECTION_ACCOUNT_ID, keyof QBOConnectionConfig>];
-            updateQuickbooksOnlineSyncReimbursedReports(MOCK_POLICY_ID, nullSettingValue, MOCK_OLD_ACCOUNT_ID, MOCK_OLD_ACCOUNT_ID);
+            // @ts-expect-error -- null is intentionally exercised as invalid runtime input.
+            updateQuickbooksOnlineSyncReimbursedReports(MOCK_POLICY_ID, null, MOCK_OLD_ACCOUNT_ID, MOCK_OLD_ACCOUNT_ID);
 
             const {onyxData} = getFirstWriteCall();
             const optimisticUpdate = onyxData?.optimisticData?.at(0);
             const configUpdate = getRequiredQuickBooksConfig(optimisticUpdate);
             expect(configUpdate[CONST.QUICKBOOKS_CONFIG.COLLECTION_ACCOUNT_ID]).toBeNull();
             expect(configUpdate[CONST.QUICKBOOKS_CONFIG.REIMBURSEMENT_ACCOUNT_ID]).toBeNull();
+        });
+    });
+
+    describe('updateQuickbooksOnlineTravelBillingPayableAccount', () => {
+        beforeEach(() => {
+            writeSpy.mockClear();
+        });
+
+        it('writes the UpdateQuickbooksOnlineTravelBillingPayableAccount command with the account ID', () => {
+            updateQuickbooksOnlineTravelBillingPayableAccount(MOCK_POLICY_ID, MOCK_ACCOUNT_ID, MOCK_OLD_ACCOUNT_ID);
+
+            const {command, params} = getFirstWriteCall();
+            expect(command).toBe(WRITE_COMMANDS.UPDATE_QUICKBOOKS_ONLINE_TRAVEL_BILLING_PAYABLE_ACCOUNT);
+
+            expect(params).toEqual(
+                expect.objectContaining({
+                    policyID: MOCK_POLICY_ID,
+                    settingValue: MOCK_ACCOUNT_ID,
+                    idempotencyKey: String(CONST.QUICKBOOKS_CONFIG.TRAVEL_BILLING_PAYABLE_ACCOUNT),
+                }),
+            );
+        });
+
+        it('updates travelInvoicingPayableAccountID optimistically and reverts to the old value on failure', () => {
+            updateQuickbooksOnlineTravelBillingPayableAccount(MOCK_POLICY_ID, MOCK_ACCOUNT_ID, MOCK_OLD_ACCOUNT_ID);
+
+            const {onyxData} = getFirstWriteCall();
+            const optimisticUpdate = onyxData?.optimisticData?.at(0);
+            const optimisticConfig = getRequiredQuickBooksConfig(optimisticUpdate);
+            expect(optimisticConfig[CONST.QUICKBOOKS_CONFIG.TRAVEL_BILLING_PAYABLE_ACCOUNT]).toBe(MOCK_ACCOUNT_ID);
+            expect(optimisticConfig.pendingFields?.[CONST.QUICKBOOKS_CONFIG.TRAVEL_BILLING_PAYABLE_ACCOUNT]).toBe(CONST.RED_BRICK_ROAD_PENDING_ACTION.UPDATE);
+
+            const failureUpdate = onyxData?.failureData?.at(0);
+            const failureConfig = getRequiredQuickBooksConfig(failureUpdate);
+            expect(failureConfig[CONST.QUICKBOOKS_CONFIG.TRAVEL_BILLING_PAYABLE_ACCOUNT]).toBe(MOCK_OLD_ACCOUNT_ID);
+        });
+    });
+
+    describe('updateQuickbooksOnlineFxExpenseAccount', () => {
+        beforeEach(() => {
+            writeSpy.mockClear();
+        });
+
+        it('writes the UpdateQuickbooksOnlineFxExpenseAccount command with the account ID', () => {
+            updateQuickbooksOnlineFxExpenseAccount(MOCK_POLICY_ID, MOCK_ACCOUNT_ID, MOCK_OLD_ACCOUNT_ID);
+
+            const {command, params} = getFirstWriteCall();
+            expect(command).toBe(WRITE_COMMANDS.UPDATE_QUICKBOOKS_ONLINE_FX_EXPENSE_ACCOUNT);
+
+            // Auth parses settingValue as JSON and 400s on anything else, so the ID goes over the wire quoted
+            expect(params).toEqual(
+                expect.objectContaining({
+                    policyID: MOCK_POLICY_ID,
+                    settingValue: JSON.stringify(MOCK_ACCOUNT_ID),
+                    idempotencyKey: String(CONST.QUICKBOOKS_CONFIG.FX_EXPENSE_ACCOUNT),
+                }),
+            );
+        });
+
+        it('updates fxExpenseAccount optimistically and reverts to the old value on failure', () => {
+            updateQuickbooksOnlineFxExpenseAccount(MOCK_POLICY_ID, MOCK_ACCOUNT_ID, MOCK_OLD_ACCOUNT_ID);
+
+            const {onyxData} = getFirstWriteCall();
+            const optimisticUpdate = onyxData?.optimisticData?.at(0);
+            const optimisticConfig = getRequiredQuickBooksConfig(optimisticUpdate);
+            expect(optimisticConfig[CONST.QUICKBOOKS_CONFIG.FX_EXPENSE_ACCOUNT]).toBe(MOCK_ACCOUNT_ID);
+            expect(optimisticConfig.pendingFields?.[CONST.QUICKBOOKS_CONFIG.FX_EXPENSE_ACCOUNT]).toBe(CONST.RED_BRICK_ROAD_PENDING_ACTION.UPDATE);
+
+            const failureUpdate = onyxData?.failureData?.at(0);
+            const failureConfig = getRequiredQuickBooksConfig(failureUpdate);
+            expect(failureConfig[CONST.QUICKBOOKS_CONFIG.FX_EXPENSE_ACCOUNT]).toBe(MOCK_OLD_ACCOUNT_ID);
+        });
+
+        it('skips the API call when the account has not changed', () => {
+            updateQuickbooksOnlineFxExpenseAccount(MOCK_POLICY_ID, MOCK_OLD_ACCOUNT_ID, MOCK_OLD_ACCOUNT_ID);
+
+            expect(writeSpy).not.toHaveBeenCalled();
+        });
+
+        it('skips the API call when policyID is missing', () => {
+            updateQuickbooksOnlineFxExpenseAccount(undefined, MOCK_ACCOUNT_ID, MOCK_OLD_ACCOUNT_ID);
+
+            expect(writeSpy).not.toHaveBeenCalled();
         });
     });
 });

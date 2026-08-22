@@ -11580,13 +11580,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const core = __importStar(__nccwpck_require__(2186));
-const github_1 = __nccwpck_require__(5438);
-const request_error_1 = __nccwpck_require__(537);
 const ActionUtils_1 = __nccwpck_require__(6981);
 const CONST_1 = __importDefault(__nccwpck_require__(9873));
 const GithubUtils_1 = __importDefault(__nccwpck_require__(9296));
 const Git_1 = __importDefault(__nccwpck_require__(7037));
+const core = __importStar(__nccwpck_require__(2186));
+const github_1 = __nccwpck_require__(5438);
+const request_error_1 = __nccwpck_require__(537);
 /**
  * Main function to check all specified files
  */
@@ -11839,16 +11839,10 @@ const CONST = {
         INTERNAL_QA: 'InternalQA',
         HELP_WANTED: 'Help Wanted',
         CP_STAGING: 'CP Staging',
+        DAILY: 'Daily',
     },
     STATE: {
         OPEN: 'open',
-    },
-    COMMENT: {
-        TYPE_BOT: 'Bot',
-        NAME_MELVIN_BOT: 'melvin-bot[bot]',
-        NAME_MELVIN_USER: 'MelvinBot',
-        NAME_CODEX: 'chatgpt-codex-connector',
-        NAME_GITHUB_ACTIONS: 'github-actions',
     },
     ACTIONS: {
         CREATED: 'created',
@@ -11885,8 +11879,14 @@ const CONST = {
     MOBILE_EXPENSIFY_URL: `https://github.com/${GIT_CONST.GITHUB_OWNER}/${GIT_CONST.MOBILE_EXPENSIFY_REPO}`,
     NO_ACTION: 'NO_ACTION',
     ACTION_EDIT: 'ACTION_EDIT',
-    ACTION_REQUIRED: 'ACTION_REQUIRED',
-    ACTION_HIDE_DUPLICATE: 'ACTION_HIDE_DUPLICATE',
+    /**
+     * What a comment on a Help Wanted issue is trying to do, for comments that don't follow the proposal template.
+     */
+    INTENT: {
+        NOT_AN_ATTEMPT: 'NOT_AN_ATTEMPT',
+        GENUINE_ATTEMPT: 'GENUINE_ATTEMPT',
+        SPAM: 'SPAM',
+    },
 };
 exports["default"] = CONST;
 
@@ -11935,7 +11935,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-/* eslint-disable @typescript-eslint/naming-convention, import/no-import-module-exports */
+/* eslint-disable @typescript-eslint/naming-convention */
 const core = __importStar(__nccwpck_require__(2186));
 const utils_1 = __nccwpck_require__(3030);
 const plugin_paginate_rest_1 = __nccwpck_require__(4193);
@@ -12023,11 +12023,11 @@ class GithubUtils {
     /**
      * Fetch all pull requests given a list of PR numbers.
      */
-    static fetchAllPullRequests(pullRequestNumbers) {
+    static fetchAllPullRequests(pullRequestNumbers, repo = CONST_1.default.APP_REPO) {
         const oldestPR = pullRequestNumbers.sort((a, b) => a - b).at(0);
         return this.paginate(this.octokit.pulls.list, {
             owner: CONST_1.default.GITHUB_OWNER,
-            repo: CONST_1.default.APP_REPO,
+            repo,
             state: 'all',
             sort: 'created',
             direction: 'desc',
@@ -12108,6 +12108,20 @@ class GithubUtils {
             issue_number: number,
             body: messageBody,
         });
+    }
+    /**
+     * Collapse a comment as spam. Only exposed over GraphQL, and unlike rewriting the body it leaves the
+     * original text intact and can be undone from the UI.
+     */
+    static minimizeCommentAsSpam(commentNodeID) {
+        console.log(`Minimizing comment ${commentNodeID} as spam`);
+        return this.graphql(`mutation($subjectId: ID!) {
+                minimizeComment(input: {subjectId: $subjectId, classifier: SPAM}) {
+                    minimizedComment {
+                        isMinimized
+                    }
+                }
+            }`, { subjectId: commentNodeID });
     }
     /**
      * Get the most recent workflow run for the given New Expensify workflow.
@@ -12353,13 +12367,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+const CONST_1 = __importDefault(__nccwpck_require__(9873));
+const GithubUtils_1 = __importDefault(__nccwpck_require__(9296));
 const github_1 = __nccwpck_require__(5438);
 const child_process_1 = __nccwpck_require__(2081);
 const fs_1 = __importDefault(__nccwpck_require__(7147));
 const path_1 = __importDefault(__nccwpck_require__(1017));
 const util_1 = __nccwpck_require__(3837);
-const CONST_1 = __importDefault(__nccwpck_require__(9873));
-const GithubUtils_1 = __importDefault(__nccwpck_require__(9296));
 const Logger_1 = __nccwpck_require__(8891);
 function exec(command, options) {
     const optionsWithEncoding = {
@@ -12410,8 +12424,8 @@ class Git {
      * @throws Error when git command fails (invalid refs, not a git repo, file not found, etc.)
      */
     static diff(fromRef, toRef, filePaths, shouldIncludeUntrackedFiles = false) {
-        // Build git diff command (with 0 context lines for easier parsing)
-        let command = `git diff -U0 ${fromRef}`;
+        // Build git diff command (with 0 context lines for easier parsing, -M for rename detection)
+        let command = `git diff -U0 -M ${fromRef}`;
         if (toRef) {
             command += ` ${toRef}`;
         }
@@ -12453,12 +12467,12 @@ class Git {
         const files = [];
         let currentFile = null;
         let currentHunk = null;
-        let oldFilePath = null; // Track old file path to determine fileDiffType
+        let oldFilePath = null;
+        let renameFromPath = null;
         for (const line of lines) {
             // File header: diff --git a/file b/file
             if (line.startsWith('diff --git')) {
                 if (currentFile) {
-                    // Push the current hunk to the current file before processing the new file
                     if (currentHunk) {
                         currentFile.hunks.push(currentHunk);
                     }
@@ -12466,41 +12480,51 @@ class Git {
                 }
                 currentFile = null;
                 currentHunk = null;
-                oldFilePath = null; // Reset for next file
+                oldFilePath = null;
+                renameFromPath = null;
+                continue;
+            }
+            // Rename detection: "rename from <path>" appears before --- / +++
+            if (line.startsWith('rename from ')) {
+                renameFromPath = line.slice('rename from '.length);
+                continue;
+            }
+            if (line.startsWith('rename to ') || line.startsWith('similarity index ')) {
                 continue;
             }
             // Old file path: --- a/file or --- /dev/null (for new files)
-            // This comes before +++ in git diff output
             if (line.startsWith('--- ')) {
-                oldFilePath = line.slice(4); // Store the old file path (remove '--- ')
+                oldFilePath = line.slice(4);
                 continue;
             }
             // New file path: +++ b/file or +++ /dev/null (for removed files)
             if (line.startsWith('+++ ')) {
-                const newFilePath = line.slice(4); // Remove '+++ '
-                // Determine fileDiffType based on old and new file paths
-                // Note: oldFilePath should always be set by the time we see +++, but handle null for type safety
+                const newFilePath = line.slice(4);
                 let fileDiffType = 'modified';
                 let diffFilePath;
+                let previousFilePath;
                 const oldPath = oldFilePath ?? '';
                 if (oldPath === '/dev/null') {
-                    // New file: use the new file path
                     fileDiffType = 'added';
                     diffFilePath = newFilePath.startsWith('b/') ? newFilePath.slice(2) : newFilePath;
                 }
                 else if (newFilePath === '/dev/null') {
-                    // Removed file: use the old file path
                     fileDiffType = 'removed';
                     diffFilePath = oldPath.startsWith('a/') ? oldPath.slice(2) : oldPath;
                 }
+                else if (renameFromPath) {
+                    fileDiffType = 'renamed';
+                    diffFilePath = newFilePath.startsWith('b/') ? newFilePath.slice(2) : newFilePath;
+                    previousFilePath = renameFromPath;
+                }
                 else {
-                    // Modified file: use the new file path
                     fileDiffType = 'modified';
                     diffFilePath = newFilePath.startsWith('b/') ? newFilePath.slice(2) : newFilePath;
                 }
                 currentFile = {
                     filePath: diffFilePath,
                     diffType: fileDiffType,
+                    previousFilePath,
                     hunks: [],
                     addedLines: new Set(),
                     removedLines: new Set(),
@@ -12637,6 +12661,19 @@ class Git {
         }
     }
     /**
+     * Abbreviated hash for HEAD in the current working directory.
+     *
+     * @returns Short commit hash, or `unknown` when not a git repo or git fails.
+     */
+    static getHeadShort() {
+        try {
+            return execSync('git rev-parse --short HEAD').trim();
+        }
+        catch {
+            return 'unknown';
+        }
+    }
+    /**
      * Ensure a git reference is available locally, fetching it if necessary.
      *
      * @param ref - The git reference to ensure is available (commit hash, branch, tag, etc.)
@@ -12648,8 +12685,10 @@ class Git {
             return; // Reference is already available locally
         }
         try {
-            (0, Logger_1.log)(`🔄 Fetching missing ref: ${ref}`);
-            await exec(`git fetch ${remote} ${ref} --no-tags --depth=1 --quiet`);
+            console.log(`🔄 Fetching missing ref: ${ref}`);
+            // Only shallow-fetch in CI; a local --depth=1 fetch would convert a full clone into a shallow one.
+            const depthArg = IS_CI ? '--depth=1' : '';
+            await exec(`git fetch ${remote} ${ref} --no-tags --quiet ${depthArg}`);
             // Verify the ref is now available
             if (!this.isValidRef(ref)) {
                 throw new Error(`Reference ${ref} is still not valid after fetching from remote ${remote}`);
@@ -12663,7 +12702,9 @@ class Git {
         const baseRefName = GITHUB_BASE_REF ?? 'main';
         // Fetch the main branch from the specified remote (or locally) to ensure it's available
         if (IS_CI || remote) {
-            await exec(`git fetch ${remote ?? 'origin'} ${baseRefName} --no-tags --depth=1`);
+            // Only shallow-fetch in CI; a local --depth=1 fetch would convert a full clone into a shallow one.
+            const depthArg = IS_CI ? '--depth=1' : '';
+            await exec(`git fetch ${remote ?? 'origin'} ${baseRefName} --no-tags ${depthArg}`);
         }
         // In CI, use a simpler approach - just use the remote main branch directly
         // This avoids issues with shallow clones and merge-base calculations
@@ -12723,20 +12764,37 @@ class Git {
             return false;
         }
     }
-    static async getChangedFileNames(fromRef, toRef, shouldIncludeUntrackedFiles = false) {
+    /**
+     * Get changed files with their status (added, modified, removed, renamed).
+     * In CI, uses the GitHub API with pagination for accuracy.
+     * Locally, uses git diff against the provided ref.
+     */
+    static async getChangedFilesWithStatus(fromRef, toRef, shouldIncludeUntrackedFiles = false) {
         if (IS_CI) {
-            const { data: changedFiles } = await GithubUtils_1.default.octokit.pulls.listFiles({
+            const files = await GithubUtils_1.default.paginate(GithubUtils_1.default.octokit.pulls.listFiles, {
                 owner: CONST_1.default.GITHUB_OWNER,
                 repo: CONST_1.default.APP_REPO,
                 // eslint-disable-next-line @typescript-eslint/naming-convention
                 pull_number: github_1.context.payload.pull_request?.number ?? 0,
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                per_page: 100,
             });
-            return changedFiles.map((file) => file.filename);
+            return files.map((file) => ({
+                filename: file.filename,
+                status: file.status,
+                previousFilename: file.previous_filename,
+            }));
         }
-        // Get the diff output and check status
         const diffResult = this.diff(fromRef, toRef, undefined, shouldIncludeUntrackedFiles);
-        const files = diffResult.files.map((file) => file.filePath);
-        return files;
+        return diffResult.files.map((file) => ({
+            filename: file.filePath,
+            status: file.diffType,
+            previousFilename: file.previousFilePath,
+        }));
+    }
+    static async getChangedFileNames(fromRef, toRef, shouldIncludeUntrackedFiles = false) {
+        const files = await this.getChangedFilesWithStatus(fromRef, toRef, shouldIncludeUntrackedFiles);
+        return files.map((file) => file.filename);
     }
     /**
      * Get list of untracked files from git.
@@ -12842,7 +12900,7 @@ exports["default"] = Git;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.bold = exports.formatLink = exports.success = exports.error = exports.note = exports.warn = exports.info = exports.log = void 0;
+exports.setOutputStream = exports.bold = exports.formatLink = exports.success = exports.errorDetail = exports.error = exports.note = exports.warn = exports.info = void 0;
 const COLOR_DIM = '\x1b[2m';
 const COLOR_RESET = '\x1b[0m';
 const COLOR_YELLOW = '\x1b[33m';
@@ -12857,40 +12915,60 @@ const EMOJIS = {
     SUCCESS: '✅',
     ERROR: '🔴',
 };
-const log = (...args) => {
-    console.debug(...args);
+/** Mirrors the console API: informational levels on stdout, warnings and errors on stderr. */
+const outputStreams = {
+    info: 'stdout',
+    bold: 'stdout',
+    success: 'stdout',
+    note: 'stdout',
+    warn: 'stderr',
+    error: 'stderr',
+    errorDetail: 'stderr',
 };
-exports.log = log;
+/**
+ * Redirects individual levels; levels left out keep whatever they are set to. Call this at startup
+ * from a script whose stdout carries machine-readable output (e.g. JSON parsed by another process),
+ * where a stray log line would corrupt the payload: `setOutputStream({info: 'stderr'})`.
+ */
+const setOutputStream = (streams) => {
+    Object.assign(outputStreams, streams);
+};
+exports.setOutputStream = setOutputStream;
+const write = (level, ...args) => {
+    if (outputStreams[level] === 'stderr') {
+        console.error(...args);
+        return;
+    }
+    console.log(...args);
+};
 const info = (...args) => {
-    const lines = [EMOJIS.INFO, ...args];
-    log(...lines);
+    write('info', EMOJIS.INFO, ...args);
 };
 exports.info = info;
 const bold = (...args) => {
-    const lines = [COLOR_BOLD, ...args, COLOR_RESET];
-    log(...lines);
+    write('bold', COLOR_BOLD, ...args, COLOR_RESET);
 };
 exports.bold = bold;
 const success = (...args) => {
-    const lines = [`${EMOJIS.SUCCESS}${COLOR_GREEN}`, ...args, COLOR_RESET];
-    log(...lines);
+    write('success', `${EMOJIS.SUCCESS}${COLOR_GREEN}`, ...args, COLOR_RESET);
 };
 exports.success = success;
 const warn = (...args) => {
-    const lines = [`${EMOJIS.WARN}${COLOR_YELLOW}`, ...args, COLOR_RESET];
-    log(...lines);
+    write('warn', `${EMOJIS.WARN}${COLOR_YELLOW}`, ...args, COLOR_RESET);
 };
 exports.warn = warn;
 const note = (...args) => {
-    const lines = [COLOR_DIM, ...args, COLOR_RESET];
-    log(...lines);
+    write('note', COLOR_DIM, ...args, COLOR_RESET);
 };
 exports.note = note;
 const error = (...args) => {
-    const lines = [`${EMOJIS.ERROR}${COLOR_RED}`, ...args, COLOR_RESET];
-    log(...lines);
+    write('error', `${EMOJIS.ERROR}${COLOR_RED}`, ...args, COLOR_RESET);
 };
 exports.error = error;
+const errorDetail = (...args) => {
+    write('errorDetail', `   ${COLOR_RED}↳`, ...args, COLOR_RESET);
+};
+exports.errorDetail = errorDetail;
 const formatLink = (name, url) => `\x1b]8;;${url}\x1b\\${name}\x1b]8;;\x1b\\`;
 exports.formatLink = formatLink;
 
