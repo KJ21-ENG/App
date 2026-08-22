@@ -1,4 +1,4 @@
-# Retry after initializing the ADB server and host key before emulator launch.
+# Retry with corrected Android remote-shell command quoting.
 name: Temporary PR 93877 Android table regression
 
 on:
