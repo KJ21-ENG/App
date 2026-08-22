@@ -1,250 +1,121 @@
-name: Repack exact PR JavaScript into recent trusted Android shell
+name: Android emulator discovery probe for PR 93877
 
 on:
   push:
     branches:
       - chatgpt/emulator-regression-93877
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
-  repack:
+  emulator-probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    env:
-      IS_HYBRID_APP: "true"
-      ENV: adhoc
-      SENTRY_DISABLE_AUTO_UPLOAD: "true"
-      EXACT_HEAD: 78ef1215915a659779791df28c40111a64fd83bb
-      SHELL_APP_HEAD: 8003cfdd653655a31a2058c031e67b2d34631c8d
-      SHELL_MOBILE_HEAD_SHORT: f4ebc06
-      SHELL_NATIVE_FINGERPRINT: 99ce769ad45c2df8b2554cf0ea345332b908e9b0
-      SHELL_INDEX_URL: https://ad-hoc-expensify-cash.s3.us-east-1.amazonaws.com/rock-artifacts/ad-hoc/rock-android-Adhoc-8003cfd-f4ebc06-99ce769ad45c2df8b2554cf0ea345332b908e9b0/index.html
+    timeout-minutes: 60
     steps:
-      - name: Checkout exact upstream PR head
-        uses: actions/checkout@v4
-        with:
-          repository: Expensify/App
-          ref: 78ef1215915a659779791df28c40111a64fd83bb
-          fetch-depth: 1
-          submodules: false
-
-      - name: Verify exact source revision
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXACT_HEAD"
-          printf '%s\n' "$EXACT_HEAD" > /tmp/EXACT_HEAD_SHA.txt
-
-      - name: Download recent trusted official Android shell
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/android-shell
-          curl -fsSL --retry 2 --max-time 120 "$SHELL_INDEX_URL" \
-            -o /tmp/android-shell/index.html
-          python3 - <<'PY'
-          import os
-          import pathlib
-          import re
-          import urllib.parse
-          import urllib.request
-
-          root = pathlib.Path('/tmp/android-shell')
-          page = (root / 'index.html').read_text(errors='replace')
-          match = re.search(r"const\s+apkFileName\s*=\s*['\"]([^'\"]+\.apk)['\"]", page)
-          if not match:
-              raise SystemExit('Could not derive APK filename from Rock index page')
-          index_url = os.environ['SHELL_INDEX_URL']
-          apk_url = urllib.parse.urljoin(index_url, match.group(1))
-          (root / 'apk-url.txt').write_text(apk_url + '\n')
-          print(f'Downloading {apk_url}')
-          request = urllib.request.Request(apk_url, headers={'User-Agent': 'exact-pr-regression-repacker'})
-          with urllib.request.urlopen(request, timeout=1200) as response, open(root / 'trusted-shell.apk', 'wb') as output:
-              while chunk := response.read(1024 * 1024):
-                  output.write(chunk)
-          PY
-          file /tmp/android-shell/trusted-shell.apk
-          sha256sum /tmp/android-shell/trusted-shell.apk \
-            | tee /tmp/android-shell/SHELL_SHA256SUM.txt
-          ls -lh /tmp/android-shell/trusted-shell.apk
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 26.5.0
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-
-      - name: Install exact project dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install --global npm@11.17.0
-          npm ci
-
-      - name: Prepare exact hybrid ad-hoc JavaScript environment
-        shell: bash
-        run: |
-          set -euo pipefail
-          cp .env.staging .env.adhoc
-          sed -i 's/ENVIRONMENT=staging/ENVIRONMENT=adhoc/' .env.adhoc
-
-      - name: Build exact Hermes JavaScript bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/exact-js/assets
-          npx rock bundle \
-            --platform android \
-            --dev false \
-            --entry-file index.js \
-            --bundle-output /tmp/exact-js/index.android.bundle \
-            --assets-dest /tmp/exact-js/assets \
-            --reset-cache \
-            --hermes
-          file /tmp/exact-js/index.android.bundle \
-            | tee /tmp/exact-js/bundle-file-type.txt
-          sha256sum /tmp/exact-js/index.android.bundle \
-            | tee /tmp/exact-js/BUNDLE_SHA256SUM.txt
-          ls -lh /tmp/exact-js/index.android.bundle
-
-      - name: Install Android signing tools
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" 'build-tools;36.0.0' 'platform-tools'
-
-      - name: Replace bundle and sign through Rock standard flow
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/exact-output
-          npx rock sign:android /tmp/android-shell/trusted-shell.apk \
-            --jsbundle /tmp/exact-js/index.android.bundle \
-            --keystore android/app/debug.keystore \
-            --keystore-password android \
-            --key-alias androiddebugkey \
-            --key-password android \
-            --output /tmp/exact-output/Expensify-93877-78ef121-emulator.apk
-
-          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
-          "$APKSIGNER" verify --verbose --print-certs \
-            /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
-            | tee /tmp/exact-output/apksigner-verification.txt
-          sha256sum /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
-            | tee /tmp/exact-output/APK_SHA256SUM.txt
-
-          unzip -p /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
-            assets/index.android.bundle > /tmp/exact-output/embedded-index.android.bundle
-          sha256sum /tmp/exact-output/embedded-index.android.bundle \
-            | tee /tmp/exact-output/EMBEDDED_BUNDLE_SHA256SUM.txt
-          cmp /tmp/exact-js/index.android.bundle /tmp/exact-output/embedded-index.android.bundle
-
-          cat > /tmp/exact-output/provenance.txt <<EOF
-          exact_javascript_head=${EXACT_HEAD}
-          exact_javascript_environment=adhoc hybrid
-          native_shell_app_head=${SHELL_APP_HEAD}
-          native_shell_mobile_head_short=${SHELL_MOBILE_HEAD_SHORT}
-          native_shell_fingerprint=${SHELL_NATIVE_FINGERPRINT}
-          native_shell_index_url=${SHELL_INDEX_URL}
-          replacement_method=rock sign:android --jsbundle
-          note=The PR changes are JavaScript/TypeScript-only. The native shell is a trusted official build produced on 2026-08-21 from a nearby App head.
-          EOF
-          ls -lh /tmp/exact-output/Expensify-93877-78ef121-emulator.apk
-
-      - name: Prepare transferable APK artifact
-        id: transfer
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK=/tmp/exact-output/Expensify-93877-78ef121-emulator.apk
-          SIZE="$(stat -c '%s' "$APK")"
-          echo "apk_bytes=$SIZE" | tee /tmp/exact-output/APK_SIZE.txt
-          if [ "$SIZE" -le 350000000 ]; then
-            echo 'whole=true' >> "$GITHUB_OUTPUT"
-          else
-            mkdir -p /tmp/exact-output/parts
-            split -b 340000000 -d -a 2 "$APK" /tmp/exact-output/parts/Expensify.apk.part-
-            for suffix in 00 01 02 03; do
-              if [ -f "/tmp/exact-output/parts/Expensify.apk.part-$suffix" ]; then
-                echo "part_$suffix=true" >> "$GITHUB_OUTPUT"
-                sha256sum "/tmp/exact-output/parts/Expensify.apk.part-$suffix"
-              fi
-            done | tee /tmp/exact-output/PART_SHA256SUMS.txt
-          fi
-
-      - name: Upload complete APK
-        if: steps.transfer.outputs.whole == 'true'
-        uses: actions/upload-artifact@v4
+      - name: Download verified exact-JS APK
+        uses: actions/download-artifact@v4
         with:
           name: expensify-93877-exact-js-near-native-apk
-          path: /tmp/exact-output/Expensify-93877-78ef121-emulator.apk
-          compression-level: 0
-          retention-days: 3
+          path: /tmp/apk
+          repository: KJ21-ENG/App
+          run-id: 32566247706
+          github-token: ${{ github.token }}
 
-      - name: Upload APK part 00
-        if: steps.transfer.outputs.part_00 == 'true'
+      - name: Verify APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find /tmp/apk -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          file "$APK"
+          sha256sum "$APK" | tee /tmp/apk/APK_SHA256SUM.txt
+          ls -lh "$APK"
+
+      - name: Run emulator discovery probe
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            mkdir -p "$GITHUB_WORKSPACE/android-regression-evidence"
+            EVIDENCE="$GITHUB_WORKSPACE/android-regression-evidence"
+            APK="$(find /tmp/apk -type f -name '*.apk' -print -quit)"
+            AAPT="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name aapt -print | sort -V | tail -1)"
+            test -x "$AAPT"
+
+            "$AAPT" dump badging "$APK" > "$EVIDENCE/apk-badging.txt"
+            PACKAGE="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "$EVIDENCE/apk-badging.txt" | head -1)"
+            ACTIVITY="$(sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p" "$EVIDENCE/apk-badging.txt" | head -1)"
+            test -n "$PACKAGE"
+            printf 'package=%s\nactivity=%s\n' "$PACKAGE" "$ACTIVITY" | tee "$EVIDENCE/app-identifiers.txt"
+
+            adb wait-for-device
+            adb shell input keyevent 82 || true
+            adb install -r -g "$APK" 2>&1 | tee "$EVIDENCE/adb-install.txt"
+            adb shell pm list packages -f | sort > "$EVIDENCE/packages.txt"
+            adb shell dumpsys package "$PACKAGE" > "$EVIDENCE/package-dumpsys.txt"
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
+            adb logcat -c
+
+            {
+              echo '=== run-as probe ==='
+              adb shell run-as "$PACKAGE" sh -c 'id; pwd; find . -maxdepth 3 -type f -o -type d | sort | head -400' || true
+              echo '=== package paths ==='
+              adb shell pm path "$PACKAGE" || true
+            } > "$EVIDENCE/run-as-probe.txt" 2>&1
+
+            adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 > "$EVIDENCE/launch.txt" 2>&1 || true
+            sleep 25
+            adb exec-out screencap -p > "$EVIDENCE/01-initial-launch.png"
+            adb shell uiautomator dump /sdcard/initial-window.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/initial-window.xml "$EVIDENCE/01-initial-window.xml" >/dev/null 2>&1 || true
+            adb shell dumpsys activity activities > "$EVIDENCE/01-activities.txt"
+
+            adb shell am start -W -a android.intent.action.VIEW -d 'new-expensify://settings/troubleshoot' -p "$PACKAGE" > "$EVIDENCE/deeplink-troubleshoot.txt" 2>&1 || true
+            sleep 15
+            adb exec-out screencap -p > "$EVIDENCE/02-troubleshoot-deeplink.png"
+            adb shell uiautomator dump /sdcard/troubleshoot-window.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/troubleshoot-window.xml "$EVIDENCE/02-troubleshoot-window.xml" >/dev/null 2>&1 || true
+            adb shell dumpsys activity activities > "$EVIDENCE/02-activities.txt"
+
+            adb shell input keyevent 4 || true
+            sleep 3
+            adb shell am force-stop "$PACKAGE" || true
+            adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 >> "$EVIDENCE/relaunch.txt" 2>&1 || true
+            sleep 12
+            adb exec-out screencap -p > "$EVIDENCE/03-relaunch.png"
+            adb shell uiautomator dump /sdcard/relaunch-window.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/relaunch-window.xml "$EVIDENCE/03-relaunch-window.xml" >/dev/null 2>&1 || true
+
+            adb logcat -d -v threadtime > "$EVIDENCE/logcat-full.txt"
+            grep -Eai 'FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|SIG(SEGV|ABRT)|ErrorBoundary|Unhandled|TypeError|ReferenceError|Invariant Violation' "$EVIDENCE/logcat-full.txt" > "$EVIDENCE/logcat-important.txt" || true
+            adb shell dumpsys meminfo "$PACKAGE" > "$EVIDENCE/meminfo.txt" || true
+            adb shell dumpsys gfxinfo "$PACKAGE" > "$EVIDENCE/gfxinfo.txt" || true
+
+            {
+              echo "package=$PACKAGE"
+              echo "activity=$ACTIVITY"
+              echo "initial_xml=$(test -s "$EVIDENCE/01-initial-window.xml" && echo yes || echo no)"
+              echo "troubleshoot_xml=$(test -s "$EVIDENCE/02-troubleshoot-window.xml" && echo yes || echo no)"
+              echo "important_log_lines=$(wc -l < "$EVIDENCE/logcat-important.txt")"
+            } | tee "$EVIDENCE/probe-summary.txt"
+
+      - name: Upload emulator probe evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: expensify-93877-apk-part-00
-          path: /tmp/exact-output/parts/Expensify.apk.part-00
-          compression-level: 0
-          retention-days: 3
-
-      - name: Upload APK part 01
-        if: steps.transfer.outputs.part_01 == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: expensify-93877-apk-part-01
-          path: /tmp/exact-output/parts/Expensify.apk.part-01
-          compression-level: 0
-          retention-days: 3
-
-      - name: Upload APK part 02
-        if: steps.transfer.outputs.part_02 == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: expensify-93877-apk-part-02
-          path: /tmp/exact-output/parts/Expensify.apk.part-02
-          compression-level: 0
-          retention-days: 3
-
-      - name: Upload APK part 03
-        if: steps.transfer.outputs.part_03 == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: expensify-93877-apk-part-03
-          path: /tmp/exact-output/parts/Expensify.apk.part-03
-          compression-level: 0
-          retention-days: 3
-
-      - name: Upload build provenance and verification
-        uses: actions/upload-artifact@v4
-        with:
-          name: expensify-93877-apk-provenance
-          path: |
-            /tmp/EXACT_HEAD_SHA.txt
-            /tmp/android-shell/apk-url.txt
-            /tmp/android-shell/SHELL_SHA256SUM.txt
-            /tmp/exact-js/bundle-file-type.txt
-            /tmp/exact-js/BUNDLE_SHA256SUM.txt
-            /tmp/exact-output/APK_SHA256SUM.txt
-            /tmp/exact-output/APK_SIZE.txt
-            /tmp/exact-output/PART_SHA256SUMS.txt
-            /tmp/exact-output/EMBEDDED_BUNDLE_SHA256SUM.txt
-            /tmp/exact-output/apksigner-verification.txt
-            /tmp/exact-output/provenance.txt
-          if-no-files-found: ignore
+          name: expensify-93877-emulator-probe-evidence
+          path: android-regression-evidence/
+          if-no-files-found: warn
           compression-level: 0
           retention-days: 3
