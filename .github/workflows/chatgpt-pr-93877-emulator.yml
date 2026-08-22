@@ -1,4 +1,4 @@
-# Retry with direct KVM device access for the hosted runner process.
+# Run a rooted app-storage inventory before deterministic Onyx state injection.
 name: Temporary PR 93877 Android emulator probe
 
 on:
@@ -98,7 +98,7 @@ jobs:
             ls -l /dev/kvm || true
           } > "$GITHUB_WORKSPACE/android-regression-evidence/kvm-after.txt" 2>&1
 
-      - name: Boot emulator and run discovery probe
+      - name: Boot emulator and run rooted storage probe
         shell: bash
         run: bash .chatgpt-regression/run-emulator-probe.sh
 
