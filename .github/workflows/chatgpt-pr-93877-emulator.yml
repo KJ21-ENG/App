@@ -64,10 +64,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
           EVIDENCE="$GITHUB_WORKSPACE/android-regression-evidence"
           APK="$(find /tmp/apk/extracted -type f -name '*.apk' -print -quit)"
           AAPT="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name aapt -print | sort -V | tail -1)"
           test -x "$AAPT"
+          command -v adb
 
           nohup "$ANDROID_SDK_ROOT/emulator/emulator" \
             -avd pr93877 \
