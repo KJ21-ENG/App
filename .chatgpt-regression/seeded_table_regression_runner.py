@@ -59,13 +59,17 @@ def seed_olddot_identity(package: str) -> None:
 
     OldDot constructs HybridAppSettings from state_v19.json. When that state is
     unsigned, NewDot intentionally clears Onyx and opens the sign-in page. A
-    matching, synthetic, offline OldDot identity keeps the deterministic Onyx
-    database intact without using real credentials or network APIs.
+    matching synthetic SSO identity follows OldDot's supported lost-keychain
+    recovery path, recreating the local keychain without real credentials or
+    network APIs and preserving the deterministic NewDot database.
     """
     uid = int(module.RESULTS["app_uid"])
     app_dir = f"/data/user/0/{package}"
     state = {
         "isOnStaging": True,
+        "offline": True,
+        "lastAuthenticated": int(time.time() * 1000),
+        "ssoType": "SAML",
         "lastUsedEmail": module.LOGIN,
         "history": [],
         "pageExtrasHistory": [],
@@ -112,6 +116,7 @@ def seed_olddot_identity(package: str) -> None:
     ).stdout
     module.write_text(module.EVIDENCE / "seeded-storage-inventory.txt", inventory)
     module.RESULTS["olddot_state_seeded"] = True
+    module.RESULTS["olddot_identity_mode"] = "synthetic_saml"
 
 
 original_install_and_seed = module.install_and_seed
