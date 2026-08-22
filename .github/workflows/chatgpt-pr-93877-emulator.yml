@@ -1,4 +1,4 @@
-# Deterministic offline table regression against the exact PR JavaScript bundle.
+# Retry after initializing the ADB server and host key before emulator launch.
 name: Temporary PR 93877 Android table regression
 
 on:
