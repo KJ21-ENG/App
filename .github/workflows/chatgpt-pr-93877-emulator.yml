@@ -1,4 +1,4 @@
-# Retry with corrected Android remote-shell command quoting.
+# Retry after creating and owning the hybrid app files directory before OnyxDB seeding.
 name: Temporary PR 93877 Android table regression
 
 on:
