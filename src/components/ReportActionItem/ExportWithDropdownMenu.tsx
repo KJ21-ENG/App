@@ -105,7 +105,7 @@ function ExportWithDropdownMenu({
             options.sort((method) => (method.value === exportMethod ? -1 : 0));
         }
         return options;
-    }, [canBeExported, connectionName, connectionNameFriendly, exportMethods, iconToDisplay, isExportInProgress, report?.policyID, translate]);
+    }, [canBeExported, connectionName, connectionNameFriendly, exportMethods, iconToDisplay, isExportInProgress, report?.policyID, styles.integrationIcon, translate]);
 
     const handleExport = (exportType: ReportExportType) => {
         if (!reportID) {
