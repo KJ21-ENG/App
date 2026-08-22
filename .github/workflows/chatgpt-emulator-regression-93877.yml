@@ -1,4 +1,4 @@
-name: Locate exact compatible official Android APK
+name: Repack exact PR JavaScript into recent trusted Android shell
 
 on:
   push:
@@ -13,44 +13,66 @@ permissions:
   contents: read
 
 jobs:
-  locate-apk:
+  repack:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     env:
       IS_HYBRID_APP: "true"
       ENV: adhoc
       SENTRY_DISABLE_AUTO_UPLOAD: "true"
       EXACT_HEAD: 78ef1215915a659779791df28c40111a64fd83bb
-      GITHUB_TOKEN: ${{ github.token }}
+      SHELL_APP_HEAD: 8003cfdd653655a31a2058c031e67b2d34631c8d
+      SHELL_MOBILE_HEAD_SHORT: f4ebc06
+      SHELL_NATIVE_FINGERPRINT: 99ce769ad45c2df8b2554cf0ea345332b908e9b0
+      SHELL_INDEX_URL: https://ad-hoc-expensify-cash.s3.us-east-1.amazonaws.com/rock-artifacts/ad-hoc/rock-android-Adhoc-8003cfd-f4ebc06-99ce769ad45c2df8b2554cf0ea345332b908e9b0/index.html
     steps:
-      - name: Checkout exact App head and exact Mobile-Expensify submodule
+      - name: Checkout exact upstream PR head
         uses: actions/checkout@v4
         with:
           repository: Expensify/App
           ref: 78ef1215915a659779791df28c40111a64fd83bb
           fetch-depth: 1
-          submodules: recursive
+          submodules: false
 
-      - name: Verify exact revisions and compute official identifier
+      - name: Verify exact source revision
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXACT_HEAD"
-          APP_SHORT="$(git rev-parse --short HEAD)"
-          MOBILE_HEAD="$(git -C Mobile-Expensify rev-parse HEAD)"
-          MOBILE_SHORT="$(git -C Mobile-Expensify rev-parse --short HEAD)"
-          test "$MOBILE_HEAD" = 'c800599a8f11425e674d6a0cf9cd23ff5e3cb3f4'
-          {
-            echo "APP_SHORT=$APP_SHORT"
-            echo "MOBILE_HEAD=$MOBILE_HEAD"
-            echo "MOBILE_SHORT=$MOBILE_SHORT"
-            echo "IDENTIFIER=${APP_SHORT}-${MOBILE_SHORT}"
-          } | tee /tmp/revision-metadata.txt
-          {
-            echo "APP_SHORT=$APP_SHORT"
-            echo "MOBILE_SHORT=$MOBILE_SHORT"
-            echo "IDENTIFIER=${APP_SHORT}-${MOBILE_SHORT}"
-          } >> "$GITHUB_ENV"
+          printf '%s\n' "$EXACT_HEAD" > /tmp/EXACT_HEAD_SHA.txt
+
+      - name: Download recent trusted official Android shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/android-shell
+          curl -fsSL --retry 2 --max-time 120 "$SHELL_INDEX_URL" \
+            -o /tmp/android-shell/index.html
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+          import urllib.parse
+          import urllib.request
+
+          root = pathlib.Path('/tmp/android-shell')
+          page = (root / 'index.html').read_text(errors='replace')
+          match = re.search(r"const\s+apkFileName\s*=\s*['\"]([^'\"]+\.apk)['\"]", page)
+          if not match:
+              raise SystemExit('Could not derive APK filename from Rock index page')
+          index_url = os.environ['SHELL_INDEX_URL']
+          apk_url = urllib.parse.urljoin(index_url, match.group(1))
+          (root / 'apk-url.txt').write_text(apk_url + '\n')
+          print(f'Downloading {apk_url}')
+          request = urllib.request.Request(apk_url, headers={'User-Agent': 'exact-pr-regression-repacker'})
+          with urllib.request.urlopen(request, timeout=1200) as response, open(root / 'trusted-shell.apk', 'wb') as output:
+              while chunk := response.read(1024 * 1024):
+                  output.write(chunk)
+          PY
+          file /tmp/android-shell/trusted-shell.apk
+          sha256sum /tmp/android-shell/trusted-shell.apk \
+            | tee /tmp/android-shell/SHELL_SHA256SUM.txt
+          ls -lh /tmp/android-shell/trusted-shell.apk
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -62,168 +84,167 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Install exact root dependencies
+      - name: Install exact project dependencies
         shell: bash
         run: |
           set -euo pipefail
           npm install --global npm@11.17.0
           npm ci
 
-      - name: Prepare official ad-hoc environment
+      - name: Prepare exact hybrid ad-hoc JavaScript environment
         shell: bash
         run: |
           set -euo pipefail
           cp .env.staging .env.adhoc
           sed -i 's/ENVIRONMENT=staging/ENVIRONMENT=adhoc/' .env.adhoc
 
-      - name: Compute exact official hybrid native fingerprint
+      - name: Build exact Hermes JavaScript bundle
         shell: bash
         run: |
           set -euo pipefail
-          FINGERPRINT="$(npx rock fingerprint -p android --raw)"
-          test -n "$FINGERPRINT"
-          printf '%s\n' "$FINGERPRINT" | tee /tmp/hybrid-native-fingerprint.txt
-          echo "HYBRID_FINGERPRINT=$FINGERPRINT" >> "$GITHUB_ENV"
+          mkdir -p /tmp/exact-js/assets
+          npx rock bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output /tmp/exact-js/index.android.bundle \
+            --assets-dest /tmp/exact-js/assets \
+            --reset-cache \
+            --hermes
+          file /tmp/exact-js/index.android.bundle \
+            | tee /tmp/exact-js/bundle-file-type.txt
+          sha256sum /tmp/exact-js/index.android.bundle \
+            | tee /tmp/exact-js/BUNDLE_SHA256SUM.txt
+          ls -lh /tmp/exact-js/index.android.bundle
 
-      - name: Search PR comments and deterministic ad-hoc paths
-        id: locate
+      - name: Install Android signing tools
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/apk-search
-          BASE='https://ad-hoc-expensify-cash.s3.us-east-1.amazonaws.com/rock-artifacts/ad-hoc'
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'build-tools;36.0.0' 'platform-tools'
 
-          for page in 1 2; do
-            curl -fsSL \
-              -H 'Accept: application/vnd.github+json' \
-              -H 'X-GitHub-Api-Version: 2022-11-28' \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              "https://api.github.com/repos/Expensify/App/issues/93877/comments?per_page=100&page=$page" \
-              > "/tmp/apk-search/comments-$page.json"
-          done
+      - name: Replace bundle and sign through Rock standard flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/exact-output
+          npx rock sign:android /tmp/android-shell/trusted-shell.apk \
+            --jsbundle /tmp/exact-js/index.android.bundle \
+            --keystore android/app/debug.keystore \
+            --keystore-password android \
+            --key-alias androiddebugkey \
+            --key-password android \
+            --output /tmp/exact-output/Expensify-93877-78ef121-emulator.apk
 
-          python3 - <<'PY'
-          import json
-          import os
-          import pathlib
-          import re
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs \
+            /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
+            | tee /tmp/exact-output/apksigner-verification.txt
+          sha256sum /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
+            | tee /tmp/exact-output/APK_SHA256SUM.txt
 
-          root = pathlib.Path('/tmp/apk-search')
-          comments = []
-          for page in (1, 2):
-              comments.extend(json.loads((root / f'comments-{page}.json').read_text()))
+          unzip -p /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
+            assets/index.android.bundle > /tmp/exact-output/embedded-index.android.bundle
+          sha256sum /tmp/exact-output/embedded-index.android.bundle \
+            | tee /tmp/exact-output/EMBEDDED_BUNDLE_SHA256SUM.txt
+          cmp /tmp/exact-js/index.android.bundle /tmp/exact-output/embedded-index.android.bundle
 
-          fingerprint = os.environ['HYBRID_FINGERPRINT']
-          all_urls = []
-          matching_urls = []
-          for comment in comments:
-              for url in re.findall(
-                  r'https://ad-hoc-expensify-cash\.s3\.[^\s|)]+/rock-artifacts/ad-hoc/rock-android-Adhoc-[^\s|)]+/index\.html',
-                  comment.get('body', ''),
-              ):
-                  all_urls.append((comment.get('created_at'), comment.get('id'), url))
-                  if f'-{fingerprint}/index.html' in url:
-                      matching_urls.append((comment.get('created_at'), comment.get('id'), url))
+          cat > /tmp/exact-output/provenance.txt <<EOF
+          exact_javascript_head=${EXACT_HEAD}
+          exact_javascript_environment=adhoc hybrid
+          native_shell_app_head=${SHELL_APP_HEAD}
+          native_shell_mobile_head_short=${SHELL_MOBILE_HEAD_SHORT}
+          native_shell_fingerprint=${SHELL_NATIVE_FINGERPRINT}
+          native_shell_index_url=${SHELL_INDEX_URL}
+          replacement_method=rock sign:android --jsbundle
+          note=The PR changes are JavaScript/TypeScript-only. The native shell is a trusted official build produced on 2026-08-21 from a nearby App head.
+          EOF
+          ls -lh /tmp/exact-output/Expensify-93877-78ef121-emulator.apk
 
-          (root / 'all-pr-android-builds.txt').write_text(
-              ''.join(f'{created_at} comment={comment_id} {url}\n' for created_at, comment_id, url in all_urls)
-          )
-          (root / 'matching-pr-android-builds.txt').write_text(
-              ''.join(f'{created_at} comment={comment_id} {url}\n' for created_at, comment_id, url in matching_urls)
-          )
-          print(f'PR Android build URLs found: {len(all_urls)}')
-          print(f'Fingerprint-compatible PR URLs found: {len(matching_urls)}')
-          PY
-
-          : > /tmp/apk-search/probe-results.txt
-          CANDIDATES=()
-
-          while IFS= read -r line; do
-            [ -z "$line" ] && continue
-            CANDIDATES+=("${line##* }")
-          done < /tmp/apk-search/matching-pr-android-builds.txt
-
-          # The official Android workflow names the directory from App short SHA,
-          # Mobile-Expensify short SHA, and the hybrid native fingerprint.
-          CANDIDATES+=("${BASE}/rock-android-Adhoc-${IDENTIFIER}-${HYBRID_FINGERPRINT}/index.html")
-          CANDIDATES+=("${BASE}/rock-android-Adhoc-${EXACT_HEAD:0:7}-${MOBILE_HEAD:0:7}-${HYBRID_FINGERPRINT}/index.html")
-          CANDIDATES+=("${BASE}/rock-android-Adhoc-${EXACT_HEAD:0:10}-${MOBILE_HEAD:0:7}-${HYBRID_FINGERPRINT}/index.html")
-          CANDIDATES+=("${BASE}/rock-android-Adhoc-${EXACT_HEAD:0:11}-${MOBILE_HEAD:0:7}-${HYBRID_FINGERPRINT}/index.html")
-
-          FOUND=''
-          for url in "${CANDIDATES[@]}"; do
-            if grep -Fxq "$url" /tmp/apk-search/already-probed.txt 2>/dev/null; then
-              continue
-            fi
-            printf '%s\n' "$url" >> /tmp/apk-search/already-probed.txt
-            code="$(curl -L -sS -o /tmp/apk-search/index.html -w '%{http_code}' --connect-timeout 30 --max-time 120 "$url" || true)"
-            bytes="$(stat -c '%s' /tmp/apk-search/index.html 2>/dev/null || printf '0')"
-            printf '%s http=%s bytes=%s\n' "$url" "$code" "$bytes" | tee -a /tmp/apk-search/probe-results.txt
-            if [ "$code" = '200' ] && grep -q 'apkFileName' /tmp/apk-search/index.html; then
-              FOUND="$url"
-              printf '%s\n' "$url" > /tmp/apk-search/found-index-url.txt
-              break
-            fi
-          done
-
-          if [ -z "$FOUND" ]; then
-            echo 'No exact-fingerprint official ad-hoc APK was found.' >&2
-            exit 1
+      - name: Prepare transferable APK artifact
+        id: transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=/tmp/exact-output/Expensify-93877-78ef121-emulator.apk
+          SIZE="$(stat -c '%s' "$APK")"
+          echo "apk_bytes=$SIZE" | tee /tmp/exact-output/APK_SIZE.txt
+          if [ "$SIZE" -le 350000000 ]; then
+            echo 'whole=true' >> "$GITHUB_OUTPUT"
+          else
+            mkdir -p /tmp/exact-output/parts
+            split -b 340000000 -d -a 2 "$APK" /tmp/exact-output/parts/Expensify.apk.part-
+            for suffix in 00 01 02 03; do
+              if [ -f "/tmp/exact-output/parts/Expensify.apk.part-$suffix" ]; then
+                echo "part_$suffix=true" >> "$GITHUB_OUTPUT"
+                sha256sum "/tmp/exact-output/parts/Expensify.apk.part-$suffix"
+              fi
+            done | tee /tmp/exact-output/PART_SHA256SUMS.txt
           fi
 
-          python3 - <<'PY'
-          import pathlib
-          import re
-          import urllib.parse
-          import urllib.request
-
-          root = pathlib.Path('/tmp/apk-search')
-          index_url = (root / 'found-index-url.txt').read_text().strip()
-          page = (root / 'index.html').read_text(errors='replace')
-          match = re.search(r"const\s+apkFileName\s*=\s*['\"]([^'\"]+\.apk)['\"]", page)
-          if not match:
-              raise SystemExit('Could not derive APK filename from Rock index page')
-          apk_url = urllib.parse.urljoin(index_url, match.group(1))
-          (root / 'found-apk-url.txt').write_text(apk_url + '\n')
-          request = urllib.request.Request(apk_url, headers={'User-Agent': 'exact-head-regression-locator'})
-          with urllib.request.urlopen(request, timeout=900) as response, open(root / 'Expensify-exact-official.apk', 'wb') as output:
-              while chunk := response.read(1024 * 1024):
-                  output.write(chunk)
-          PY
-
-          file /tmp/apk-search/Expensify-exact-official.apk
-          sha256sum /tmp/apk-search/Expensify-exact-official.apk \
-            | tee /tmp/apk-search/APK_SHA256SUM.txt
-          ls -lh /tmp/apk-search/Expensify-exact-official.apk
-
-      - name: Upload located exact official APK
+      - name: Upload complete APK
+        if: steps.transfer.outputs.whole == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: expensify-93877-exact-official-apk
-          path: |
-            /tmp/apk-search/Expensify-exact-official.apk
-            /tmp/apk-search/APK_SHA256SUM.txt
-            /tmp/apk-search/found-index-url.txt
-            /tmp/apk-search/found-apk-url.txt
-            /tmp/apk-search/probe-results.txt
-            /tmp/apk-search/all-pr-android-builds.txt
-            /tmp/apk-search/matching-pr-android-builds.txt
-            /tmp/hybrid-native-fingerprint.txt
-            /tmp/revision-metadata.txt
+          name: expensify-93877-exact-js-near-native-apk
+          path: /tmp/exact-output/Expensify-93877-78ef121-emulator.apk
           compression-level: 0
           retention-days: 3
 
-      - name: Upload fingerprint evidence on failure
-        if: failure()
+      - name: Upload APK part 00
+        if: steps.transfer.outputs.part_00 == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: exact-hybrid-fingerprint-search-evidence
+          name: expensify-93877-apk-part-00
+          path: /tmp/exact-output/parts/Expensify.apk.part-00
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload APK part 01
+        if: steps.transfer.outputs.part_01 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: expensify-93877-apk-part-01
+          path: /tmp/exact-output/parts/Expensify.apk.part-01
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload APK part 02
+        if: steps.transfer.outputs.part_02 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: expensify-93877-apk-part-02
+          path: /tmp/exact-output/parts/Expensify.apk.part-02
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload APK part 03
+        if: steps.transfer.outputs.part_03 == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: expensify-93877-apk-part-03
+          path: /tmp/exact-output/parts/Expensify.apk.part-03
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload build provenance and verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: expensify-93877-apk-provenance
           path: |
-            /tmp/apk-search/probe-results.txt
-            /tmp/apk-search/all-pr-android-builds.txt
-            /tmp/apk-search/matching-pr-android-builds.txt
-            /tmp/hybrid-native-fingerprint.txt
-            /tmp/revision-metadata.txt
+            /tmp/EXACT_HEAD_SHA.txt
+            /tmp/android-shell/apk-url.txt
+            /tmp/android-shell/SHELL_SHA256SUM.txt
+            /tmp/exact-js/bundle-file-type.txt
+            /tmp/exact-js/BUNDLE_SHA256SUM.txt
+            /tmp/exact-output/APK_SHA256SUM.txt
+            /tmp/exact-output/APK_SIZE.txt
+            /tmp/exact-output/PART_SHA256SUMS.txt
+            /tmp/exact-output/EMBEDDED_BUNDLE_SHA256SUM.txt
+            /tmp/exact-output/apksigner-verification.txt
+            /tmp/exact-output/provenance.txt
           if-no-files-found: ignore
           compression-level: 0
           retention-days: 3
