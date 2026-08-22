@@ -1,4 +1,4 @@
-# Hybrid identity seed: preserve synthetic Onyx through OldDot -> NewDot startup.
+# Synthetic SSO identity: recover OldDot keychain and preserve seeded NewDot Onyx.
 name: Temporary PR 93877 Android table regression
 
 on:
