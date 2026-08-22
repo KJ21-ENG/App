@@ -4,4 +4,4 @@ export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
 mkdir -p "$HOME/.android"
 adb start-server
 adb devices -l
-exec python3 .chatgpt-regression/seeded_table_regression.py
+exec python3 .chatgpt-regression/seeded_table_regression_runner.py
