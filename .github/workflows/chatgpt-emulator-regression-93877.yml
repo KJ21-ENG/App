@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   materialize:
@@ -42,7 +43,7 @@ jobs:
       - name: Upload exact source tree
         uses: actions/upload-artifact@v4
         with:
-          name: expensify-app-78ef121-source
+          name: expensify-app-78ef121-source-v2
           path: /tmp/expensify-app-78ef121-source.tar.gz
           compression-level: 0
           retention-days: 3
@@ -57,7 +58,7 @@ jobs:
             "emulator" \
             "system-images;android-35;google_apis;x86_64"
 
-      - name: Archive Android emulator runtime
+      - name: Archive and split Android emulator runtime
         shell: bash
         run: |
           set -euo pipefail
@@ -68,11 +69,185 @@ jobs:
           cp -a "$ANDROID_SDK_ROOT/licenses" /tmp/android-sdk-bundle/ || true
           cp -a "$ANDROID_SDK_ROOT/system-images/android-35/google_apis/x86_64" /tmp/android-sdk-bundle/system-images/android-35/google_apis/
           tar -C /tmp/android-sdk-bundle -czf /tmp/android-emulator-api35-x86_64.tar.gz .
+          mkdir -p emulator-parts
+          split -b 350M -d -a 2 /tmp/android-emulator-api35-x86_64.tar.gz emulator-parts/android-emulator-api35-x86_64.part-
+          sha256sum emulator-parts/* > emulator-parts/SHA256SUMS
+          ls -lh emulator-parts
 
-      - name: Upload Android emulator runtime
+      - name: Upload emulator checksums
         uses: actions/upload-artifact@v4
         with:
-          name: android-emulator-api35-x86_64
-          path: /tmp/android-emulator-api35-x86_64.tar.gz
+          name: android-emulator-api35-checksums
+          path: emulator-parts/SHA256SUMS
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload emulator part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-api35-part-00
+          path: emulator-parts/android-emulator-api35-x86_64.part-00
+          compression-level: 0
+          retention-days: 3
+      - name: Upload emulator part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-api35-part-01
+          path: emulator-parts/android-emulator-api35-x86_64.part-01
+          compression-level: 0
+          retention-days: 3
+      - name: Upload emulator part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-api35-part-02
+          path: emulator-parts/android-emulator-api35-x86_64.part-02
+          compression-level: 0
+          retention-days: 3
+      - name: Upload emulator part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-api35-part-03
+          path: emulator-parts/android-emulator-api35-x86_64.part-03
+          compression-level: 0
+          retention-days: 3
+      - name: Upload emulator part 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-api35-part-04
+          path: emulator-parts/android-emulator-api35-x86_64.part-04
+          compression-level: 0
+          retention-days: 3
+      - name: Upload emulator part 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-api35-part-05
+          path: emulator-parts/android-emulator-api35-x86_64.part-05
+          compression-level: 0
+          retention-days: 3
+
+  bundle-and-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      STANDALONE_NEW_DOT: "true"
+      SENTRY_DISABLE_AUTO_UPLOAD: "true"
+      IS_HYBRID_APP: "false"
+      ENV: adhoc
+    steps:
+      - name: Checkout exact upstream PR head
+        uses: actions/checkout@v4
+        with:
+          repository: Expensify/App
+          ref: 78ef1215915a659779791df28c40111a64fd83bb
+          fetch-depth: 1
+          submodules: false
+
+      - name: Verify exact source revision
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "78ef1215915a659779791df28c40111a64fd83bb"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26.5.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Set up exact npm and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.17.0
+          node --version
+          npm --version
+          bun --version
+          npm ci
+
+      - name: Prepare adhoc environment
+        shell: bash
+        run: |
+          cp .env.staging .env.adhoc
+          sed -i 's/ENVIRONMENT=staging/ENVIRONMENT=adhoc/' .env.adhoc
+
+      - name: Generate exact-head Android JavaScript bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENTRY_FILE="$(node -e "require('expo/scripts/resolveAppEntry')" "$PWD" android absolute)"
+          mkdir -p /tmp/exact-head-bundle/assets
+          npx rock bundle \
+            --platform android \
+            --dev false \
+            --entry-file "$ENTRY_FILE" \
+            --bundle-output /tmp/exact-head-bundle/index.android.bundle \
+            --assets-dest /tmp/exact-head-bundle/assets \
+            --reset-cache
+          printf '%s\n' '78ef1215915a659779791df28c40111a64fd83bb' > /tmp/exact-head-bundle/EXACT_HEAD_SHA.txt
+          tar -C /tmp/exact-head-bundle -czf /tmp/exact-head-android-js-bundle.tar.gz .
+          ls -lh /tmp/exact-head-android-js-bundle.tar.gz
+
+      - name: Upload exact-head JavaScript bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-head-android-js-bundle
+          path: /tmp/exact-head-android-js-bundle.tar.gz
+          compression-level: 0
+          retention-days: 3
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Attempt cached exact native APK and inject exact bundle
+        id: rock-build
+        continue-on-error: true
+        uses: callstackincubator/android@4cedf4d9b5c167452c96fe67233577e0fde9a025
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SENTRY_DISABLE_AUTO_UPLOAD: "true"
+          IS_HYBRID_APP: "false"
+        with:
+          variant: Adhoc
+          aab: false
+          sign: true
+          re-sign: true
+          ad-hoc: true
+          setup-java: false
+          keystore-file: android/app/debug.keystore
+          keystore-store-file: debug.keystore
+          keystore-store-password: android
+          keystore-key-alias: androiddebugkey
+          keystore-key-password: android
+          keystore-path: app/debug.keystore
+          comment-bot: false
+          custom-identifier: exact-78ef121
+          rock-build-extra-params: '--extra-params "-PreactNativeArchitectures=x86_64 --profile"'
+
+      - name: Collect APK candidates and diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/exact-apk-candidates
+          find android .rock -type f -name '*.apk' -print -exec cp -v '{}' /tmp/exact-apk-candidates/ \; 2>/dev/null || true
+          printf 'rock_step_outcome=%s\n' '${{ steps.rock-build.outcome }}' > /tmp/exact-apk-candidates/BUILD_STATUS.txt
+          printf 'exact_head=%s\n' '78ef1215915a659779791df28c40111a64fd83bb' >> /tmp/exact-apk-candidates/BUILD_STATUS.txt
+          find /tmp/exact-apk-candidates -maxdepth 1 -type f -printf '%f %s bytes\n'
+
+      - name: Upload APK candidates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-head-android-apk-candidates
+          path: /tmp/exact-apk-candidates
+          if-no-files-found: warn
           compression-level: 0
           retention-days: 3
