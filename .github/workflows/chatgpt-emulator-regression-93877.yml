@@ -1,4 +1,4 @@
-name: Build exact-head emulator APK by bundle replacement
+name: Build exact-head emulator APK from matching native cache
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  repack-exact-head-apk:
+  exact-head-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -22,6 +22,7 @@ jobs:
       IS_HYBRID_APP: "false"
       ENV: adhoc
       EXACT_HEAD: 78ef1215915a659779791df28c40111a64fd83bb
+      NATIVE_FINGERPRINT: 09678c18e7a6107bd501ae35dfbee45ee92f3f1a
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact upstream PR head
@@ -37,6 +38,72 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXACT_HEAD"
+          printf '%s\n' "$EXACT_HEAD" > /tmp/EXACT_HEAD_SHA.txt
+
+      - name: Download matching public Rock native cache
+        id: native-cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/native-cache/download /tmp/native-cache/extracted
+          BASE_URL='https://ad-hoc-expensify-cash.s3.us-east-1.amazonaws.com/rock-artifacts'
+          CANDIDATES=(
+            "rock-android-Adhoc-${NATIVE_FINGERPRINT}.zip"
+            "rock-android-Adhoc-93877-${NATIVE_FINGERPRINT}.zip"
+            "rock-android-Adhoc-4-${NATIVE_FINGERPRINT}.zip"
+          )
+
+          : > /tmp/native-cache/probe-results.txt
+          FOUND=''
+          for object_name in "${CANDIDATES[@]}"; do
+            url="${BASE_URL}/${object_name}"
+            destination="/tmp/native-cache/download/${object_name}"
+            echo "Probing ${url}" | tee -a /tmp/native-cache/probe-results.txt
+            http_code="$(curl \
+              --location \
+              --silent \
+              --show-error \
+              --retry 2 \
+              --retry-all-errors \
+              --connect-timeout 30 \
+              --max-time 900 \
+              --output "$destination" \
+              --write-out '%{http_code}' \
+              "$url" || true)"
+            size="$(stat -c '%s' "$destination" 2>/dev/null || printf '0')"
+            printf '%s http=%s bytes=%s\n' "$object_name" "$http_code" "$size" \
+              | tee -a /tmp/native-cache/probe-results.txt
+
+            if [ "$http_code" = '200' ] && [ "$size" -gt 1000000 ] && unzip -tq "$destination" >/dev/null; then
+              FOUND="$destination"
+              printf '%s\n' "$object_name" > /tmp/native-cache/matched-object-name.txt
+              printf '%s\n' "$url" > /tmp/native-cache/matched-object-url.txt
+              break
+            fi
+            rm -f "$destination"
+          done
+
+          if [ -z "$FOUND" ]; then
+            echo 'No matching public native cache object was found.' >&2
+            exit 1
+          fi
+
+          unzip -q "$FOUND" -d /tmp/native-cache/extracted
+          find /tmp/native-cache/extracted -maxdepth 5 -type f -printf '%P %s bytes\n' \
+            | sort | tee /tmp/native-cache/extracted-files.txt
+
+          APK_PATH="$(find /tmp/native-cache/extracted -type f -name '*.apk' -print -quit)"
+          if [ -z "$APK_PATH" ]; then
+            echo 'The matching cache ZIP did not contain an APK.' >&2
+            exit 1
+          fi
+
+          cp "$APK_PATH" /tmp/native-cache/matching-native-shell.apk
+          printf '%s\n' "$APK_PATH" > /tmp/native-cache/original-apk-path.txt
+          sha256sum /tmp/native-cache/matching-native-shell.apk \
+            | tee /tmp/native-cache/NATIVE_SHELL_SHA256SUM.txt
+          file /tmp/native-cache/matching-native-shell.apk
+          ls -lh /tmp/native-cache/matching-native-shell.apk
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -48,166 +115,21 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Install exact npm and project dependencies
+      - name: Install exact project dependencies
         shell: bash
         run: |
           set -euo pipefail
           npm install --global npm@11.17.0
           npm ci
 
-      - name: Prepare adhoc environment
+      - name: Prepare exact adhoc environment
         shell: bash
         run: |
           set -euo pipefail
           cp .env.staging .env.adhoc
           sed -i 's/ENVIRONMENT=staging/ENVIRONMENT=adhoc/' .env.adhoc
 
-      - name: Build exact Hermes bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          ENTRY_FILE="$(node -e "require('expo/scripts/resolveAppEntry')" "$PWD" android absolute)"
-          mkdir -p /tmp/exact-head/assets
-          npx rock bundle \
-            --platform android \
-            --dev false \
-            --entry-file "$ENTRY_FILE" \
-            --bundle-output /tmp/exact-head/index.android.bundle \
-            --assets-dest /tmp/exact-head/assets \
-            --reset-cache \
-            --hermes
-          printf '%s\n' "$EXACT_HEAD" > /tmp/exact-head/EXACT_HEAD_SHA.txt
-          file /tmp/exact-head/index.android.bundle
-          ls -lh /tmp/exact-head/index.android.bundle
-
-      - name: Find latest official Android ad-hoc shell for PR 93877
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/official-shell
-          for page in 1 2; do
-            curl -fsSL \
-              -H 'Accept: application/vnd.github+json' \
-              -H 'X-GitHub-Api-Version: 2022-11-28' \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              "https://api.github.com/repos/Expensify/App/issues/93877/comments?per_page=100&page=$page" \
-              > "/tmp/official-shell/comments-$page.json"
-          done
-
-          jq -s '
-            add
-            | map(select(.body | contains("rock-android-Adhoc-")))
-            | sort_by(.created_at)
-            | last
-          ' /tmp/official-shell/comments-1.json /tmp/official-shell/comments-2.json \
-            > /tmp/official-shell/latest-comment.json
-
-          python3 - <<'PY'
-          import json
-          import pathlib
-          import re
-
-          root = pathlib.Path('/tmp/official-shell')
-          comment = json.loads((root / 'latest-comment.json').read_text())
-          if not comment:
-              raise SystemExit('No official Android ad-hoc build comment found')
-          body = comment.get('body', '')
-          urls = re.findall(
-              r'https://ad-hoc-expensify-cash\.s3\.[^\s|)]+/rock-artifacts/ad-hoc/rock-android-Adhoc-[^\s|)]+/index\.html',
-              body,
-          )
-          if not urls:
-              raise SystemExit('Official Android ad-hoc index URL was not found')
-          index_url = urls[0]
-          (root / 'index-url.txt').write_text(index_url + '\n')
-          (root / 'shell-comment-metadata.txt').write_text(
-              f"comment_id={comment.get('id')}\n"
-              f"created_at={comment.get('created_at')}\n"
-              f"html_url={comment.get('html_url')}\n"
-              f"index_url={index_url}\n"
-          )
-          print((root / 'shell-comment-metadata.txt').read_text())
-          PY
-
-      - name: Download official APK shell
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import pathlib
-          import re
-          import urllib.parse
-          import urllib.request
-
-          root = pathlib.Path('/tmp/official-shell')
-          index_url = (root / 'index-url.txt').read_text().strip()
-          headers = {'User-Agent': 'exact-head-regression-builder'}
-          with urllib.request.urlopen(urllib.request.Request(index_url, headers=headers), timeout=60) as response:
-              page = response.read().decode('utf-8', errors='replace')
-          (root / 'index.html').write_text(page)
-
-          candidates = re.findall(r'''(?:href|src)=["']([^"']+\.apk(?:\?[^"']*)?)["']''', page, flags=re.I)
-          if not candidates:
-              candidates = re.findall(r'''https?://[^\s"']+\.apk(?:\?[^\s"']*)?''', page, flags=re.I)
-          if not candidates:
-              raise SystemExit('No APK URL found in the official ad-hoc index page')
-
-          apk_url = urllib.parse.urljoin(index_url, candidates[0])
-          (root / 'apk-url.txt').write_text(apk_url + '\n')
-          print(f'Downloading APK shell from {apk_url}')
-          with urllib.request.urlopen(urllib.request.Request(apk_url, headers=headers), timeout=300) as response, open(root / 'official-shell.apk', 'wb') as output:
-              while chunk := response.read(1024 * 1024):
-                  output.write(chunk)
-          PY
-          file /tmp/official-shell/official-shell.apk
-          ls -lh /tmp/official-shell/official-shell.apk
-
-      - name: Replace bundled JavaScript
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import copy
-          import pathlib
-          import zipfile
-
-          root = pathlib.Path('/tmp/official-shell')
-          source_apk = root / 'official-shell.apk'
-          output_apk = root / 'unsigned-exact-head.apk'
-          exact_bundle = pathlib.Path('/tmp/exact-head/index.android.bundle').read_bytes()
-
-          with zipfile.ZipFile(source_apk, 'r') as source:
-              bundle_names = [name for name in source.namelist() if name.endswith('index.android.bundle')]
-              if len(bundle_names) != 1:
-                  raise SystemExit(f'Expected one index.android.bundle entry, found: {bundle_names}')
-              bundle_name = bundle_names[0]
-              old_bundle = source.read(bundle_name)
-              old_info = source.getinfo(bundle_name)
-              old_is_text = old_bundle.startswith((b'var ', b'!function', b'(function', b'__d('))
-              if old_is_text:
-                  raise SystemExit('The official shell is not a Hermes APK; refusing an engine-mismatched replacement')
-
-              with zipfile.ZipFile(output_apk, 'w', allowZip64=True) as target:
-                  for info in source.infolist():
-                      if info.filename.upper().startswith('META-INF/'):
-                          continue
-                      cloned = copy.copy(info)
-                      data = exact_bundle if info.filename == bundle_name else source.read(info.filename)
-                      target.writestr(cloned, data, compress_type=info.compress_type)
-
-          (root / 'bundle-replacement-metadata.txt').write_text(
-              f'bundle_entry={bundle_name}\n'
-              f'bundle_format=hermes\n'
-              f'old_bundle_size={len(old_bundle)}\n'
-              f'new_bundle_size={len(exact_bundle)}\n'
-              f'old_compression={old_info.compress_type}\n'
-          )
-          print((root / 'bundle-replacement-metadata.txt').read_text())
-          PY
-          file /tmp/official-shell/unsigned-exact-head.apk
-          ls -lh /tmp/official-shell/unsigned-exact-head.apk
-
-      - name: Align and sign exact-head APK
+      - name: Install Android signing tools
         shell: bash
         run: |
           set -euo pipefail
@@ -215,34 +137,71 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'build-tools;36.0.0' 'platform-tools'
 
-          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign"
-          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
-          "$ZIPALIGN" -p -f 4 \
-            /tmp/official-shell/unsigned-exact-head.apk \
-            /tmp/official-shell/aligned-exact-head.apk
-          "$APKSIGNER" sign \
-            --ks android/app/debug.keystore \
-            --ks-pass pass:android \
-            --ks-key-alias androiddebugkey \
-            --key-pass pass:android \
-            --out /tmp/official-shell/Expensify-93877-78ef121-emulator.apk \
-            /tmp/official-shell/aligned-exact-head.apk
-          "$APKSIGNER" verify --verbose --print-certs \
-            /tmp/official-shell/Expensify-93877-78ef121-emulator.apk \
-            | tee /tmp/official-shell/apksigner-verification.txt
-          sha256sum /tmp/official-shell/Expensify-93877-78ef121-emulator.apk \
-            | tee /tmp/official-shell/APK_SHA256SUM.txt
+      - name: Apply exact Hermes bundle using Rock standard re-sign flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/exact-output
+          npx rock sign:android /tmp/native-cache/matching-native-shell.apk \
+            --build-jsbundle \
+            --keystore android/app/debug.keystore \
+            --keystore-password android \
+            --key-alias androiddebugkey \
+            --key-password android \
+            --output /tmp/exact-output/Expensify-93877-78ef121-emulator.apk
 
-      - name: Upload exact-head emulator APK
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs \
+            /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
+            | tee /tmp/exact-output/apksigner-verification.txt
+          sha256sum /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
+            | tee /tmp/exact-output/APK_SHA256SUM.txt
+
+          unzip -p /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
+            assets/index.android.bundle > /tmp/exact-output/index.android.bundle
+          file /tmp/exact-output/index.android.bundle \
+            | tee /tmp/exact-output/bundle-file-type.txt
+          ls -lh /tmp/exact-output/Expensify-93877-78ef121-emulator.apk \
+            /tmp/exact-output/index.android.bundle
+
+          cat > /tmp/exact-output/build-provenance.txt <<EOF
+          exact_head=${EXACT_HEAD}
+          native_fingerprint=${NATIVE_FINGERPRINT}
+          matched_cache_object=$(cat /tmp/native-cache/matched-object-name.txt)
+          matched_cache_url=$(cat /tmp/native-cache/matched-object-url.txt)
+          re_sign_method=rock sign:android --build-jsbundle
+          environment=adhoc
+          EOF
+
+      - name: Upload exact-head APK and provenance
         uses: actions/upload-artifact@v4
         with:
           name: expensify-93877-78ef121-emulator-apk
           path: |
-            /tmp/official-shell/Expensify-93877-78ef121-emulator.apk
-            /tmp/official-shell/APK_SHA256SUM.txt
-            /tmp/official-shell/apksigner-verification.txt
-            /tmp/official-shell/bundle-replacement-metadata.txt
-            /tmp/official-shell/shell-comment-metadata.txt
-            /tmp/exact-head/EXACT_HEAD_SHA.txt
+            /tmp/exact-output/Expensify-93877-78ef121-emulator.apk
+            /tmp/exact-output/APK_SHA256SUM.txt
+            /tmp/exact-output/apksigner-verification.txt
+            /tmp/exact-output/bundle-file-type.txt
+            /tmp/exact-output/build-provenance.txt
+            /tmp/EXACT_HEAD_SHA.txt
+            /tmp/native-cache/probe-results.txt
+            /tmp/native-cache/matched-object-name.txt
+            /tmp/native-cache/NATIVE_SHELL_SHA256SUM.txt
+            /tmp/native-cache/extracted-files.txt
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload cache probe evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-native-cache-probe-evidence
+          path: |
+            /tmp/native-cache/probe-results.txt
+            /tmp/native-cache/extracted-files.txt
+            /tmp/native-cache/matched-object-name.txt
+            /tmp/native-cache/matched-object-url.txt
+            /tmp/EXACT_HEAD_SHA.txt
+          if-no-files-found: ignore
           compression-level: 0
           retention-days: 3
