@@ -1,4 +1,4 @@
-# Retry with bounded emulator startup diagnostics.
+# Retry with an explicit AVD search path shared by avdmanager and emulator.
 name: Temporary PR 93877 Android emulator probe
 
 on:
@@ -14,7 +14,7 @@ permissions:
 jobs:
   emulator-probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       APK_ARTIFACT_ID: "9474257761"
       RESULT_BRANCH: chatgpt/emulator-regression-93877
@@ -63,12 +63,15 @@ jobs:
           sha256sum "$APK" | tee "$GITHUB_WORKSPACE/android-regression-evidence/APK_SHA256SUM.txt"
           ls -lh "$APK"
 
-      - name: Install Android emulator image
+      - name: Install Android emulator image and create AVD
         shell: bash
         run: |
           set -euo pipefail
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           AVDMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
           echo no | "$AVDMANAGER" create avd \
@@ -76,6 +79,9 @@ jobs:
             --name pr93877 \
             --package 'system-images;android-35;google_apis;x86_64' \
             --device 'pixel_6'
+          "$AVDMANAGER" list avd | tee "$GITHUB_WORKSPACE/android-regression-evidence/avd-list.txt"
+          find "$ANDROID_AVD_HOME" -maxdepth 3 -printf '%p %s bytes\n' | sort \
+            > "$GITHUB_WORKSPACE/android-regression-evidence/avd-files.txt"
           sudo chown root:kvm /dev/kvm || true
           sudo chmod 660 /dev/kvm || true
 
