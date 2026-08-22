@@ -16,6 +16,7 @@ nohup "$ANDROID_SDK_ROOT/emulator/emulator" \
   -no-snapshot \
   -wipe-data \
   -accel on \
+  -no-metrics \
   -gpu swiftshader_indirect \
   -camera-back none \
   -camera-front none \
@@ -58,6 +59,13 @@ adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
 
+{
+  adb root || true
+  sleep 2
+  adb wait-for-device
+  adb shell id
+} > "$EVIDENCE/adb-root.txt" 2>&1
+
 "$AAPT" dump badging "$APK" > "$EVIDENCE/apk-badging.txt"
 PACKAGE="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "$EVIDENCE/apk-badging.txt" | head -1)"
 ACTIVITY="$(sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p" "$EVIDENCE/apk-badging.txt" | head -1)"
@@ -69,13 +77,6 @@ adb shell pm list packages -f | sort > "$EVIDENCE/packages.txt"
 adb shell dumpsys package "$PACKAGE" > "$EVIDENCE/package-dumpsys.txt"
 adb logcat -c
 
-{
-  echo '=== run-as probe ==='
-  adb shell run-as "$PACKAGE" sh -c 'id; pwd; find . -maxdepth 3 \( -type f -o -type d \) -print | sort | head -400' || true
-  echo '=== package paths ==='
-  adb shell pm path "$PACKAGE" || true
-} > "$EVIDENCE/run-as-probe.txt" 2>&1
-
 adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 > "$EVIDENCE/launch.txt" 2>&1 || true
 sleep 25
 adb exec-out screencap -p > "$EVIDENCE/01-initial-launch.png"
@@ -83,7 +84,15 @@ adb shell uiautomator dump /sdcard/initial-window.xml >/dev/null 2>&1 || true
 adb pull /sdcard/initial-window.xml "$EVIDENCE/01-initial-window.xml" >/dev/null 2>&1 || true
 adb shell dumpsys activity activities > "$EVIDENCE/01-activities.txt"
 
-adb shell am start -W -a android.intent.action.VIEW -d 'new-expensify://settings/troubleshoot' -p "$PACKAGE" > "$EVIDENCE/deeplink-troubleshoot.txt" 2>&1 || true
+APP_DATA="/data/user/0/$PACKAGE"
+{
+  echo "app_data=$APP_DATA"
+  adb shell "ls -ld '$APP_DATA'"
+  adb shell "find '$APP_DATA' -maxdepth 6 -printf '%y %p %s bytes %m %u:%g\n' | sort"
+} > "$EVIDENCE/app-data-files.txt" 2>&1 || true
+adb exec-out "tar -C '$APP_DATA' -cf - ." 2> "$EVIDENCE/app-data-tar-stderr.txt" | gzip -1 > "$EVIDENCE/app-data.tar.gz" || true
+
+adb shell am start -W -a android.intent.action.VIEW -d 'expensify://open/settings/troubleshoot' > "$EVIDENCE/deeplink-troubleshoot.txt" 2>&1 || true
 sleep 15
 adb exec-out screencap -p > "$EVIDENCE/02-troubleshoot-deeplink.png"
 adb shell uiautomator dump /sdcard/troubleshoot-window.xml >/dev/null 2>&1 || true
@@ -107,7 +116,9 @@ adb shell dumpsys gfxinfo "$PACKAGE" > "$EVIDENCE/gfxinfo.txt" || true
 {
   echo "package=$PACKAGE"
   echo "activity=$ACTIVITY"
+  echo "adb_root=$(grep -q 'uid=0(root)' "$EVIDENCE/adb-root.txt" && echo yes || echo no)"
   echo "initial_xml=$(test -s "$EVIDENCE/01-initial-window.xml" && echo yes || echo no)"
   echo "troubleshoot_xml=$(test -s "$EVIDENCE/02-troubleshoot-window.xml" && echo yes || echo no)"
+  echo "app_data_archive_bytes=$(stat -c '%s' "$EVIDENCE/app-data.tar.gz" 2>/dev/null || echo 0)"
   echo "important_log_lines=$(wc -l < "$EVIDENCE/logcat-important.txt")"
 } | tee "$EVIDENCE/probe-summary.txt"
