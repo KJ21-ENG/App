@@ -1,4 +1,4 @@
-# Retry with an explicit AVD search path shared by avdmanager and emulator.
+# Retry with direct KVM device access for the hosted runner process.
 name: Temporary PR 93877 Android emulator probe
 
 on:
@@ -82,8 +82,21 @@ jobs:
           "$AVDMANAGER" list avd | tee "$GITHUB_WORKSPACE/android-regression-evidence/avd-list.txt"
           find "$ANDROID_AVD_HOME" -maxdepth 3 -printf '%p %s bytes\n' | sort \
             > "$GITHUB_WORKSPACE/android-regression-evidence/avd-files.txt"
-          sudo chown root:kvm /dev/kvm || true
-          sudo chmod 660 /dev/kvm || true
+          {
+            id
+            groups
+            getent group kvm || true
+            ls -l /dev/kvm || true
+          } > "$GITHUB_WORKSPACE/android-regression-evidence/kvm-before.txt" 2>&1
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
+          {
+            id
+            groups
+            getent group kvm || true
+            ls -l /dev/kvm || true
+          } > "$GITHUB_WORKSPACE/android-regression-evidence/kvm-after.txt" 2>&1
 
       - name: Boot emulator and run discovery probe
         shell: bash
