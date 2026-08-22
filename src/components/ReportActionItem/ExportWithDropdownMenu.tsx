@@ -52,6 +52,8 @@ function ExportWithDropdownMenu({
     wrapperStyle,
     sentryLabel,
 }: ExportWithDropdownMenuProps) {
+    'use no memo';
+
     const reportID = report?.reportID;
     const styles = useThemeStyles();
     const {translate} = useLocalize();
