@@ -52,8 +52,6 @@ function ExportWithDropdownMenu({
     wrapperStyle,
     sentryLabel,
 }: ExportWithDropdownMenuProps) {
-    'use no memo';
-
     const reportID = report?.reportID;
     const styles = useThemeStyles();
     const {translate} = useLocalize();
@@ -80,6 +78,7 @@ function ExportWithDropdownMenu({
     const isExportInProgress = isExportInProgressUtils(reportActions);
     const flattenedWrapperStyle = StyleSheet.flatten([styles.flex1, wrapperStyle]);
     const connectionNameFriendly = getAccountingIntegrationDisplayName(policy, connectionName, translate);
+    const exportMethod = report?.policyID ? exportMethods?.[report.policyID] : null;
 
     const dropdownOptions: Array<DropdownOption<ReportExportType>> = useMemo(() => {
         const optionTemplate = {
@@ -102,14 +101,11 @@ function ExportWithDropdownMenu({
                 ...optionTemplate,
             },
         ];
-        const exportMethod = report?.policyID ? exportMethods?.[report.policyID] : null;
         if (exportMethod) {
             options.sort((method) => (method.value === exportMethod ? -1 : 0));
         }
         return options;
-        // We do not include exportMethods not to re-render the component when the preferred export method changes
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canBeExported, iconToDisplay, connectionName, connectionNameFriendly, report?.policyID, translate]);
+    }, [canBeExported, connectionName, connectionNameFriendly, exportMethod, iconToDisplay, styles.integrationIcon, translate]);
 
     const handleExport = (exportType: ReportExportType) => {
         if (!reportID) {
