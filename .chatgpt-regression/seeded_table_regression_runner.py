@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -21,6 +22,18 @@ def fixed_shell(command: str, *, check: bool = True, timeout: int | float | None
     # `sh`, `-c`, and a spaced command as separate argv entries loses the
     # required quoting (e.g. `getprop sys.boot_completed` becomes `sh -c
     # getprop`). Send the complete command as one adb-shell argument instead.
+    #
+    # A freshly installed hybrid APK does not create its files directory until
+    # first launch. The deterministic seed is written before launch, so create
+    # and correctly own that directory when the OnyxDB copy command is issued.
+    if "cp /data/local/tmp/OnyxDB.seed" in command:
+        directory_match = re.search(r"cp /data/local/tmp/OnyxDB\.seed (/data/user/0/[^/]+/files)/OnyxDB", command)
+        owner_match = re.search(r"chown (\d+:\d+) /data/user/0/[^/]+/files/OnyxDB", command)
+        if directory_match and owner_match:
+            app_files_dir = directory_match.group(1)
+            owner = owner_match.group(1)
+            command = f"mkdir -p {app_files_dir} && chown {owner} {app_files_dir} && chmod 700 {app_files_dir} && {command}"
+
     return module.adb("shell", command, check=check, timeout=timeout)
 
 
