@@ -22,6 +22,7 @@ jobs:
       IS_HYBRID_APP: "false"
       ENV: adhoc
       EXACT_HEAD: 78ef1215915a659779791df28c40111a64fd83bb
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact upstream PR head
         uses: actions/checkout@v4
@@ -52,9 +53,6 @@ jobs:
         run: |
           set -euo pipefail
           npm install --global npm@11.17.0
-          node --version
-          npm --version
-          bun --version
           npm ci
 
       - name: Prepare adhoc environment
@@ -64,7 +62,7 @@ jobs:
           cp .env.staging .env.adhoc
           sed -i 's/ENVIRONMENT=staging/ENVIRONMENT=adhoc/' .env.adhoc
 
-      - name: Build exact Metro and Hermes bundles
+      - name: Build exact Hermes bundle
         shell: bash
         run: |
           set -euo pipefail
@@ -76,32 +74,25 @@ jobs:
             --entry-file "$ENTRY_FILE" \
             --bundle-output /tmp/exact-head/index.android.bundle \
             --assets-dest /tmp/exact-head/assets \
-            --reset-cache
-
-          HERMESC="$(find node_modules/react-native -type f -path '*/linux64-bin/hermesc' -print -quit)"
-          test -n "$HERMESC"
-          chmod +x "$HERMESC"
-          "$HERMESC" -O -emit-binary -out /tmp/exact-head/index.android.bundle.hbc /tmp/exact-head/index.android.bundle
-
+            --reset-cache \
+            --hermes
           printf '%s\n' "$EXACT_HEAD" > /tmp/exact-head/EXACT_HEAD_SHA.txt
-          file /tmp/exact-head/index.android.bundle /tmp/exact-head/index.android.bundle.hbc
-          ls -lh /tmp/exact-head/index.android.bundle /tmp/exact-head/index.android.bundle.hbc
+          file /tmp/exact-head/index.android.bundle
+          ls -lh /tmp/exact-head/index.android.bundle
 
       - name: Find latest official Android ad-hoc shell for PR 93877
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/official-shell
-          curl -fsSL \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            'https://api.github.com/repos/Expensify/App/issues/93877/comments?per_page=100&page=1' \
-            > /tmp/official-shell/comments-1.json
-          curl -fsSL \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            'https://api.github.com/repos/Expensify/App/issues/93877/comments?per_page=100&page=2' \
-            > /tmp/official-shell/comments-2.json
+          for page in 1 2; do
+            curl -fsSL \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "https://api.github.com/repos/Expensify/App/issues/93877/comments?per_page=100&page=$page" \
+              > "/tmp/official-shell/comments-$page.json"
+          done
 
           jq -s '
             add
@@ -126,13 +117,14 @@ jobs:
               body,
           )
           if not urls:
-              raise SystemExit('Official Android ad-hoc index URL was not found in latest build comment')
-          (root / 'index-url.txt').write_text(urls[0] + '\n')
+              raise SystemExit('Official Android ad-hoc index URL was not found')
+          index_url = urls[0]
+          (root / 'index-url.txt').write_text(index_url + '\n')
           (root / 'shell-comment-metadata.txt').write_text(
               f"comment_id={comment.get('id')}\n"
               f"created_at={comment.get('created_at')}\n"
               f"html_url={comment.get('html_url')}\n"
-              f"index_url={urls[0]}\n"
+              f"index_url={index_url}\n"
           )
           print((root / 'shell-comment-metadata.txt').read_text())
           PY
@@ -149,8 +141,8 @@ jobs:
 
           root = pathlib.Path('/tmp/official-shell')
           index_url = (root / 'index-url.txt').read_text().strip()
-          request = urllib.request.Request(index_url, headers={'User-Agent': 'exact-head-regression-builder'})
-          with urllib.request.urlopen(request, timeout=60) as response:
+          headers = {'User-Agent': 'exact-head-regression-builder'}
+          with urllib.request.urlopen(urllib.request.Request(index_url, headers=headers), timeout=60) as response:
               page = response.read().decode('utf-8', errors='replace')
           (root / 'index.html').write_text(page)
 
@@ -158,23 +150,19 @@ jobs:
           if not candidates:
               candidates = re.findall(r'''https?://[^\s"']+\.apk(?:\?[^\s"']*)?''', page, flags=re.I)
           if not candidates:
-              raise SystemExit('No APK URL found in official ad-hoc index page')
+              raise SystemExit('No APK URL found in the official ad-hoc index page')
 
           apk_url = urllib.parse.urljoin(index_url, candidates[0])
           (root / 'apk-url.txt').write_text(apk_url + '\n')
           print(f'Downloading APK shell from {apk_url}')
-          request = urllib.request.Request(apk_url, headers={'User-Agent': 'exact-head-regression-builder'})
-          with urllib.request.urlopen(request, timeout=300) as response, open(root / 'official-shell.apk', 'wb') as output:
-              while True:
-                  chunk = response.read(1024 * 1024)
-                  if not chunk:
-                      break
+          with urllib.request.urlopen(urllib.request.Request(apk_url, headers=headers), timeout=300) as response, open(root / 'official-shell.apk', 'wb') as output:
+              while chunk := response.read(1024 * 1024):
                   output.write(chunk)
           PY
           file /tmp/official-shell/official-shell.apk
           ls -lh /tmp/official-shell/official-shell.apk
 
-      - name: Replace bundled JavaScript while preserving APK entry metadata
+      - name: Replace bundled JavaScript
         shell: bash
         run: |
           set -euo pipefail
@@ -186,8 +174,7 @@ jobs:
           root = pathlib.Path('/tmp/official-shell')
           source_apk = root / 'official-shell.apk'
           output_apk = root / 'unsigned-exact-head.apk'
-          text_bundle = pathlib.Path('/tmp/exact-head/index.android.bundle')
-          hermes_bundle = pathlib.Path('/tmp/exact-head/index.android.bundle.hbc')
+          exact_bundle = pathlib.Path('/tmp/exact-head/index.android.bundle').read_bytes()
 
           with zipfile.ZipFile(source_apk, 'r') as source:
               bundle_names = [name for name in source.namelist() if name.endswith('index.android.bundle')]
@@ -196,24 +183,23 @@ jobs:
               bundle_name = bundle_names[0]
               old_bundle = source.read(bundle_name)
               old_info = source.getinfo(bundle_name)
-
-              use_hermes = not old_bundle.startswith((b'var ', b'!function', b'(function', b'__d('))
-              replacement = hermes_bundle.read_bytes() if use_hermes else text_bundle.read_bytes()
-              bundle_format = 'hermes' if use_hermes else 'metro-text'
+              old_is_text = old_bundle.startswith((b'var ', b'!function', b'(function', b'__d('))
+              if old_is_text:
+                  raise SystemExit('The official shell is not a Hermes APK; refusing an engine-mismatched replacement')
 
               with zipfile.ZipFile(output_apk, 'w', allowZip64=True) as target:
                   for info in source.infolist():
                       if info.filename.upper().startswith('META-INF/'):
                           continue
                       cloned = copy.copy(info)
-                      data = replacement if info.filename == bundle_name else source.read(info.filename)
+                      data = exact_bundle if info.filename == bundle_name else source.read(info.filename)
                       target.writestr(cloned, data, compress_type=info.compress_type)
 
           (root / 'bundle-replacement-metadata.txt').write_text(
               f'bundle_entry={bundle_name}\n'
-              f'bundle_format={bundle_format}\n'
+              f'bundle_format=hermes\n'
               f'old_bundle_size={len(old_bundle)}\n'
-              f'new_bundle_size={len(replacement)}\n'
+              f'new_bundle_size={len(exact_bundle)}\n'
               f'old_compression={old_info.compress_type}\n'
           )
           print((root / 'bundle-replacement-metadata.txt').read_text())
