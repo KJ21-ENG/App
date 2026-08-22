@@ -1,4 +1,4 @@
-# Retry after creating and owning the hybrid app files directory before OnyxDB seeding.
+# Diagnostic: capture seeded and post-launch OnyxDB files at the first authentication gate.
 name: Temporary PR 93877 Android table regression
 
 on:
