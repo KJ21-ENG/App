@@ -1,5 +1,5 @@
-# Run a rooted app-storage inventory before deterministic Onyx state injection.
-name: Temporary PR 93877 Android emulator probe
+# Deterministic offline table regression against the exact PR JavaScript bundle.
+name: Temporary PR 93877 Android table regression
 
 on:
   push:
@@ -12,14 +12,14 @@ permissions:
   contents: write
 
 jobs:
-  emulator-probe:
+  table-regression:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       APK_ARTIFACT_ID: "9474257761"
       RESULT_BRANCH: chatgpt/emulator-regression-93877
     steps:
-      - name: Checkout temporary result branch
+      - name: Checkout deterministic harness
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.RESULT_BRANCH }}
@@ -35,12 +35,13 @@ jobs:
             echo "run_attempt=$GITHUB_RUN_ATTEMPT"
             echo "workflow_sha=$GITHUB_SHA"
             echo "phase=active"
+            echo "suite=seeded-table-regression"
             echo "created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > .chatgpt-regression/probe-active-run-id.txt
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .chatgpt-regression/probe-active-run-id.txt
-          git commit -m "Record active PR 93877 emulator probe $GITHUB_RUN_ID"
+          git commit -m "Record active PR 93877 table regression $GITHUB_RUN_ID"
           git push origin "HEAD:$RESULT_BRANCH"
 
       - name: Download verified exact-JS APK artifact
@@ -59,11 +60,11 @@ jobs:
           unzip -q /tmp/apk/artifact.zip -d /tmp/apk/extracted
           APK="$(find /tmp/apk/extracted -type f -name '*.apk' -print -quit)"
           test -n "$APK"
-          file "$APK"
           sha256sum "$APK" | tee "$GITHUB_WORKSPACE/android-regression-evidence/APK_SHA256SUM.txt"
+          file "$APK"
           ls -lh "$APK"
 
-      - name: Install Android emulator image and create AVD
+      - name: Install Android 35 emulator and create AVD
         shell: bash
         run: |
           set -euo pipefail
@@ -80,33 +81,20 @@ jobs:
             --package 'system-images;android-35;google_apis;x86_64' \
             --device 'pixel_6'
           "$AVDMANAGER" list avd | tee "$GITHUB_WORKSPACE/android-regression-evidence/avd-list.txt"
-          find "$ANDROID_AVD_HOME" -maxdepth 3 -printf '%p %s bytes\n' | sort \
-            > "$GITHUB_WORKSPACE/android-regression-evidence/avd-files.txt"
-          {
-            id
-            groups
-            getent group kvm || true
-            ls -l /dev/kvm || true
-          } > "$GITHUB_WORKSPACE/android-regression-evidence/kvm-before.txt" 2>&1
           if [ -e /dev/kvm ]; then
             sudo chmod 666 /dev/kvm
           fi
-          {
-            id
-            groups
-            getent group kvm || true
-            ls -l /dev/kvm || true
-          } > "$GITHUB_WORKSPACE/android-regression-evidence/kvm-after.txt" 2>&1
+          ls -l /dev/kvm > "$GITHUB_WORKSPACE/android-regression-evidence/kvm.txt" 2>&1 || true
 
-      - name: Boot emulator and run rooted storage probe
+      - name: Execute seeded table regression
         shell: bash
         run: bash .chatgpt-regression/run-emulator-probe.sh
 
-      - name: Upload emulator probe evidence
+      - name: Upload complete table regression evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: expensify-93877-emulator-probe-evidence
+          name: expensify-93877-seeded-table-regression-evidence
           path: android-regression-evidence/
           if-no-files-found: warn
           compression-level: 0
@@ -122,9 +110,10 @@ jobs:
             echo "run_attempt=$GITHUB_RUN_ATTEMPT"
             echo "workflow_sha=$GITHUB_SHA"
             echo "phase=completed"
+            echo "suite=seeded-table-regression"
             echo "created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > .chatgpt-regression/probe-run-id.txt
           git add .chatgpt-regression/probe-run-id.txt
-          git commit -m "Record completed PR 93877 emulator probe $GITHUB_RUN_ID" || true
+          git commit -m "Record completed PR 93877 table regression $GITHUB_RUN_ID" || true
           git pull --rebase origin "$RESULT_BRANCH"
           git push origin "HEAD:$RESULT_BRANCH"
