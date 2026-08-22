@@ -1104,7 +1104,7 @@ describe('getPrimaryAction', () => {
             type: CONST.POLICY.TYPE.CORPORATE,
             connections: {
                 netsuite: {
-                    config: {export: {exporter: CURRENT_USER_EMAIL}},
+                    options: {config: {exporter: CURRENT_USER_EMAIL}},
                 },
             },
         });
