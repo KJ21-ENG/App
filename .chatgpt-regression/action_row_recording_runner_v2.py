@@ -8,6 +8,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 BASE = Path(__file__).with_name("action_row_recording_runner.py")
@@ -18,6 +19,55 @@ runner = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = runner
 spec.loader.exec_module(runner)
 app = runner.app
+
+
+def tap_node(node: dict[str, str]) -> bool:
+    center = app.bounds_center(node.get("bounds", ""))
+    if not center:
+        return False
+    app.shell(f"input tap {center[0]} {center[1]}", check=False)
+    time.sleep(3)
+    return True
+
+
+def dismiss_blocking_dialog(nodes: list[dict[str, str]]) -> str | None:
+    """Dismiss emulator system ANRs and product overlays covering NewDot."""
+    texts = "\n".join(app.node_text(node) for node in nodes).casefold()
+    if "isn't responding" in texts or "is not responding" in texts:
+        for label in ("Close app", "Wait"):
+            matches = runner.exact_nodes(nodes, [label])
+            if matches and tap_node(matches[0]):
+                return label
+
+    for label in ("Dismiss", "Got it", "Maybe later", "Not now", "Close"):
+        matches = runner.exact_nodes(nodes, [label])
+        if matches and tap_node(matches[0]):
+            return label
+    return None
+
+
+def resilient_wait_for_text(needle: str, timeout: int = 45) -> bool:
+    deadline = time.monotonic() + timeout
+    dismissed: list[str] = []
+    attempt = 0
+    while time.monotonic() < deadline:
+        nodes = app.parse_nodes(app.dump_xml(f"resilient-wait-{attempt}"))
+        if app.contains_text(nodes, needle):
+            if dismissed:
+                app.RESULTS.setdefault("dismissed_blockers", []).extend(dismissed)
+            return True
+        blocker = dismiss_blocking_dialog(nodes)
+        if blocker:
+            dismissed.append(blocker)
+        else:
+            time.sleep(2)
+        attempt += 1
+    if dismissed:
+        app.RESULTS.setdefault("dismissed_blockers", []).extend(dismissed)
+    return False
+
+
+runner.wait_for_text = resilient_wait_for_text
 
 
 def main() -> int:
@@ -39,7 +89,7 @@ def main() -> int:
         # mounts NewDot; the path itself is subsequently selected through the
         # visible NewDot bottom navigation.
         app.launch_uri(package, activity, "expensify://open/workspaces", "00-enter-newdot")
-        if not runner.wait_for_text("Workspaces", 100):
+        if not resilient_wait_for_text("Workspaces", 100):
             raise app.HarnessError("Hybrid handoff did not mount the NewDot navigation shell")
         runner.dismiss_overlays()
         app.capture("00-newdot-home-ready")
