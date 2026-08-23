@@ -1,4 +1,4 @@
-# Synthetic SSO identity: recover OldDot keychain and preserve seeded NewDot Onyx.
+# Targeted Workspaces and Categories action-row video capture for PR 93877.
 name: Temporary PR 93877 Android table regression
 
 on:
@@ -14,7 +14,7 @@ permissions:
 jobs:
   table-regression:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       APK_ARTIFACT_ID: "9474257761"
       RESULT_BRANCH: chatgpt/emulator-regression-93877
@@ -35,13 +35,13 @@ jobs:
             echo "run_attempt=$GITHUB_RUN_ATTEMPT"
             echo "workflow_sha=$GITHUB_SHA"
             echo "phase=active"
-            echo "suite=seeded-table-regression"
+            echo "suite=action-row-recording"
             echo "created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > .chatgpt-regression/probe-active-run-id.txt
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .chatgpt-regression/probe-active-run-id.txt
-          git commit -m "Record active PR 93877 table regression $GITHUB_RUN_ID"
+          git commit -m "Record active PR 93877 action-row recording $GITHUB_RUN_ID"
           git push origin "HEAD:$RESULT_BRANCH"
 
       - name: Download verified exact-JS APK artifact
@@ -86,15 +86,20 @@ jobs:
           fi
           ls -l /dev/kvm > "$GITHUB_WORKSPACE/android-regression-evidence/kvm.txt" 2>&1 || true
 
-      - name: Execute seeded table regression
+      - name: Execute targeted action-row recording
         shell: bash
-        run: bash .chatgpt-regression/run-emulator-probe.sh
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          mkdir -p "$HOME/.android"
+          adb start-server
+          python3 .chatgpt-regression/action_row_recording_runner.py
 
-      - name: Upload complete table regression evidence
+      - name: Upload complete action-row evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: expensify-93877-seeded-table-regression-evidence
+          name: expensify-93877-action-row-recording-evidence
           path: android-regression-evidence/
           if-no-files-found: warn
           compression-level: 0
@@ -110,10 +115,10 @@ jobs:
             echo "run_attempt=$GITHUB_RUN_ATTEMPT"
             echo "workflow_sha=$GITHUB_SHA"
             echo "phase=completed"
-            echo "suite=seeded-table-regression"
+            echo "suite=action-row-recording"
             echo "created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > .chatgpt-regression/probe-run-id.txt
           git add .chatgpt-regression/probe-run-id.txt
-          git commit -m "Record completed PR 93877 table regression $GITHUB_RUN_ID" || true
+          git commit -m "Record completed PR 93877 action-row recording $GITHUB_RUN_ID" || true
           git pull --rebase origin "$RESULT_BRANCH"
           git push origin "HEAD:$RESULT_BRANCH"
