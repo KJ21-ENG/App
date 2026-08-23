@@ -1,4 +1,4 @@
-# Hybrid URI handoff before targeted Workspaces and Categories video capture.
+# Dismiss emulator ANR and product overlays before action-row video capture.
 name: Temporary PR 93877 Android table regression
 
 on:
