@@ -1,4 +1,4 @@
-# Targeted Workspaces and Categories action-row video capture for PR 93877.
+# Hybrid URI handoff before targeted Workspaces and Categories video capture.
 name: Temporary PR 93877 Android table regression
 
 on:
@@ -93,7 +93,7 @@ jobs:
           export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
           mkdir -p "$HOME/.android"
           adb start-server
-          python3 .chatgpt-regression/action_row_recording_runner.py
+          python3 .chatgpt-regression/action_row_recording_runner_v2.py
 
       - name: Upload complete action-row evidence
         if: always()
