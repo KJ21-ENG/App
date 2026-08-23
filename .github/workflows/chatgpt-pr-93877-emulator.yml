@@ -1,4 +1,4 @@
-# Dismiss emulator ANR and product overlays before action-row video capture.
+# Dismiss the Workspaces coachmark before both action-row video captures.
 name: Temporary PR 93877 Android table regression
 
 on:
@@ -93,7 +93,7 @@ jobs:
           export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
           mkdir -p "$HOME/.android"
           adb start-server
-          python3 .chatgpt-regression/action_row_recording_runner_v2.py
+          python3 .chatgpt-regression/action_row_recording_runner_v3.py
 
       - name: Upload complete action-row evidence
         if: always()
