@@ -29,15 +29,24 @@ import MoneyReportHeaderSelectionDropdown from './MoneyReportHeaderSelectionDrop
  * TRANSACTION_PRIMARY_ACTIONS values (e.g. "keepThisOne") are irrelevant here.
  */
 function narrowPrimaryAction(primaryAction: MoneyReportHeaderActionsProps['primaryAction']): ValueOf<typeof CONST.REPORT.PRIMARY_ACTIONS> | '' {
-    if ((Object.values(CONST.REPORT.PRIMARY_ACTIONS) as string[]).includes(primaryAction)) {
-        return primaryAction as ValueOf<typeof CONST.REPORT.PRIMARY_ACTIONS>;
+    if (
+        primaryAction === CONST.REPORT.PRIMARY_ACTIONS.SUBMIT ||
+        primaryAction === CONST.REPORT.PRIMARY_ACTIONS.APPROVE ||
+        primaryAction === CONST.REPORT.PRIMARY_ACTIONS.PAY ||
+        primaryAction === CONST.REPORT.PRIMARY_ACTIONS.EXPORT_TO_ACCOUNTING ||
+        primaryAction === CONST.REPORT.PRIMARY_ACTIONS.REMOVE_HOLD ||
+        primaryAction === CONST.REPORT.PRIMARY_ACTIONS.REVIEW_DUPLICATES ||
+        primaryAction === CONST.REPORT.PRIMARY_ACTIONS.MARK_AS_CASH ||
+        primaryAction === CONST.REPORT.PRIMARY_ACTIONS.MARK_AS_RESOLVED
+    ) {
+        return primaryAction;
     }
     return '';
 }
 
 function MoneyReportHeaderActions({reportID, primaryAction, isReportInSearch, backTo}: MoneyReportHeaderActionsProps) {
     const styles = useThemeStyles();
-    const dropdownMenuRef = useRef<ButtonWithDropdownMenuRef>(null) as React.RefObject<ButtonWithDropdownMenuRef>;
+    const dropdownMenuRef = useRef<ButtonWithDropdownMenuRef>(null);
 
     const {shouldUseNarrowLayout, isMediumScreenWidth, isInLandscapeMode} = useResponsiveLayout();
     const shouldDisplayNarrowVersion = shouldUseNarrowLayout || isMediumScreenWidth;

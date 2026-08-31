@@ -85,7 +85,7 @@ type MoneyReportHeaderSecondaryActionsProps = {
     primaryAction: ValueOf<typeof CONST.REPORT.PRIMARY_ACTIONS> | '';
     isReportInSearch?: boolean;
     backTo?: Route;
-    dropdownMenuRef?: React.RefObject<ButtonWithDropdownMenuRef>;
+    dropdownMenuRef?: React.RefObject<ButtonWithDropdownMenuRef | null>;
 };
 
 const MORE_MENU_SUBMIT_TO_POPOVER_ANCHOR_ALIGNMENT = {

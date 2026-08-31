@@ -1,4 +1,4 @@
-import type {Emoji} from '@assets/emojis/types';
+import type {Emoji, HeaderEmoji} from '@assets/emojis/types';
 
 import EmojiPickerMenuItem from '@components/EmojiPicker/EmojiPickerMenuItem';
 import Text from '@components/Text';
@@ -17,7 +17,6 @@ import type {EmojiPickerList, EmojiPickerListItem} from '@libs/EmojiUtils';
 import {getRemovedSkinToneEmoji} from '@libs/EmojiUtils';
 
 import CONST from '@src/CONST';
-import type {TranslationPaths} from '@src/languages/types';
 
 import type {ListRenderItem} from '@shopify/flash-list';
 
@@ -155,16 +154,17 @@ function EmojiPickerMenu({onEmojiSelected, activeEmoji, ref}: EmojiPickerMenuPro
             }
 
             if ('header' in item && item.header) {
+                const translationKey: `emojiPicker.headers.${HeaderEmoji['code']}` = `emojiPicker.headers.${item.code}`;
                 return (
                     <View
                         ref={getHeaderRef(index)}
                         accessible
                         accessibilityRole="header"
-                        accessibilityLabel={translate(`emojiPicker.headers.${code}` as TranslationPaths)}
+                        accessibilityLabel={translate(translationKey)}
                         style={[styles.emojiHeaderContainer, target === 'StickyHeader' ? styles.mh4 : {width: windowWidth}]}
                         onLayout={() => handleHeaderLayout(index)}
                     >
-                        <Text style={styles.textLabelSupporting}>{translate(`emojiPicker.headers.${code}` as TranslationPaths)}</Text>
+                        <Text style={styles.textLabelSupporting}>{translate(translationKey)}</Text>
                     </View>
                 );
             }
