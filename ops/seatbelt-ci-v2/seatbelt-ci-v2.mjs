@@ -1,8 +1,9 @@
-import {appendFileSync, readFileSync, writeFileSync, mkdtempSync, rmSync, realpathSync, lstatSync} from 'node:fs';
+import {appendFileSync, readFileSync, writeFileSync, mkdtempSync, rmSync, realpathSync, lstatSync, readdirSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
+import {isDeepStrictEqual} from 'node:util';
 import {pathToFileURL} from 'node:url';
 
 // This validator is shared by the v2 helper and the installed workflow entry.
@@ -36,7 +37,14 @@ export function validateRequest(value) {
     }
 }
 
-function run(request, candidate, trusted, output) {
+function resultContext(request) {
+    return {request, repository: {name: process.env.GITHUB_REPOSITORY, id: Number(process.env.GITHUB_REPOSITORY_ID)},
+        runId: Number(process.env.GITHUB_RUN_ID), attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+        setup: 'failed', outcomes: []};
+}
+
+function run(request, name, candidate, trusted, output) {
+    if (!request.checks.includes(name)) throw new Error('Unselected check');
     const temporary = mkdtempSync(join(tmpdir(), 'seatbelt-ci-'));
     const env = {PATH: process.env.PATH, HOME: temporary, CI: 'true', GITHUB_BASE_REF: request.comparisonBase,
         NPM_CONFIG_USERCONFIG: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
@@ -44,11 +52,9 @@ function run(request, candidate, trusted, output) {
     const git = (cwd, args) => {
         const result = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', '-C', cwd, ...args], {env, encoding: 'utf8', maxBuffer: 1048576});
         if (result.error || result.status !== 0) throw new Error('Exact checkout or comparison base unavailable');
-        return result.stdout.trim();
+        return args.includes('-z') ? result.stdout : result.stdout.trim();
     };
-    const result = {request, repository: {name: process.env.GITHUB_REPOSITORY, id: Number(process.env.GITHUB_REPOSITORY_ID)},
-        runId: Number(process.env.GITHUB_RUN_ID), attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
-        setup: 'failed', outcomes: []};
+    const result = resultContext(request);
     try {
         if (result.repository.name !== 'KJ21-ENG/App'
             || ![result.repository.id, result.runId, result.attempt].every(id => Number.isSafeInteger(id) && id > 0)
@@ -61,6 +67,14 @@ function run(request, candidate, trusted, output) {
             throw new Error('Workflow or tested checkout identity mismatch');
         }
         git(candidate, ['merge-base', '--is-ancestor', request.comparisonBase, request.head]);
+        // Disable rename detection so every surviving destination is selected, while deleted paths are omitted.
+        const lintFiles = name !== 'lint' ? [] : git(candidate, ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=ACMT', request.comparisonBase, request.head, '--'])
+            .split('\0').filter(path => /\.(?:[cm]?js|jsx|tsx?|[cm]ts)$/.test(path));
+        if (lintFiles.length > 1000 || lintFiles.some(path => path.length > 512
+            || !/^[A-Za-z0-9_@(). /-]+$/.test(path) || path.split('/').some(part => !part || part === '.' || part === '..')
+            || realpathSync(resolve(candidate, path)) !== resolve(candidate, path) || !lstatSync(resolve(candidate, path)).isFile())) {
+            throw new Error('Unsupported changed lint path');
+        }
         // Upstream Git.getMainBranchCommitHash fetches this exact SHA and resolves origin/<SHA>.
         git(candidate, ['update-ref', `refs/remotes/origin/${request.comparisonBase}`, request.comparisonBase]);
         for (const path of request.jestFiles) {
@@ -72,37 +86,66 @@ function run(request, candidate, trusted, output) {
         const install = npm(['ci']);
         if (install.error || install.status !== 0) throw new Error('Dependency installation failed');
         result.setup = 'passed';
-        for (const name of request.checks) {
-            const jestOutput = join(temporary, 'jest.json');
-            const args = name === 'jest' ? ['test', '--', '--runInBand', '--json', '--outputFile', jestOutput, '--runTestsByPath', ...request.jestFiles]
-                : name === 'react-compiler' ? ['run', 'react-compiler-compliance-check', '--', 'check-changed']
-                    : ['run', name === 'format' ? 'fmt' : name];
-            // Lint can tighten its tracked baseline. Formatting is compared with its own pre-command diff.
-            const before = name === 'format' ? git(candidate, ['diff', '--binary', 'HEAD', '--']) : '';
-            // Upstream tests CI === 'true'; local diff uses the exact base without PR API context.
-            const executed = npm(args, name === 'react-compiler' ? {...env, CI: 'false'} : env);
-            let status = executed.error || executed.signal || [126, 127, 137, 143].includes(executed.status) ? 'infrastructure-failure' : executed.status === 0 ? 'passed' : 'code-failure';
-            if (name === 'format' && status === 'passed' && git(candidate, ['diff', '--binary', 'HEAD', '--']) !== before) status = 'code-failure';
-            if (name === 'jest' && status === 'passed') {
-                try {
-                    const tests = JSON.parse(readFileSync(jestOutput, 'utf8')).testResults;
-                    const names = tests.map(test => test.name).sort();
-                    if (JSON.stringify(names) !== JSON.stringify(request.jestFiles.map(path => resolve(candidate, path)).sort())
-                        || tests.some(test => !test.assertionResults.some(assertion => assertion.status === 'passed'))) {
-                        status = 'infrastructure-failure';
-                    }
-                } catch {status = 'infrastructure-failure';}
-            }
-            result.outcomes.push({name, status});
+        if (name === 'lint' && lintFiles.length === 0) {
+            console.log('No changed lintable files in the exact comparison');
+            result.outcomes.push({name, status: 'passed'});
+            return 0;
         }
+        const jestOutput = join(temporary, 'jest.json');
+        const args = name === 'jest' ? ['test', '--', '--runInBand', '--json', '--outputFile', jestOutput, '--runTestsByPath', ...request.jestFiles]
+            : name === 'react-compiler' ? ['run', 'react-compiler-compliance-check', '--', 'check-changed']
+                : name === 'lint' ? ['run', 'lint', '--', ...lintFiles.map(path => `./${path}`)]
+                : ['run', name === 'format' ? 'fmt' : name];
+        // Formatting is compared with its own pre-command diff.
+        const before = name === 'format' ? git(candidate, ['diff', '--binary', 'HEAD', '--']) : '';
+        // Upstream tests CI === 'true'; local diff uses the exact base without PR API context.
+        const executed = npm(args, name === 'react-compiler' ? {...env, CI: 'false'} : env);
+        // npm/Bun/npx propagate a nested SIGABRT as 128 + 6, without an outer signal.
+        let status = executed.error || executed.signal || [126, 127, 134, 137, 143].includes(executed.status) ? 'infrastructure-failure' : executed.status === 0 ? 'passed' : 'code-failure';
+        if (name === 'format' && status === 'passed' && git(candidate, ['diff', '--binary', 'HEAD', '--']) !== before) status = 'code-failure';
+        if (name === 'jest' && status === 'passed') {
+            try {
+                const tests = JSON.parse(readFileSync(jestOutput, 'utf8')).testResults;
+                const names = tests.map(test => test.name).sort();
+                if (JSON.stringify(names) !== JSON.stringify(request.jestFiles.map(path => resolve(candidate, path)).sort())
+                    || tests.some(test => !test.assertionResults.some(assertion => assertion.status === 'passed'))) {
+                    status = 'infrastructure-failure';
+                }
+            } catch {status = 'infrastructure-failure';}
+        }
+        result.outcomes.push({name, status});
     } catch (error) {
         console.error(error.message);
     } finally {
         writeFileSync(output, JSON.stringify(result));
         rmSync(temporary, {recursive: true, force: true});
     }
-    return result.setup === 'passed' && result.outcomes.length === request.checks.length
+    return result.setup === 'passed' && result.outcomes.length === 1
         && result.outcomes.every(item => item.status === 'passed') ? 0 : 1;
+}
+
+// Each matrix job uploads one small result. The final job accepts exactly the selected set.
+function collect(request, directory, output) {
+    const result = resultContext(request);
+    try {
+        const expected = request.checks.map(name => `seatbelt-v2-check-${name}-${result.attempt}`);
+        if (!isDeepStrictEqual(readdirSync(directory).sort(), expected.sort())) throw new Error('Missing or extra check artifact');
+        for (const name of request.checks) {
+            const path = join(directory, `seatbelt-v2-check-${name}-${result.attempt}`, 'result.json');
+            if (lstatSync(path).size > 32768) throw new Error('Check result too large');
+            const part = JSON.parse(readFileSync(path, 'utf8'));
+            if (!isDeepStrictEqual(part, {...result, setup: part.setup, outcomes: part.outcomes})
+                || part.setup !== 'passed' || !Array.isArray(part.outcomes) || part.outcomes.length !== 1
+                || !['passed', 'code-failure', 'infrastructure-failure'].includes(part.outcomes[0]?.status)
+                || !isDeepStrictEqual(part.outcomes[0], {name, status: part.outcomes[0].status})) {
+                throw new Error('Missing, incomplete or mismatched check result');
+            }
+            result.outcomes.push(part.outcomes[0]);
+        }
+        result.setup = 'passed';
+    } catch (error) {console.error(error.message);}
+    writeFileSync(output, JSON.stringify(result));
+    return result.setup === 'passed' && result.outcomes.every(item => item.status === 'passed') ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -114,7 +157,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         const output = `head=${request.head}\n`;
         if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
         else process.stdout.write(output);
-    } else if (process.argv[2] === 'run' && process.argv.length === 6) {
+    } else if (process.argv[2] === 'run' && process.argv.length === 7) {
         process.exitCode = run(request, ...process.argv.slice(3));
+    } else if (process.argv[2] === 'collect' && process.argv.length === 5) {
+        process.exitCode = collect(request, ...process.argv.slice(3));
     } else throw new Error('Unknown Fork CI command');
 }
