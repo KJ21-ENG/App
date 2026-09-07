@@ -34,6 +34,7 @@ import {
     haveWaypointAddressesChanged,
     isDistanceRequest as isDistanceRequestTransactionUtils,
     isFetchingWaypointsFromServer,
+    isMapBasedDistanceRequest,
     isOnHold,
     isScanning,
     removeTransactionFromDuplicateTransactionViolation,
@@ -69,6 +70,7 @@ type UpdateMoneyRequestData<TKey extends OnyxKey> = {
 
 type UpdateMoneyRequestDateParams = {
     transactionID: string;
+    transaction?: OnyxEntry<OnyxTypes.Transaction>;
     transactionThreadReport: OnyxEntry<OnyxTypes.Report>;
     parentReport: OnyxEntry<OnyxTypes.Report>;
     iouReportOwnerLogin: string | undefined;
@@ -219,6 +221,7 @@ function getRecalculatedDistanceRateIDForExpenseDate({
 /** Updates the created date of an expense */
 function updateMoneyRequestDate({
     transactionID,
+    transaction: transactionParam,
     transactionThreadReport,
     parentReport,
     iouReportOwnerLogin,
@@ -242,7 +245,7 @@ function updateMoneyRequestDate({
     getCurrencyDecimals,
     getCurrencySymbol,
 }: UpdateMoneyRequestDateParams) {
-    const transaction = getAllTransactions()[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`];
+    const transaction = transactionParam ?? getAllTransactions()[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`];
     const isTrackExpense = isTrackExpenseReport(transactionThreadReport) && isSelfDM(parentReport);
     const effectivePolicy = isTrackExpense ? policyForTrackExpense : policy;
     const currentTransactionViolations = transactionViolations?.[`${ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS}${transactionID}`] ?? [];
@@ -300,21 +303,22 @@ function updateMoneyRequestDate({
     let data: UpdateMoneyRequestData<UpdateMoneyRequestDataKeys>;
 
     if (isTrackExpense) {
-        data = getUpdateTrackExpenseParams(
+        data = getUpdateTrackExpenseParams({
             transactionID,
-            transactionThreadReport?.reportID,
+            transaction,
+            transactionThreadReportID: transactionThreadReport?.reportID,
             transactionChanges,
-            effectivePolicy,
+            policy: effectivePolicy,
             delegateAccountID,
-            {getCurrencyDecimals, getCurrencySymbol},
+            currencyContext: {getCurrencyDecimals, getCurrencySymbol},
             hash,
-            undefined,
             distanceOriginalPolicy,
             currentTransactionViolations,
-        );
+        });
     } else {
         data = getUpdateMoneyRequestParams({
             transactionID,
+            transaction,
             transactionThreadReport,
             iouReport: parentReport,
             iouReportOwnerLogin,
@@ -475,6 +479,7 @@ function updateMoneyRequestReimbursable({
 /** Updates the merchant field of an expense */
 function updateMoneyRequestMerchant({
     transactionID,
+    transaction,
     transactionThreadReport,
     parentReport,
     iouReportOwnerLogin,
@@ -494,6 +499,7 @@ function updateMoneyRequestMerchant({
     getCurrencySymbol,
 }: {
     transactionID: string;
+    transaction?: OnyxEntry<OnyxTypes.Transaction>;
     transactionThreadReport: OnyxEntry<OnyxTypes.Report>;
     parentReport: OnyxEntry<OnyxTypes.Report>;
     iouReportOwnerLogin: string | undefined;
@@ -518,10 +524,20 @@ function updateMoneyRequestMerchant({
     let data: UpdateMoneyRequestData<UpdateMoneyRequestDataKeys>;
 
     if (isTrackExpenseReport(transactionThreadReport) && isSelfDM(parentReport)) {
-        data = getUpdateTrackExpenseParams(transactionID, transactionThreadReport?.reportID, transactionChanges, policy, delegateAccountID, {getCurrencyDecimals, getCurrencySymbol}, hash);
+        data = getUpdateTrackExpenseParams({
+            transactionID,
+            transaction,
+            transactionThreadReportID: transactionThreadReport?.reportID,
+            transactionChanges,
+            policy,
+            delegateAccountID,
+            currencyContext: {getCurrencyDecimals, getCurrencySymbol},
+            hash,
+        });
     } else {
         data = getUpdateMoneyRequestParams({
             transactionID,
+            transaction,
             transactionThreadReport,
             iouReport: parentReport,
             iouReportOwnerLogin,
@@ -621,28 +637,39 @@ type UpdateMoneyRequestVendorParams = {
     parentReport?: OnyxEntry<OnyxTypes.Report>;
     policy?: OnyxEntry<OnyxTypes.Policy>;
     delegateAccountID: number | undefined;
+    transactionViolations: OnyxEntry<OnyxTypes.TransactionViolations>;
 };
 
 /**
  * Update the QBO vendor matched to a non-reimbursable expense. The vendor lives on the transaction's
- * `comment.vendor` NVP as `{ externalID, isManuallySet }`. `isManuallySet` is hard-coded to `true` here
+ * `comment.vendor` NVP as `{ externalID, wasManuallySet }`. `wasManuallySet` is hard-coded to `true` here
  * because this action is only called from user-driven flows (the App vendor picker, etc.); the PHP
- * fuzzy matcher writes auto-matches directly via `UpdateMoneyRequestVendor` with `isManuallySet=false`.
+ * fuzzy matcher writes auto-matches directly via `UpdateMoneyRequestVendor` with `wasManuallySet=false`.
  *
  * Passing `vendorID=''` clears the vendor from the transaction.
  */
-function updateMoneyRequestVendor({transactionID, vendorID, vendorName, transaction, transactionThreadReport, parentReport, policy, delegateAccountID}: UpdateMoneyRequestVendorParams) {
+function updateMoneyRequestVendor({
+    transactionID,
+    vendorID,
+    vendorName,
+    transaction,
+    transactionThreadReport,
+    parentReport,
+    policy,
+    delegateAccountID,
+    transactionViolations,
+}: UpdateMoneyRequestVendorParams) {
     // Fall back to the cached Onyx transaction when the caller doesn't pass one so failureData can
     // restore the actual previous vendor on API failure instead of clearing it.
     const resolvedTransaction = transaction ?? getAllTransactions()?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`];
     const previousVendor = resolvedTransaction?.comment?.vendor;
     const isClearing = !vendorID;
 
-    const newVendorOptimisticValue = isClearing ? null : {externalID: vendorID, name: vendorName, isManuallySet: true};
+    const newVendorOptimisticValue = isClearing ? null : {externalID: vendorID, name: vendorName, wasManuallySet: true};
 
     // Build an optimistic MODIFIED_EXPENSE so the transaction thread shows "set vendor X" /
     // "changed vendor from X to Y" / "removed the vendor" immediately. Auth's UpdateMoneyRequestVendor
-    // command writes the same {externalID, isManuallySet} shape to the action's originalMessage; the
+    // command writes the same {externalID, wasManuallySet} shape to the action's originalMessage; the
     // optimistic action mirrors that so the local render matches the eventual server payload.
     const optimisticModifiedExpense =
         resolvedTransaction && transactionThreadReport?.reportID
@@ -759,9 +786,7 @@ function updateMoneyRequestVendor({transactionID, vendorID, vendorName, transact
     // resolves it (no vendor → no inactive-vendor). Without this, the stale violation persists
     // in Onyx until some unrelated recalculation fires, keeping the expense incorrectly flagged.
     const violationsKey = `${ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS}${transactionID}` as const;
-    // TODO: https://github.com/Expensify/App/issues/66512
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    const currentViolations = getAllTransactionViolations()[violationsKey] ?? [];
+    const currentViolations = transactionViolations ?? [];
     if (currentViolations.some((violation) => violation.name === CONST.VIOLATIONS.INACTIVE_VENDOR)) {
         optimisticData.push({
             onyxMethod: Onyx.METHOD.SET,
@@ -782,7 +807,7 @@ function updateMoneyRequestVendor({transactionID, vendorID, vendorName, transact
             reportActionID: optimisticReportActionID,
             vendorID,
             vendorName,
-            isManuallySet: true,
+            wasManuallySet: true,
         },
         {optimisticData, successData, failureData},
     );
@@ -790,6 +815,7 @@ function updateMoneyRequestVendor({transactionID, vendorID, vendorName, transact
 
 type UpdateMoneyRequestTagParams = {
     transactionID: string;
+    transaction?: OnyxEntry<OnyxTypes.Transaction>;
     transactionThreadReport: OnyxEntry<OnyxTypes.Report>;
     parentReport: OnyxEntry<OnyxTypes.Report>;
     iouReportOwnerLogin: string | undefined;
@@ -813,6 +839,7 @@ type UpdateMoneyRequestTagParams = {
 /** Updates the tag of an expense */
 function updateMoneyRequestTag({
     transactionID,
+    transaction,
     transactionThreadReport,
     parentReport,
     iouReportOwnerLogin,
@@ -837,6 +864,7 @@ function updateMoneyRequestTag({
     };
     const {params, onyxData} = getUpdateMoneyRequestParams({
         transactionID,
+        transaction,
         transactionThreadReport,
         iouReport: parentReport,
         iouReportOwnerLogin,
@@ -1060,18 +1088,16 @@ function updateMoneyRequestDistance({
     let data: UpdateMoneyRequestData<UpdateMoneyRequestDataKeys | typeof ONYXKEYS.NVP_RECENT_WAYPOINTS>;
 
     if (isTrackExpenseReport(transactionThreadReport) && isSelfDM(parentReport)) {
-        data = getUpdateTrackExpenseParams(
-            transaction?.transactionID,
-            transactionThreadReport?.reportID,
+        data = getUpdateTrackExpenseParams({
+            transactionID: transaction?.transactionID,
+            transaction,
+            transactionThreadReportID: transactionThreadReport?.reportID,
             transactionChanges,
             policy,
             delegateAccountID,
-            {personalPolicyOutputCurrency, getCurrencyDecimals, getCurrencySymbol},
-            undefined,
-            undefined,
+            currencyContext: {personalPolicyOutputCurrency, getCurrencyDecimals, getCurrencySymbol},
             distanceOriginalPolicy,
-            undefined,
-        );
+        });
     } else {
         data = getUpdateMoneyRequestParams({
             transactionID: transaction?.transactionID,
@@ -1158,6 +1184,7 @@ function updateMoneyRequestDistance({
 /** Updates the category of an expense */
 function updateMoneyRequestCategory({
     transactionID,
+    transaction,
     transactionThreadReport,
     parentReport,
     iouReportOwnerLogin,
@@ -1177,6 +1204,7 @@ function updateMoneyRequestCategory({
     getCurrencySymbol,
 }: {
     transactionID: string;
+    transaction?: OnyxEntry<OnyxTypes.Transaction>;
     transactionThreadReport: OnyxEntry<OnyxTypes.Report>;
     parentReport: OnyxEntry<OnyxTypes.Report>;
     iouReportOwnerLogin: string | undefined;
@@ -1201,6 +1229,7 @@ function updateMoneyRequestCategory({
 
     const {params, onyxData} = getUpdateMoneyRequestParams({
         transactionID,
+        transaction,
         transactionThreadReport,
         iouReport: parentReport,
         iouReportOwnerLogin,
@@ -1225,6 +1254,7 @@ function updateMoneyRequestCategory({
 /** Updates the description of an expense */
 function updateMoneyRequestDescription({
     transactionID,
+    transaction,
     transactionThreadReport,
     parentReport,
     iouReportOwnerLogin,
@@ -1243,6 +1273,7 @@ function updateMoneyRequestDescription({
     getCurrencySymbol,
 }: {
     transactionID: string;
+    transaction?: OnyxEntry<OnyxTypes.Transaction>;
     transactionThreadReport: OnyxEntry<OnyxTypes.Report>;
     parentReport: OnyxEntry<OnyxTypes.Report>;
     iouReportOwnerLogin: string | undefined;
@@ -1267,10 +1298,20 @@ function updateMoneyRequestDescription({
     let data: UpdateMoneyRequestData<UpdateMoneyRequestDataKeys>;
 
     if (isTrackExpenseReport(transactionThreadReport) && isSelfDM(parentReport)) {
-        data = getUpdateTrackExpenseParams(transactionID, transactionThreadReport?.reportID, transactionChanges, policy, delegateAccountID, {getCurrencyDecimals, getCurrencySymbol}, hash);
+        data = getUpdateTrackExpenseParams({
+            transactionID,
+            transaction,
+            transactionThreadReportID: transactionThreadReport?.reportID,
+            transactionChanges,
+            policy,
+            delegateAccountID,
+            currencyContext: {getCurrencyDecimals, getCurrencySymbol},
+            hash,
+        });
     } else {
         data = getUpdateMoneyRequestParams({
             transactionID,
+            transaction,
             transactionThreadReport,
             iouReport: parentReport,
             iouReportOwnerLogin,
@@ -1381,18 +1422,19 @@ function updateMoneyRequestDistanceRate({
         currentTransactionViolationsParam ?? (transaction?.transactionID ? transactionViolations?.[`${ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS}${transaction.transactionID}`] : undefined);
 
     if (isTrackExpenseReport(transactionThreadReport) && isSelfDM(parentReport)) {
-        data = getUpdateTrackExpenseParams(
-            transaction?.transactionID,
-            transactionThreadReport?.reportID,
+        data = getUpdateTrackExpenseParams({
+            transactionID: transaction?.transactionID,
+            transaction,
+            transactionThreadReportID: transactionThreadReport?.reportID,
             transactionChanges,
             policy,
             delegateAccountID,
-            {personalPolicyOutputCurrency, getCurrencyDecimals, getCurrencySymbol},
+            currencyContext: {personalPolicyOutputCurrency, getCurrencyDecimals, getCurrencySymbol},
             hash,
             shouldBuildOptimisticModifiedExpenseReportAction,
             distanceOriginalPolicy,
             currentTransactionViolations,
-        );
+        });
     } else {
         data = getUpdateMoneyRequestParams({
             transactionID: transaction?.transactionID,
@@ -1431,6 +1473,7 @@ function updateMoneyRequestDistanceRate({
 
 type UpdateMoneyRequestAmountAndCurrencyParams = {
     transactionID: string;
+    transaction?: OnyxEntry<OnyxTypes.Transaction>;
     transactionThreadReport: OnyxEntry<OnyxTypes.Report>;
     parentReport: OnyxEntry<OnyxTypes.Report>;
     iouReportOwnerLogin: string | undefined;
@@ -1460,6 +1503,7 @@ type UpdateMoneyRequestAmountAndCurrencyParams = {
 /** Updates the amount and currency fields of an expense */
 function updateMoneyRequestAmountAndCurrency({
     transactionID,
+    transaction,
     transactionThreadReport,
     parentReport,
     iouReportOwnerLogin,
@@ -1496,10 +1540,20 @@ function updateMoneyRequestAmountAndCurrency({
     let data: UpdateMoneyRequestData<UpdateMoneyRequestDataKeys>;
 
     if (isTrackExpenseReport(transactionThreadReport) && isSelfDM(parentReport)) {
-        data = getUpdateTrackExpenseParams(transactionID, transactionThreadReport?.reportID, transactionChanges, policy, delegateAccountID, {getCurrencyDecimals, getCurrencySymbol}, hash);
+        data = getUpdateTrackExpenseParams({
+            transactionID,
+            transaction,
+            transactionThreadReportID: transactionThreadReport?.reportID,
+            transactionChanges,
+            policy,
+            delegateAccountID,
+            currencyContext: {getCurrencyDecimals, getCurrencySymbol},
+            hash,
+        });
     } else {
         data = getUpdateMoneyRequestParams({
             transactionID,
+            transaction,
             transactionThreadReport,
             iouReport: parentReport,
             iouReportOwnerLogin,
@@ -1527,6 +1581,7 @@ function updateMoneyRequestAmountAndCurrency({
 
 type GetUpdateMoneyRequestParamsType = {
     transactionID: string | undefined;
+    transaction?: OnyxEntry<OnyxTypes.Transaction>;
     transactionThreadReport: OnyxEntry<OnyxTypes.Report>;
     transactionChanges: TransactionChanges;
     policy: OnyxEntry<OnyxTypes.Policy>;
@@ -1573,6 +1628,7 @@ type UpdateMoneyRequestDataKeys =
 function getUpdateMoneyRequestParams(params: GetUpdateMoneyRequestParamsType): UpdateMoneyRequestData<UpdateMoneyRequestDataKeys> {
     const {
         transactionID,
+        transaction: transactionParam,
         transactionThreadReport,
         transactionChanges,
         policy,
@@ -1636,7 +1692,7 @@ function getUpdateMoneyRequestParams(params: GetUpdateMoneyRequestParamsType): U
     > = [];
 
     // Step 1: Get the transaction being updated
-    const transaction = getAllTransactions()?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`];
+    const transaction = transactionParam ?? getAllTransactions()?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`];
 
     // The manual-distance submit path always sends waypoints to keep the BE in sync, even when the user
     // only edited the distance number. Detect whether the addresses actually changed so we can skip the
@@ -1661,6 +1717,9 @@ function getUpdateMoneyRequestParams(params: GetUpdateMoneyRequestParamsType): U
     if (shouldFlagMerchantPending) {
         pendingFields.merchant = CONST.RED_BRICK_ROAD_PENDING_ACTION.UPDATE;
     }
+
+    // Odometer and pure manual receipts are uploaded, not regenerated, so their page count has to survive the edit.
+    const shouldClearReceiptPageCount = shouldFlagMerchantPending && isMapBasedDistanceRequest(transaction);
     const clearedPendingFields = getClearedPendingFields(transactionChanges);
     // `getClearedPendingFields` only clears `merchant` for distance edits, so when we artificially
     // flag it for waypoint/rate edits we must also clear it here. Otherwise the flag persists past
@@ -1892,6 +1951,8 @@ function getUpdateMoneyRequestParams(params: GetUpdateMoneyRequestParamsType): U
         key: `${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`,
         value: {
             ...updatedTransaction,
+            // Clear the stale page count until the regenerated receipt arrives.
+            ...(shouldClearReceiptPageCount && updatedTransaction?.receipt ? {receipt: {...updatedTransaction.receipt, pageCount: null}} : {}),
             pendingFields,
             errorFields: null,
             reportID: newTransactionReportID ?? updatedTransaction?.reportID,
@@ -2237,17 +2298,22 @@ type TrackExpenseCurrencyContext = {
     getCurrencySymbol: CurrencyListActionsContextType['getCurrencySymbol'];
 };
 
+type GetUpdateTrackExpenseParamsType = {
+    transactionID: string | undefined;
+    transaction?: OnyxEntry<OnyxTypes.Transaction>;
+    transactionThreadReportID: string | undefined;
+    transactionChanges: TransactionChanges;
+    policy: OnyxEntry<OnyxTypes.Policy>;
+    delegateAccountID: number | undefined;
+    currencyContext: TrackExpenseCurrencyContext;
+    hash?: number;
+    shouldBuildOptimisticModifiedExpenseReportAction?: boolean;
+    distanceOriginalPolicy?: OnyxEntry<OnyxTypes.Policy>;
+    currentTransactionViolations?: OnyxEntry<OnyxTypes.TransactionViolations>;
+};
+
 function getUpdateTrackExpenseParams(
-    transactionID: string | undefined,
-    transactionThreadReportID: string | undefined,
-    transactionChanges: TransactionChanges,
-    policy: OnyxEntry<OnyxTypes.Policy>,
-    delegateAccountID: number | undefined,
-    currencyContext: TrackExpenseCurrencyContext,
-    hash?: number,
-    shouldBuildOptimisticModifiedExpenseReportAction = true,
-    distanceOriginalPolicy?: OnyxEntry<OnyxTypes.Policy>,
-    currentTransactionViolations?: OnyxEntry<OnyxTypes.TransactionViolations>,
+    params: GetUpdateTrackExpenseParamsType,
 ): UpdateMoneyRequestData<
     | typeof ONYXKEYS.COLLECTION.REPORT_ACTIONS
     | typeof ONYXKEYS.COLLECTION.TRANSACTION
@@ -2256,6 +2322,19 @@ function getUpdateTrackExpenseParams(
     | typeof ONYXKEYS.COLLECTION.SNAPSHOT
     | typeof ONYXKEYS.COLLECTION.TRANSACTION_VIOLATIONS
 > {
+    const {
+        transactionID,
+        transaction: transactionParam,
+        transactionThreadReportID,
+        transactionChanges,
+        policy,
+        delegateAccountID,
+        currencyContext,
+        hash,
+        shouldBuildOptimisticModifiedExpenseReportAction = true,
+        distanceOriginalPolicy,
+        currentTransactionViolations,
+    } = params;
     const {personalPolicyOutputCurrency, getCurrencyDecimals, getCurrencySymbol} = currencyContext;
     const optimisticData: Array<
         OnyxUpdate<
@@ -2286,7 +2365,7 @@ function getUpdateTrackExpenseParams(
 
     // Step 2: Get all the collections being updated
     const transactionThread = getAllReports()?.[`${ONYXKEYS.COLLECTION.REPORT}${transactionThreadReportID}`] ?? null;
-    const transaction = getAllTransactions()?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`];
+    const transaction = transactionParam ?? getAllTransactions()?.[`${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`];
     const chatReport = getAllReports()?.[`${ONYXKEYS.COLLECTION.REPORT}${transactionThread?.parentReportID}`] ?? null;
     const policyForTransaction = distanceOriginalPolicy ?? policy;
     const updatedTransaction = transaction
@@ -2312,6 +2391,11 @@ function getUpdateTrackExpenseParams(
     if ('distance' in transactionChanges && typeof transactionChanges.distance === 'number') {
         dataToIncludeInParams.distance = transactionChanges.distance;
     }
+
+    // Same page count clear as `getUpdateMoneyRequestParams`.
+    const shouldClearReceiptPageCount =
+        ('waypoints' in transactionChanges || 'distance' in transactionChanges || 'customUnitRateID' in transactionChanges || 'selectedRouteKey' in transactionChanges) &&
+        isMapBasedDistanceRequest(transaction);
 
     const apiParams: UpdateMoneyRequestParams = {
         ...dataToIncludeInParams,
@@ -2412,6 +2496,7 @@ function getUpdateTrackExpenseParams(
         key: `${ONYXKEYS.COLLECTION.TRANSACTION}${transactionID}`,
         value: {
             ...updatedTransaction,
+            ...(shouldClearReceiptPageCount && updatedTransaction?.receipt ? {receipt: {...updatedTransaction.receipt, pageCount: null}} : {}),
             pendingFields,
             errorFields: null,
         },
