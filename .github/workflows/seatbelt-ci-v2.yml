@@ -1,0 +1,52 @@
+name: Seatbelt CI v2
+run-name: ${{ fromJSON(inputs.request).operationId }}
+on:
+  workflow_dispatch:
+    inputs:
+      request:
+        description: Exact candidate, definition and complete check selection
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  checks:
+    name: Seatbelt v2 checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      REQUEST_JSON: ${{ inputs.request }}
+    steps:
+      - name: Trusted definition
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Validate request
+        id: request
+        run: node trusted/ops/seatbelt-ci-v2/seatbelt-ci-v2.mjs prepare
+      - name: Exact candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ steps.request.outputs.head }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Candidate Node version
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version-file: candidate/.nvmrc
+      - name: Install and execute required checks
+        id: execute
+        env:
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: node trusted/ops/seatbelt-ci-v2/seatbelt-ci-v2.mjs run "$GITHUB_WORKSPACE/candidate" "$GITHUB_WORKSPACE/trusted" "$RUNNER_TEMP/result.json"
+      - name: Upload exact result
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: seatbelt-v2-result-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: error
+          retention-days: 7
