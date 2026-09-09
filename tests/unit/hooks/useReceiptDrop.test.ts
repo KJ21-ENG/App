@@ -56,7 +56,19 @@ describe('report receipt drop operation', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         jest.mocked(useFilesValidation).mockReturnValue({validateFiles, PDFValidationComponent: undefined});
-        jest.mocked(initMoneyRequest).mockReturnValue({...createRandomTransaction(1), transactionID: CONST.IOU.OPTIMISTIC_TRANSACTION_ID});
+        jest.mocked(initMoneyRequest).mockReturnValue({
+            amount: 0,
+            comment: {},
+            created: '2026-09-09',
+            currency: CONST.CURRENCY.USD,
+            category: null,
+            iouRequestType: CONST.IOU.REQUEST_TYPE.SCAN,
+            reportID: 'report',
+            transactionID: CONST.IOU.OPTIMISTIC_TRANSACTION_ID,
+            isFromGlobalCreate: undefined,
+            isFromFloatingActionButton: undefined,
+            merchant: CONST.TRANSACTION.PARTIAL_TRANSACTION_MERCHANT,
+        });
         jest.mocked(buildOptimisticTransactionAndCreateDraft).mockReturnValue({...createRandomTransaction(2), transactionID: 'new-second'});
         jest.mocked(shouldRestrictUserBillableActions).mockReturnValue(false);
         URL.createObjectURL = jest.fn(() => 'blob:synthetic');
