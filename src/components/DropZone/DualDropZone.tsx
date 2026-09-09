@@ -28,9 +28,12 @@ type DropZoneProps = {
     onReceiptDrop: (event: DragEvent) => void;
 
     shouldAcceptSingleReceipt?: boolean;
+
+    /** Bulk report drops create expenses even when a single drop edits a receipt. */
+    shouldAllowMultipleReceipts?: boolean;
 };
 
-function DualDropZone({isEditing, onAttachmentDrop, onReceiptDrop, shouldAcceptSingleReceipt}: DropZoneProps) {
+function DualDropZone({isEditing, onAttachmentDrop, onReceiptDrop, shouldAcceptSingleReceipt, shouldAllowMultipleReceipts = false}: DropZoneProps) {
     const styles = useThemeStyles();
     const {translate} = useLocalize();
     const {shouldUseNarrowLayout, isMediumScreenWidth} = useResponsiveLayout();
@@ -69,10 +72,10 @@ function DualDropZone({isEditing, onAttachmentDrop, onReceiptDrop, shouldAcceptS
                 </DropZoneWrapper>
                 <Animated.View style={isWideRHPFocused ? styles.wideRHPDropZoneContainer : [styles.flex1, styles.h100]}>
                     <DropZoneWrapper onDrop={onReceiptDrop}>
-                        {({isDraggingOver}) => (
+                        {({isDraggingOver, fileCount}) => (
                             <DropZoneUI
-                                icon={isEditing ? icons.ReplaceReceipt : icons.SmartScan}
-                                dropTitle={translate(isEditing ? 'dropzone.replaceReceipt' : scanReceiptsText)}
+                                icon={isEditing && !(shouldAllowMultipleReceipts && fileCount > 1) ? icons.ReplaceReceipt : icons.SmartScan}
+                                dropTitle={translate(shouldAllowMultipleReceipts && fileCount > 1 ? 'dropzone.scanReceipts' : isEditing ? 'dropzone.replaceReceipt' : scanReceiptsText)}
                                 dropStyles={styles.receiptDropOverlay(isDraggingOver)}
                                 dropTextStyles={styles.receiptDropText}
                                 dashedBorderStyles={[

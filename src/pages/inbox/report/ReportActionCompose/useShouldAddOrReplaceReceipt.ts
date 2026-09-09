@@ -40,7 +40,7 @@ function useShouldAddOrReplaceReceipt(reportID: string) {
         !transaction?.receipt?.isTestDriveReceipt;
     const shouldAddOrReplaceReceipt = (isTransactionThreadView || isSingleTransactionView) && canEditReceipt;
 
-    return {shouldAddOrReplaceReceipt, transactionID};
+    return {shouldAddOrReplaceReceipt, transactionID, isTransactionThreadView};
 }
 
 export default useShouldAddOrReplaceReceipt;

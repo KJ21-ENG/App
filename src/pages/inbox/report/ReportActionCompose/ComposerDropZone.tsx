@@ -31,7 +31,7 @@ type RichDropZoneProps = {
     shouldAddOrReplaceReceipt: boolean;
     transactionID: string | undefined;
     onAttachmentDrop: (dragEvent: DragEvent) => void;
-    onReceiptDrop: (dragEvent: DragEvent) => void;
+    isTransactionThreadView: boolean;
     children: React.ReactNode;
 };
 
@@ -57,7 +57,7 @@ function SimpleDropZone({onAttachmentDrop, children}: {onAttachmentDrop: (dragEv
     );
 }
 
-function RichDropZone({reportID, shouldAddOrReplaceReceipt, transactionID, onAttachmentDrop, onReceiptDrop, children}: RichDropZoneProps) {
+function RichDropZone({reportID, shouldAddOrReplaceReceipt, transactionID, onAttachmentDrop, isTransactionThreadView, children}: RichDropZoneProps) {
     const styles = useThemeStyles();
     const theme = useTheme();
     const {translate} = useLocalize();
@@ -82,6 +82,14 @@ function RichDropZone({reportID, shouldAddOrReplaceReceipt, transactionID, onAtt
     const hasMoneyRequestOptions = !!temporary_getMoneyRequestOptions(report, policy, reportParticipantIDs, betas, isReportArchived, isRestrictedToPreferredPolicy).length;
     const canModifyReceipt = shouldAddOrReplaceReceipt && !isSettledOrApproved;
     const shouldDisplayDualDropZone = canModifyReceipt || hasMoneyRequestOptions;
+    const {onReceiptDropped, PDFValidationComponent} = useReceiptDrop({
+        reportID,
+        report,
+        shouldAddOrReplaceReceipt,
+        transactionID,
+        isTransactionThreadView,
+        canCreateExpenses: hasMoneyRequestOptions,
+    });
 
     if (shouldDisplayDualDropZone) {
         return (
@@ -90,9 +98,11 @@ function RichDropZone({reportID, shouldAddOrReplaceReceipt, transactionID, onAtt
                 <DualDropZone
                     isEditing={shouldAddOrReplaceReceipt && hasReceipt}
                     onAttachmentDrop={onAttachmentDrop}
-                    onReceiptDrop={onReceiptDrop}
+                    onReceiptDrop={onReceiptDropped}
                     shouldAcceptSingleReceipt={shouldAddOrReplaceReceipt}
+                    shouldAllowMultipleReceipts={!isTransactionThreadView && hasMoneyRequestOptions}
                 />
+                {PDFValidationComponent}
             </>
         );
     }
@@ -116,14 +126,8 @@ function RichDropZone({reportID, shouldAddOrReplaceReceipt, transactionID, onAtt
 function ComposerDropZone({children}: PropsWithChildren) {
     const {reportID} = useComposerState();
     const [report] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${reportID}`);
-    const {shouldAddOrReplaceReceipt, transactionID} = useShouldAddOrReplaceReceipt(reportID);
+    const {shouldAddOrReplaceReceipt, transactionID, isTransactionThreadView} = useShouldAddOrReplaceReceipt(reportID);
     const {pickAttachments, PDFValidationComponent: AttachmentPDFValidation} = useAttachmentPicker(reportID);
-    const {onReceiptDropped, PDFValidationComponent: ReceiptPDFValidation} = useReceiptDrop({
-        reportID,
-        report,
-        shouldAddOrReplaceReceipt,
-        transactionID,
-    });
 
     const onAttachmentDrop = (dragEvent: DragEvent) => pickAttachments({dragEvent});
 
@@ -143,12 +147,11 @@ function ComposerDropZone({children}: PropsWithChildren) {
                 shouldAddOrReplaceReceipt={shouldAddOrReplaceReceipt}
                 transactionID={transactionID}
                 onAttachmentDrop={onAttachmentDrop}
-                onReceiptDrop={onReceiptDropped}
+                isTransactionThreadView={isTransactionThreadView}
             >
                 {children}
             </RichDropZone>
             {AttachmentPDFValidation}
-            {ReceiptPDFValidation}
         </>
     );
 }

@@ -30,9 +30,11 @@ type UseReceiptDropParams = {
     report: OnyxEntry<OnyxTypes.Report>;
     shouldAddOrReplaceReceipt: boolean;
     transactionID: string | undefined;
+    isTransactionThreadView: boolean;
+    canCreateExpenses: boolean;
 };
 
-function useReceiptDrop({reportID, report, shouldAddOrReplaceReceipt, transactionID}: UseReceiptDropParams) {
+function useReceiptDrop({reportID, report, shouldAddOrReplaceReceipt, transactionID, isTransactionThreadView, canCreateExpenses}: UseReceiptDropParams) {
     const currentUserPersonalDetails = useCurrentUserPersonalDetails();
     const [policy] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY}${report?.policyID}`);
     const [newParentReport] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${report?.parentReportID}`);
@@ -49,12 +51,12 @@ function useReceiptDrop({reportID, report, shouldAddOrReplaceReceipt, transactio
     const [transaction] = useOnyx(`${ONYXKEYS.COLLECTION.TRANSACTION}${getNonEmptyStringOnyxID(transactionID)}`);
     const [transactionReport] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT}${transaction?.reportID}`);
 
-    const onFilesValidated = (files: FileObject[]) => {
+    const onFilesValidated = (files: FileObject[], shouldReplaceReceipt: boolean) => {
         if (files.length === 0) {
             return;
         }
 
-        if (shouldAddOrReplaceReceipt && transactionID) {
+        if (shouldReplaceReceipt && transactionID) {
             const source = URL.createObjectURL(files.at(0) as Blob);
             replaceReceipt({
                 transaction,
@@ -103,7 +105,7 @@ function useReceiptDrop({reportID, report, shouldAddOrReplaceReceipt, transactio
         );
     };
 
-    const {validateFiles, PDFValidationComponent} = useFilesValidation(onFilesValidated);
+    const {validateFiles, PDFValidationComponent} = useFilesValidation((files) => onFilesValidated(files, false));
 
     const onReceiptDropped = (e: DragEvent) => {
         if (policy && shouldRestrictUserBillableActions(policy, ownerBillingGracePeriodEnd, userBillingGracePeriodEnds, amountOwed, currentUserPersonalDetails.accountID)) {
@@ -114,17 +116,24 @@ function useReceiptDrop({reportID, report, shouldAddOrReplaceReceipt, transactio
         const files = getFilesFromClipboardEvent(e);
         const items = Array.from(e.dataTransfer?.items ?? []);
 
-        if (shouldAddOrReplaceReceipt && transactionID) {
+        const shouldReplaceReceipt = shouldAddOrReplaceReceipt && !!transactionID && (isTransactionThreadView || files.length === 1);
+        const onBatchValidated = (validatedFiles: FileObject[]) => onFilesValidated(validatedFiles, shouldReplaceReceipt);
+
+        if (shouldReplaceReceipt) {
             const file = files.at(0);
             if (!file) {
                 return;
             }
 
-            validateFiles([file], items);
+            validateFiles([file], items, {onFilesValidated: onBatchValidated});
             return;
         }
 
-        validateFiles(files, items, {isValidatingReceipts: true});
+        if (!canCreateExpenses || isTransactionThreadView || files.length === 0) {
+            return;
+        }
+
+        validateFiles(files, items, {isValidatingReceipts: true, onFilesValidated: onBatchValidated});
     };
 
     return {onReceiptDropped, PDFValidationComponent};

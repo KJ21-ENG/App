@@ -152,6 +152,41 @@ describe('useFilesValidation', () => {
         });
     });
 
+    describe('batch completion handler', () => {
+        it('preserves the accepted batch handler when a mixed batch shrinks and another validation is rejected', async () => {
+            const validFile = createFile({uri: 'valid'});
+            const invalidFile = createFile({uri: 'invalid'});
+            mockValidateAttachmentFile.mockImplementation(async (file) =>
+                file === invalidFile ? {isValid: false, error: CONST.FILE_VALIDATION_ERRORS.WRONG_FILE_TYPE} : {isValid: true, file},
+            );
+            const {result, onFilesValidated} = setup();
+            const createExpenses = jest.fn();
+            const replaceReceipt = jest.fn();
+            triggerValidation(result, [validFile, invalidFile], [], {onFilesValidated: createExpenses});
+            await waitFor(() => expect(mockShowConfirmModal).toHaveBeenCalledTimes(1));
+            triggerValidation(result, [validFile], [], {onFilesValidated: replaceReceipt});
+            await resolveModal();
+            expect(createExpenses).toHaveBeenCalledWith([validFile], []);
+            expect(replaceReceipt).not.toHaveBeenCalled();
+            expect(onFilesValidated).not.toHaveBeenCalled();
+        });
+
+        it.each(['CLOSE', 'CONFIRM'] as const)('clears the batch handler after an all-invalid batch is dismissed with %s', async (action) => {
+            const invalidFile = createFile({uri: 'invalid'});
+            mockInvalid(CONST.FILE_VALIDATION_ERRORS.WRONG_FILE_TYPE);
+            const {result, onFilesValidated} = setup();
+            const previousBatch = jest.fn();
+            triggerValidation(result, [invalidFile, invalidFile], [], {onFilesValidated: previousBatch});
+            await waitFor(() => expect(mockShowConfirmModal).toHaveBeenCalledTimes(1));
+            await resolveModal(action);
+            const validFile = createFile({uri: 'valid'});
+            mockValid(validFile);
+            triggerValidation(result, [validFile]);
+            await waitFor(() => expect(onFilesValidated).toHaveBeenCalledWith([validFile], []));
+            expect(previousBatch).not.toHaveBeenCalled();
+        });
+    });
+
     describe('successful validation', () => {
         it('validates and returns a single valid file without showing a modal', async () => {
             const validFile = createFile({uri: 'file-1'});

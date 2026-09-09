@@ -25,6 +25,8 @@ const MIN_LOADER_VISIBLE_DURATION_MS = 200;
 
 type ValidationOptions = {
     isValidatingReceipts?: boolean;
+    /** Completion handler bound to this validation batch, including partial acceptance. */
+    onFilesValidated?: (files: FileObject[], dataTransferItems: DataTransferItem[]) => void;
 };
 
 type ValidationState = {
@@ -65,6 +67,7 @@ function useFilesValidation(onFilesValidated: (files: FileObject[], dataTransfer
         isValidatingMultipleFiles: false,
     });
     const isMountedRef = useRef(true);
+    const batchOnFilesValidated = useRef<typeof onFilesValidated | undefined>(undefined);
 
     const updateFileOrderMapping = (oldFile: FileObject | undefined, newFile: FileObject) => {
         const originalIndex = originalFileOrder.current.get(oldFile?.uri ?? '');
@@ -97,6 +100,7 @@ function useFilesValidation(onFilesValidated: (files: FileObject[], dataTransfer
     }, []);
 
     const reset = () => {
+        batchOnFilesValidated.current = undefined;
         setIsValidatingFiles(false);
         setPdfFilesToRender([]);
         setValidatedPDFCount(0);
@@ -189,7 +193,7 @@ function useFilesValidation(onFilesValidated: (files: FileObject[], dataTransfer
         const sortedFiles = sortFilesByOriginalOrder(validFilesToUploadRef.current, originalFileOrder.current);
         const proceedWithValidFiles = () => {
             if (sortedFiles.length !== 0) {
-                onFilesValidated(sortedFiles, dataTransferItemList.current);
+                (batchOnFilesValidated.current ?? onFilesValidated)(sortedFiles, dataTransferItemList.current);
             }
             reset();
         };
@@ -230,7 +234,7 @@ function useFilesValidation(onFilesValidated: (files: FileObject[], dataTransfer
             }
         } else if (validFiles.current.length > 0) {
             const sortedFiles = sortFilesByOriginalOrder(validFiles.current, originalFileOrder.current);
-            onFilesValidated(sortedFiles, dataTransferItemList.current);
+            (batchOnFilesValidated.current ?? onFilesValidated)(sortedFiles, dataTransferItemList.current);
             reset();
         }
     };
@@ -393,7 +397,7 @@ function useFilesValidation(onFilesValidated: (files: FileObject[], dataTransfer
                 }
             } else if (validNonPdfFiles.length > 0) {
                 const sortedFiles = sortFilesByOriginalOrder(validNonPdfFiles, originalFileOrder.current);
-                onFilesValidated(sortedFiles, dataTransferItemList.current);
+                (batchOnFilesValidated.current ?? onFilesValidated)(sortedFiles, dataTransferItemList.current);
                 reset();
             }
         };
@@ -431,6 +435,7 @@ function useFilesValidation(onFilesValidated: (files: FileObject[], dataTransfer
             return;
         }
 
+        batchOnFilesValidated.current = validationOptions?.onFilesValidated;
         setIsValidatingFiles(true);
 
         const validationState: ValidationState = {
