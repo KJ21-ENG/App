@@ -11,6 +11,8 @@ import {initMoneyRequest} from '@userActions/IOU/MoneyRequest';
 import {replaceReceipt, setMoneyRequestReceipt} from '@userActions/IOU/Receipt';
 import {buildOptimisticTransactionAndCreateDraft} from '@userActions/TransactionEdit';
 
+import CONST from '@src/CONST';
+
 import createRandomTransaction from '../../utils/collections/transaction';
 
 jest.mock('@hooks/useCurrentUserPersonalDetails', () => () => ({accountID: 1}));
@@ -29,7 +31,7 @@ jest.mock('@userActions/TransactionEdit', () => ({buildOptimisticTransactionAndC
 const validateFiles = jest.fn<void, Parameters<ReturnType<typeof useFilesValidation>['validateFiles']>>();
 const fileA = new File(['receipt A'], 'a.jpg', {type: 'image/jpeg'});
 const fileB = new File(['receipt B'], 'b.jpg', {type: 'image/jpeg'});
-const event = {} as DragEvent;
+const event: DragEvent = Object.assign(new MouseEvent('drop'), {dataTransfer: null});
 
 function setup(overrides: Partial<Parameters<typeof useReceiptDrop>[0]> = {}) {
     return renderHook(() =>
@@ -54,7 +56,7 @@ describe('report receipt drop operation', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         jest.mocked(useFilesValidation).mockReturnValue({validateFiles, PDFValidationComponent: undefined});
-        jest.mocked(initMoneyRequest).mockReturnValue({...createRandomTransaction(1), transactionID: 'new-first'});
+        jest.mocked(initMoneyRequest).mockReturnValue({...createRandomTransaction(1), transactionID: CONST.IOU.OPTIMISTIC_TRANSACTION_ID});
         jest.mocked(buildOptimisticTransactionAndCreateDraft).mockReturnValue({...createRandomTransaction(2), transactionID: 'new-second'});
         jest.mocked(shouldRestrictUserBillableActions).mockReturnValue(false);
         URL.createObjectURL = jest.fn(() => 'blob:synthetic');

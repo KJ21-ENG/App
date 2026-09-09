@@ -43,6 +43,7 @@ function DualDropZone({isEditing, onAttachmentDrop, onReceiptDrop, shouldAcceptS
     const {isWideRHPFocused} = useWideRHPState();
     const shouldStackVertically = (shouldUseNarrowLayout || isMediumScreenWidth) && !isWideRHPFocused;
     const scanReceiptsText = shouldAcceptSingleReceipt ? 'dropzone.addReceipt' : 'dropzone.scanReceipts';
+    const receiptTitle = isEditing ? 'dropzone.replaceReceipt' : scanReceiptsText;
     const shouldStackRevertHorizontally = isWideRHPFocused;
     let flexStyle: ViewStyle = styles.flexRow;
     if (shouldStackVertically) {
@@ -75,7 +76,7 @@ function DualDropZone({isEditing, onAttachmentDrop, onReceiptDrop, shouldAcceptS
                         {({isDraggingOver, fileCount}) => (
                             <DropZoneUI
                                 icon={isEditing && !(shouldAllowMultipleReceipts && fileCount > 1) ? icons.ReplaceReceipt : icons.SmartScan}
-                                dropTitle={translate(shouldAllowMultipleReceipts && fileCount > 1 ? 'dropzone.scanReceipts' : isEditing ? 'dropzone.replaceReceipt' : scanReceiptsText)}
+                                dropTitle={translate(shouldAllowMultipleReceipts && fileCount > 1 ? 'dropzone.scanReceipts' : receiptTitle)}
                                 dropStyles={styles.receiptDropOverlay(isDraggingOver)}
                                 dropTextStyles={styles.receiptDropText}
                                 dashedBorderStyles={[
