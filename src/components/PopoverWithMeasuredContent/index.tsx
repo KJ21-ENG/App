@@ -1,10 +1,15 @@
+import Modal from '@components/Modal';
+
+import useResponsiveLayout from '@hooks/useResponsiveLayout';
+
+import CONST from '@src/CONST';
+
 import {circularDeepEqual} from 'fast-equals';
 import React, {useEffect, useState, useTransition} from 'react';
-import Modal from '@components/Modal';
-import useResponsiveLayout from '@hooks/useResponsiveLayout';
-import CONST from '@src/CONST';
-import PopoverWithMeasuredContentBase from './PopoverWithMeasuredContentBase';
+
 import type PopoverWithMeasuredContentProps from './types';
+
+import PopoverWithMeasuredContentBase from './PopoverWithMeasuredContentBase';
 
 /**
  * Logic for PopoverWithMeasuredContent is in PopoverWithMeasuredContentBase.
@@ -31,12 +36,13 @@ function PopoverWithMeasuredContent({shouldWrapModalChildrenInScrollViewIfBottom
     if (isSmallScreenWidth) {
         return (
             <Modal
-                // eslint-disable-next-line react/jsx-props-no-spreading
                 {...props}
                 type={CONST.MODAL.MODAL_TYPE.BOTTOM_DOCKED}
                 animationIn="slideInUp"
                 animationOut="slideOutDown"
                 shouldWrapModalChildrenInScrollViewIfBottomDockedInLandscapeMode={shouldWrapModalChildrenInScrollViewIfBottomDockedInLandscapeMode}
+                // The anchor is the launcher fallback for triggers that blur themselves before opening.
+                launcherRef={props.anchorRef}
             />
         );
     }
@@ -45,7 +51,6 @@ function PopoverWithMeasuredContent({shouldWrapModalChildrenInScrollViewIfBottom
         return null;
     }
 
-    // eslint-disable-next-line react/jsx-props-no-spreading
     return <PopoverWithMeasuredContentBase {...props} />;
 }
 

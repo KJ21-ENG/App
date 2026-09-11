@@ -1,13 +1,24 @@
 import {render, screen} from '@testing-library/react-native';
-import Onyx from 'react-native-onyx';
+
 import OnyxListItemProvider from '@src/components/OnyxListItemProvider';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
-import TimeSensitiveSection from '@src/pages/home/TimeSensitiveSection';
 import useTimeSensitiveAddPaymentCard from '@src/pages/home/TimeSensitiveSection/hooks/useTimeSensitiveAddPaymentCard';
+import TimeSensitiveGroup from '@src/pages/home/TimeSensitiveSection/TimeSensitiveGroup';
+import useTimeSensitiveItems from '@src/pages/home/TimeSensitiveSection/useTimeSensitiveItems';
+
+import type * as NativeNavigation from '@react-navigation/native';
+
+import Onyx from 'react-native-onyx';
+
 import waitForBatchedUpdates from '../../../../utils/waitForBatchedUpdates';
 
 jest.mock('@libs/Navigation/Navigation');
+
+jest.mock('@react-navigation/native', () => ({
+    ...jest.requireActual<typeof NativeNavigation>('@react-navigation/native'),
+    useFocusEffect: jest.fn(),
+}));
 
 jest.mock('@hooks/useLocalize', () => jest.fn(() => ({translate: jest.fn((key: string) => key)})));
 
@@ -16,6 +27,12 @@ jest.mock('@hooks/useLazyAsset', () => ({
         EnvelopeOpenStar: () => null,
     })),
 }));
+
+jest.mock('@src/pages/home/TimeSensitiveSection/hooks/useTimeSensitiveAddBankAccount', () =>
+    jest.fn(() => ({
+        shouldShowAddBankAccount: false,
+    })),
+);
 
 jest.mock('@src/pages/home/TimeSensitiveSection/hooks/useTimeSensitiveAddPaymentCard', () =>
     jest.fn(() => ({
@@ -44,6 +61,9 @@ jest.mock('@hooks/useCardFeedErrors', () =>
 jest.mock('@hooks/useCurrentUserPersonalDetails', () => jest.fn(() => ({login: 'test@example.com'})));
 
 jest.mock('@hooks/useResponsiveLayout', () => jest.fn(() => ({shouldUseNarrowLayout: false})));
+function TimeSensitiveSection() {
+    return <TimeSensitiveGroup items={useTimeSensitiveItems()} />;
+}
 
 const renderTimeSensitiveSection = () =>
     render(
@@ -60,6 +80,7 @@ describe('TimeSensitiveSection - ValidateAccount', () => {
     });
 
     beforeEach(async () => {
+        jest.clearAllMocks();
         mockedUseTimeSensitiveAddPaymentCard.mockReturnValue({
             shouldShowAddPaymentCard: false,
         });
@@ -102,8 +123,10 @@ describe('TimeSensitiveSection - ValidateAccount', () => {
 
         await Onyx.set(ONYXKEYS.ACCOUNT, {validated: false});
         await Onyx.set(ONYXKEYS.SESSION, {authTokenType: CONST.AUTH_TOKEN_TYPES.SUPPORT, email: validatedEmail});
-        await Onyx.set(ONYXKEYS.LOGIN_LIST, {
-            [validatedEmail]: {
+        await Onyx.set(ONYXKEYS.LOGINS, {
+            [`1_${validatedEmail}`]: {
+                partnerID: 1,
+                partnerUserID: validatedEmail,
                 validatedDate: '2026-03-18 00:00:00.000',
             },
         });

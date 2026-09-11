@@ -1,13 +1,17 @@
-import React, {useMemo} from 'react';
-import {View} from 'react-native';
-import Animated, {Keyframe, ReduceMotion} from 'react-native-reanimated';
 import type {BackdropProps} from '@components/Modal/ReanimatedModal/types';
 import {getModalInAnimation, getModalOutAnimation} from '@components/Modal/ReanimatedModal/utils';
 import {PressableWithoutFeedback} from '@components/Pressable';
+
 import useLocalize from '@hooks/useLocalize';
 import useThemeStyles from '@hooks/useThemeStyles';
+
 import variables from '@styles/variables';
+
 import CONST from '@src/CONST';
+
+import React, {useMemo} from 'react';
+import {View} from 'react-native';
+import Animated, {Keyframe, ReduceMotion} from 'react-native-reanimated';
 
 function Backdrop({
     style,
@@ -46,17 +50,18 @@ function Backdrop({
 
     if (!customBackdrop) {
         return (
+            // Keep the interactive wrapper full-screen so Safari does not size the overlay from its narrower reported window dimensions.
             <PressableWithoutFeedback
                 accessible
                 accessibilityLabel={translate('modal.backdropLabel')}
                 onPress={onBackdropPress}
-                style={[styles.userSelectNone, styles.cursorAuto]}
+                style={[styles.fullScreen, styles.userSelectNone, styles.cursorAuto]}
                 dataSet={{[CONST.SELECTION_SCRAPER_HIDDEN_ELEMENT]: true}}
                 sentryLabel={CONST.SENTRY_LABEL.REANIMATED_MODAL.BACKDROP}
             >
                 {isBackdropVisible && (
                     <Animated.View
-                        style={[styles.modalBackdrop, backdropStyle, style]}
+                        style={[styles.flex1, backdropStyle, style]}
                         entering={Entering}
                         exiting={Exiting}
                     />
@@ -67,13 +72,13 @@ function Backdrop({
     return (
         isBackdropVisible && (
             <View
-                style={[styles.userSelectNone]}
+                style={[styles.fullScreen, styles.userSelectNone]}
                 dataSet={{[CONST.SELECTION_SCRAPER_HIDDEN_ELEMENT]: true}}
             >
                 <Animated.View
                     entering={Entering}
                     exiting={Exiting}
-                    style={[styles.modalBackdrop, backdropStyle, style]}
+                    style={[styles.flex1, backdropStyle, style]}
                 >
                     {!!customBackdrop && customBackdrop}
                 </Animated.View>

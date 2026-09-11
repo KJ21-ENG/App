@@ -1,15 +1,18 @@
-import type {StyleProp, ViewStyle} from 'react-native';
-import type {OnyxEntry} from 'react-native-onyx';
 import type {PaymentMethod} from '@components/KYCWall/types';
+
+import type CONST from '@src/CONST';
 import type ROUTES from '@src/ROUTES';
 import type {Route} from '@src/ROUTES';
-import type {ButtonSizeValue} from '@src/styles/utils/types';
 import type {Report} from '@src/types/onyx';
 import type {PaymentMethodType} from '@src/types/onyx/OriginalMessage';
 import type AnchorAlignment from '@src/types/utils/AnchorAlignment';
 import type WithSentryLabel from '@src/types/utils/SentryLabel';
 
-type EnablePaymentsRoute = typeof ROUTES.ENABLE_PAYMENTS | typeof ROUTES.IOU_SEND_ENABLE_PAYMENTS | typeof ROUTES.SETTINGS_ENABLE_PAYMENTS;
+import type {StyleProp, ViewStyle} from 'react-native';
+import type {OnyxEntry} from 'react-native-onyx';
+import type {ValueOf} from 'type-fest';
+
+type EnablePaymentsRoute = typeof ROUTES.ENABLE_PAYMENTS | typeof ROUTES.IOU_SEND_ENABLE_PAYMENTS | ReturnType<typeof ROUTES.SETTINGS_ENABLE_PAYMENTS.getRoute>;
 
 type PaymentActionParams = {
     paymentType?: PaymentMethodType;
@@ -47,12 +50,6 @@ type SettlementButtonProps = WithSentryLabel & {
     /** Should we show the payment options? */
     shouldHidePaymentOptions?: boolean;
 
-    /** Should we show the payment options? */
-    shouldShowApproveButton?: boolean;
-
-    /** Should approve button be disabled? */
-    shouldDisableApproveButton?: boolean;
-
     /** The policyID of the report we are paying */
     policyID: string | undefined;
 
@@ -68,11 +65,8 @@ type SettlementButtonProps = WithSentryLabel & {
     /** Total money amount in form <currency><amount> */
     formattedAmount?: string;
 
-    /** The size of button size */
-    buttonSize?: ButtonSizeValue;
-
-    /** Render button in extra-small size */
-    extraSmall?: boolean;
+    /** The size of the button */
+    size?: ValueOf<typeof CONST.BUTTON_SIZE>;
 
     /** Route for the Add Debit Card screen for a given navigation stack */
     addDebitCardRoute?: Route;
@@ -81,7 +75,7 @@ type SettlementButtonProps = WithSentryLabel & {
     isDisabled?: boolean;
 
     /** Whether the button should stay visually normal even when disabled. */
-    shouldStayNormalOnDisable?: boolean;
+    stayNormalOnDisable?: boolean;
 
     /** Whether we should show a loading state for the main button */
     isLoading?: boolean;
@@ -97,9 +91,6 @@ type SettlementButtonProps = WithSentryLabel & {
 
     /** The priority to assign the enter key event listener to buttons. 0 is the highest priority. */
     enterKeyEventListenerPriority?: number;
-
-    /** Callback to open confirmation modal if any of the transactions is on HOLD */
-    confirmApproval?: () => void;
 
     /** Whether to use keyboard shortcuts for confirmation or not */
     useKeyboardShortcuts?: boolean;

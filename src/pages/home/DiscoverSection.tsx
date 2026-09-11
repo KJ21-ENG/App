@@ -1,9 +1,9 @@
-import React from 'react';
-import {Image, Linking, View} from 'react-native';
 import HomeTestDriveImage from '@assets/images/home-testdrive-image.png';
+
 import MenuItemWithTopDescription from '@components/MenuItemWithTopDescription';
 import {PressableWithoutFeedback} from '@components/Pressable';
 import WidgetContainer from '@components/WidgetContainer';
+
 import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import useIsPaidPolicyAdmin from '@hooks/useIsPaidPolicyAdmin';
 import useLocalize from '@hooks/useLocalize';
@@ -12,11 +12,17 @@ import useOnyx from '@hooks/useOnyx';
 import useParentReportAction from '@hooks/useParentReportAction';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
+
 import {completeTestDriveTask} from '@libs/actions/Task';
 import {setSelfTourViewed} from '@libs/actions/Welcome';
 import {getTestDriveURL} from '@libs/TourUtils';
+
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
+
+import {delegateEmailSelector} from '@selectors/Account';
+import React from 'react';
+import {Image, Linking, View} from 'react-native';
 
 const MAX_NUMBER_OF_LINES_TITLE = 4;
 
@@ -35,6 +41,7 @@ function DiscoverSection() {
     } = useOnboardingTaskInformation(CONST.ONBOARDING_TASK_TYPE.VIEW_TOUR);
     const parentReportAction = useParentReportAction(viewTourTaskReport);
     const [onboarding] = useOnyx(ONYXKEYS.NVP_ONBOARDING);
+    const [delegateEmail] = useOnyx(ONYXKEYS.ACCOUNT, {selector: delegateEmailSelector});
 
     if (onboarding?.selfTourViewed || !onboarding) {
         return null;
@@ -51,6 +58,7 @@ function DiscoverSection() {
                 currentUserPersonalDetails.accountID,
                 hasOutstandingChildTask,
                 parentReportAction,
+                delegateEmail,
                 false,
             );
             return;
@@ -70,6 +78,7 @@ function DiscoverSection() {
             >
                 <View style={[styles.br2, styles.overflowHidden]}>
                     <Image
+                        accessibilityIgnoresInvertColors
                         source={HomeTestDriveImage}
                         style={styles.discoverSectionImage}
                     />

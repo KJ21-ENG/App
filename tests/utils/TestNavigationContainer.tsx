@@ -1,29 +1,49 @@
-import type {InitialState} from '@react-navigation/native';
-import {NavigationContainer} from '@react-navigation/native';
-import React from 'react';
 import createRootStackNavigator from '@libs/Navigation/AppNavigator/createRootStackNavigator';
 import createSplitNavigator from '@libs/Navigation/AppNavigator/createSplitNavigator';
+import createWorkspaceNavigator from '@libs/Navigation/AppNavigator/createWorkspaceNavigator';
 import navigationRef from '@libs/Navigation/navigationRef';
 import type {
     AuthScreensParamList,
+    DomainSplitNavigatorParamList,
     ReportsSplitNavigatorParamList,
     RightModalNavigatorParamList,
     SearchFullscreenNavigatorParamList,
     SettingsSplitNavigatorParamList,
+    TabNavigatorParamList,
     WorkspaceNavigatorParamList,
     WorkspaceSplitNavigatorParamList,
 } from '@libs/Navigation/types';
+
 import createPlatformStackNavigator from '@navigation/PlatformStackNavigation/createPlatformStackNavigator';
+
 import CONST from '@src/CONST';
 import NAVIGATORS from '@src/NAVIGATORS';
 import SCREENS from '@src/SCREENS';
 
-const RootStack = createRootStackNavigator<AuthScreensParamList>();
+import type {InitialState, NavigatorScreenParams, ParamListBase, RouteProp} from '@react-navigation/native';
+
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import {NavigationContainer} from '@react-navigation/native';
+import React from 'react';
+
+/** Test-specific param list with split navigators at root level for simplified test setup */
+type TestRootParamList = AuthScreensParamList & {
+    [NAVIGATORS.REPORTS_SPLIT_NAVIGATOR]: NavigatorScreenParams<ReportsSplitNavigatorParamList>;
+    [NAVIGATORS.SETTINGS_SPLIT_NAVIGATOR]: NavigatorScreenParams<SettingsSplitNavigatorParamList>;
+    [NAVIGATORS.SEARCH_FULLSCREEN_NAVIGATOR]: NavigatorScreenParams<SearchFullscreenNavigatorParamList>;
+    [NAVIGATORS.WORKSPACE_SPLIT_NAVIGATOR]: NavigatorScreenParams<WorkspaceSplitNavigatorParamList>;
+    [NAVIGATORS.DOMAIN_SPLIT_NAVIGATOR]: NavigatorScreenParams<DomainSplitNavigatorParamList>;
+    [NAVIGATORS.WORKSPACE_NAVIGATOR]: NavigatorScreenParams<WorkspaceNavigatorParamList>;
+};
+
+const RootStack = createRootStackNavigator<TestRootParamList>();
+const TabNav = createBottomTabNavigator<TabNavigatorParamList>();
 const ReportsSplit = createSplitNavigator<ReportsSplitNavigatorParamList>();
 const SettingsSplit = createSplitNavigator<SettingsSplitNavigatorParamList>();
 const SearchStack = createPlatformStackNavigator<SearchFullscreenNavigatorParamList>();
 const WorkspaceSplit = createSplitNavigator<WorkspaceSplitNavigatorParamList>();
-const WorkspaceStack = createPlatformStackNavigator<WorkspaceNavigatorParamList>();
+const DomainSplit = createSplitNavigator<DomainSplitNavigatorParamList>();
+const WorkspaceStack = createWorkspaceNavigator<WorkspaceNavigatorParamList>();
 const RightModalNavigatorStack = createSplitNavigator<RightModalNavigatorParamList>();
 
 const getEmptyComponent = () => jest.fn();
@@ -50,6 +70,10 @@ function TestWorkspaceSplitNavigator() {
                 getComponent={getEmptyComponent}
             />
             <WorkspaceSplit.Screen
+                name={SCREENS.WORKSPACE.MORE_FEATURES}
+                getComponent={getEmptyComponent}
+            />
+            <WorkspaceSplit.Screen
                 name={SCREENS.WORKSPACE.CATEGORIES}
                 getComponent={getEmptyComponent}
             />
@@ -65,9 +89,9 @@ function TestWorkspaceSplitNavigator() {
     );
 }
 
-function TestWorkspaceNavigator() {
+function TestWorkspaceNavigator({route}: {route: RouteProp<ParamListBase>}) {
     return (
-        <WorkspaceStack.Navigator>
+        <WorkspaceStack.Navigator parentRoute={route}>
             <WorkspaceStack.Screen
                 name={SCREENS.WORKSPACES_LIST}
                 component={getEmptyComponent()}
@@ -76,7 +100,34 @@ function TestWorkspaceNavigator() {
                 name={NAVIGATORS.WORKSPACE_SPLIT_NAVIGATOR}
                 component={TestWorkspaceSplitNavigator}
             />
+            <WorkspaceStack.Screen
+                name={NAVIGATORS.DOMAIN_SPLIT_NAVIGATOR}
+                component={TestDomainSplitNavigator}
+            />
         </WorkspaceStack.Navigator>
+    );
+}
+
+function TestDomainSplitNavigator() {
+    return (
+        <DomainSplit.Navigator
+            sidebarScreen={SCREENS.DOMAIN.INITIAL}
+            defaultCentralScreen={SCREENS.DOMAIN.MEMBERS}
+            parentRoute={CONST.NAVIGATION_TESTS.DEFAULT_PARENT_ROUTE}
+        >
+            <DomainSplit.Screen
+                name={SCREENS.DOMAIN.INITIAL}
+                getComponent={getEmptyComponent}
+            />
+            <DomainSplit.Screen
+                name={SCREENS.DOMAIN.MEMBERS}
+                getComponent={getEmptyComponent}
+            />
+            <DomainSplit.Screen
+                name={SCREENS.DOMAIN.SAML}
+                getComponent={getEmptyComponent}
+            />
+        </DomainSplit.Navigator>
     );
 }
 
@@ -155,6 +206,33 @@ function TestRightModalNavigator() {
     );
 }
 
+function TestTabNavigator() {
+    return (
+        <TabNav.Navigator screenOptions={{headerShown: false}}>
+            <TabNav.Screen
+                name={SCREENS.HOME}
+                component={getEmptyComponent()}
+            />
+            <TabNav.Screen
+                name={NAVIGATORS.REPORTS_SPLIT_NAVIGATOR}
+                component={TestReportsSplitNavigator}
+            />
+            <TabNav.Screen
+                name={NAVIGATORS.SEARCH_FULLSCREEN_NAVIGATOR}
+                component={TestSearchFullscreenNavigator}
+            />
+            <TabNav.Screen
+                name={NAVIGATORS.SETTINGS_SPLIT_NAVIGATOR}
+                component={TestSettingsSplitNavigator}
+            />
+            <TabNav.Screen
+                name={NAVIGATORS.WORKSPACE_NAVIGATOR}
+                component={TestWorkspaceNavigator}
+            />
+        </TabNav.Navigator>
+    );
+}
+
 function TestNavigationContainer({initialState}: TestNavigationContainerProps) {
     return (
         <NavigationContainer
@@ -163,20 +241,8 @@ function TestNavigationContainer({initialState}: TestNavigationContainerProps) {
         >
             <RootStack.Navigator>
                 <RootStack.Screen
-                    name={NAVIGATORS.REPORTS_SPLIT_NAVIGATOR}
-                    component={TestReportsSplitNavigator}
-                />
-                <RootStack.Screen
-                    name={NAVIGATORS.SETTINGS_SPLIT_NAVIGATOR}
-                    component={TestSettingsSplitNavigator}
-                />
-                <RootStack.Screen
-                    name={NAVIGATORS.WORKSPACE_NAVIGATOR}
-                    component={TestWorkspaceNavigator}
-                />
-                <RootStack.Screen
-                    name={NAVIGATORS.SEARCH_FULLSCREEN_NAVIGATOR}
-                    component={TestSearchFullscreenNavigator}
+                    name={NAVIGATORS.TAB_NAVIGATOR}
+                    component={TestTabNavigator}
                 />
                 <RootStack.Screen
                     name={SCREENS.VALIDATE_LOGIN}

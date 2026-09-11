@@ -1,6 +1,7 @@
-import Onyx from 'react-native-onyx';
 import IntlStore from '@src/languages/IntlStore';
-import type {TranslationPaths} from '@src/languages/types';
+
+import Onyx from 'react-native-onyx';
+
 import CONST from '../../src/CONST';
 import * as Localize from '../../src/libs/Localize';
 import ONYXKEYS from '../../src/ONYXKEYS';
@@ -44,7 +45,8 @@ async function testMissingTranslationBehavior(environmentConfig: EnvironmentConf
     try {
         await setupSession(sessionEmail);
 
-        const result = Localize.translate(CONST.LOCALES.EN, 'missing.translation.key' as TranslationPaths);
+        // @ts-expect-error This scenario intentionally exercises runtime handling of a key absent from TranslationPaths.
+        const result = Localize.translate(CONST.LOCALES.EN, 'missing.translation.key');
         expect(result).toBe(expectedResult);
     } finally {
         cleanup();
@@ -56,7 +58,7 @@ describe('localize', () => {
         Onyx.init({
             keys: {
                 NVP_PREFERRED_LOCALE: ONYXKEYS.NVP_PREFERRED_LOCALE,
-                ARE_TRANSLATIONS_LOADING: ONYXKEYS.ARE_TRANSLATIONS_LOADING,
+                ARE_TRANSLATIONS_LOADING: ONYXKEYS.RAM_ONLY_ARE_TRANSLATIONS_LOADING,
                 SESSION: ONYXKEYS.SESSION,
             },
         });

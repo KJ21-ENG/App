@@ -1,10 +1,17 @@
-import React from 'react';
 import BaseWidgetItem from '@components/BaseWidgetItem';
+
 import {useMemoizedLazyExpensifyIcons} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
+
+import createDynamicRoute from '@libs/Navigation/helpers/dynamicRoutesUtils/createDynamicRoute';
 import Navigation from '@libs/Navigation/Navigation';
+
 import colors from '@styles/theme/colors';
-import ROUTES from '@src/ROUTES';
+
+import CONST from '@src/CONST';
+import {DYNAMIC_ROUTES} from '@src/ROUTES';
+
+import React from 'react';
 
 function ValidateAccount() {
     const {translate} = useLocalize();
@@ -18,8 +25,8 @@ function ValidateAccount() {
             title={translate('homePage.timeSensitiveSection.validateAccount.title')}
             subtitle={translate('homePage.timeSensitiveSection.validateAccount.subtitle')}
             ctaText={translate('homePage.timeSensitiveSection.validateAccount.cta')}
-            onCtaPress={() => Navigation.navigate(ROUTES.SETTINGS_CONTACT_METHOD_VERIFY_ACCOUNT.getRoute())}
-            buttonProps={{success: true}}
+            onCtaPress={() => Navigation.navigate(createDynamicRoute(DYNAMIC_ROUTES.VERIFY_ACCOUNT.path))}
+            buttonVariant={CONST.BUTTON_VARIANT.SUCCESS}
         />
     );
 }

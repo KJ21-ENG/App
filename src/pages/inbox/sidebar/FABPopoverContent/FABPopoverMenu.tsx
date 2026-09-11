@@ -1,26 +1,32 @@
-import React, {Activity, useState} from 'react';
-import type {ActivityProps, RefObject} from 'react';
-import {View} from 'react-native';
+import CompactMenuContext from '@components/CompactMenuContext';
 import FocusTrapForModal from '@components/FocusTrap/FocusTrapForModal';
 import PopoverWithMeasuredContent from '@components/PopoverWithMeasuredContent';
+
 import useArrowKeyFocusManager from '@hooks/useArrowKeyFocusManager';
+import useBottomSafeSafeAreaPaddingStyle from '@hooks/useBottomSafeSafeAreaPaddingStyle';
 import useResponsiveLayout from '@hooks/useResponsiveLayout';
 import useThemeStyles from '@hooks/useThemeStyles';
 import useWindowDimensions from '@hooks/useWindowDimensions';
+
 import {close} from '@libs/actions/Modal';
 import {isSafari} from '@libs/Browser';
-import navigateAfterInteraction from '@libs/Navigation/navigateAfterInteraction';
+
 import CONST from '@src/CONST';
+
+import type {ActivityProps, RefObject} from 'react';
+
+import React, {Activity, useState} from 'react';
+import {View} from 'react-native';
+
 import {FABMenuContext} from './FABMenuContext';
 
 const FAB_ITEM_ORDER = [
     CONST.FAB_MENU_ITEM_IDS.EXPENSE,
-    CONST.FAB_MENU_ITEM_IDS.TRACK_DISTANCE,
     CONST.FAB_MENU_ITEM_IDS.CREATE_REPORT,
+    CONST.FAB_MENU_ITEM_IDS.TRACK_DISTANCE,
     CONST.FAB_MENU_ITEM_IDS.NEW_CHAT,
     CONST.FAB_MENU_ITEM_IDS.INVOICE,
     CONST.FAB_MENU_ITEM_IDS.TRAVEL,
-    CONST.FAB_MENU_ITEM_IDS.TEST_DRIVE,
     CONST.FAB_MENU_ITEM_IDS.NEW_WORKSPACE,
     CONST.FAB_MENU_ITEM_IDS.QUICK_ACTION,
 ] as const;
@@ -40,6 +46,13 @@ function FABPopoverMenu({isVisible, onClose, onItemSelected, anchorRef, animatio
     const {shouldUseNarrowLayout} = useResponsiveLayout();
     const {windowHeight} = useWindowDimensions();
     const anchorPosition = styles.createMenuPositionSidebar(windowHeight);
+    // Use paddingTop (pt*) for the top and pass the bottom via additionalPaddingBottom so it composes with the safe-area inset.
+    // paddingVertical (pv*) shorthand isn't readable by the hook, so its injected paddingBottom would clobber the intended bottom padding.
+    const bottomSafeAreaPaddingStyle = useBottomSafeSafeAreaPaddingStyle({
+        addBottomSafeAreaPadding: true,
+        style: shouldUseNarrowLayout ? styles.pt4 : styles.pt2,
+        additionalPaddingBottom: shouldUseNarrowLayout ? 16 : 8,
+    });
     const [contentActivityMode, setContentActivityMode] = useState<ActivityProps['mode']>(isVisible ? 'visible' : 'hidden');
 
     const [registeredSet, setRegisteredSet] = useState<ReadonlySet<string>>(new Set());
@@ -84,10 +97,10 @@ function FABPopoverMenu({isVisible, onClose, onItemSelected, anchorRef, animatio
         onItemSelected();
         if (options?.shouldCallAfterModalHide && !isSafari()) {
             close(() => {
-                navigateAfterInteraction(onSelected);
+                onSelected();
             });
         } else {
-            navigateAfterInteraction(onSelected);
+            onSelected();
         }
         setFocusedIndex(-1);
     };
@@ -123,16 +136,20 @@ function FABPopoverMenu({isVisible, onClose, onItemSelected, anchorRef, animatio
                 disableAnimation={false}
                 shouldHandleNavigationBack
                 innerContainerStyle={styles.pv0}
+                enableEdgeToEdgeBottomSafeAreaPadding
             >
                 <FocusTrapForModal
                     active={isVisible}
                     shouldReturnFocus
+                    launcherRef={anchorRef}
                 >
-                    <Activity mode={contentActivityMode}>
-                        <View style={shouldUseNarrowLayout ? styles.flexGrow1 : [styles.createMenuContainer, styles.pv0, styles.flex1]}>
-                            <View style={styles.pv4}>{children}</View>
-                        </View>
-                    </Activity>
+                    <CompactMenuContext.Provider value>
+                        <Activity mode={contentActivityMode}>
+                            <View style={shouldUseNarrowLayout ? styles.flexGrow1 : [styles.createMenuContainer, styles.pv0, styles.flex1]}>
+                                <View style={bottomSafeAreaPaddingStyle}>{children}</View>
+                            </View>
+                        </Activity>
+                    </CompactMenuContext.Provider>
                 </FocusTrapForModal>
             </PopoverWithMeasuredContent>
         </FABMenuContext.Provider>
