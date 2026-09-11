@@ -51,7 +51,7 @@ import {updateSelectedFeed} from '@userActions/Card';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import ROUTES, {DYNAMIC_ROUTES} from '@src/ROUTES';
-import type {BankAccount, BankAccountList, CardList, Policy} from '@src/types/onyx';
+import type {BankAccountList, CardList, Policy} from '@src/types/onyx';
 import type PaymentMethod from '@src/types/onyx/PaymentMethod';
 import {getEmptyObject, isEmptyObject} from '@src/types/utils/EmptyObject';
 import type IconAsset from '@src/types/utils/IconAsset';
@@ -546,10 +546,11 @@ function PaymentMethodList({
 
         if (filterType ?? filterCurrency ?? excludeBankAccountID) {
             combinedPaymentMethods = combinedPaymentMethods.filter((paymentMethod) => {
-                const account = paymentMethod as BankAccount;
-                const typeMatches = !filterType || account.accountData?.type === filterType;
-                const currencyMatches = !filterCurrency || account.bankCurrency === filterCurrency;
-                const shouldInclude = !excludeBankAccountID || account.methodID !== excludeBankAccountID;
+                const accountType = paymentMethod.accountData && 'type' in paymentMethod.accountData ? paymentMethod.accountData.type : undefined;
+                const bankCurrency = 'bankCurrency' in paymentMethod ? paymentMethod.bankCurrency : undefined;
+                const typeMatches = !filterType || accountType === filterType;
+                const currencyMatches = !filterCurrency || bankCurrency === filterCurrency;
+                const shouldInclude = !excludeBankAccountID || paymentMethod.methodID !== excludeBankAccountID;
 
                 return typeMatches && currencyMatches && shouldInclude;
             });
@@ -557,9 +558,8 @@ function PaymentMethodList({
 
         if (excludeStates?.length) {
             combinedPaymentMethods = combinedPaymentMethods.filter((paymentMethod) => {
-                const account = paymentMethod as BankAccount;
-                const bankAccountState = getBankAccountState(account.accountData) as ValueOf<typeof CONST.BANK_ACCOUNT.STATE> | undefined;
-                return !bankAccountState || !excludeStates.includes(bankAccountState);
+                const bankAccountState = getBankAccountState(paymentMethod.accountData);
+                return !bankAccountState || !excludeStates.some((state) => state === bankAccountState);
             });
         }
 
@@ -645,15 +645,23 @@ function PaymentMethodList({
         />
     );
 
-    const hasPersonalBank = filteredPaymentMethods.find((method) => (method as BankAccount).accountData?.type === CONST.BANK_ACCOUNT.TYPE.PERSONAL);
-    const hasBusinessBank = filteredPaymentMethods.find((method) => (method as BankAccount).accountData?.type === CONST.BANK_ACCOUNT.TYPE.BUSINESS);
+    const hasPersonalBank = filteredPaymentMethods.find(
+        (method) => typeof method !== 'string' && method.accountData && 'type' in method.accountData && method.accountData.type === CONST.BANK_ACCOUNT.TYPE.PERSONAL,
+    );
+    const hasBusinessBank = filteredPaymentMethods.find(
+        (method) => typeof method !== 'string' && method.accountData && 'type' in method.accountData && method.accountData.type === CONST.BANK_ACCOUNT.TYPE.BUSINESS,
+    );
     const itemsToRender =
         shouldShowBankAccountSections && hasPersonalBank && hasBusinessBank
             ? [
                   translate('walletPage.personalBankAccounts'),
-                  ...filteredPaymentMethods.filter((method) => (method as BankAccount).accountData?.type === CONST.BANK_ACCOUNT.TYPE.PERSONAL),
+                  ...filteredPaymentMethods.filter(
+                      (method) => typeof method !== 'string' && method.accountData && 'type' in method.accountData && method.accountData.type === CONST.BANK_ACCOUNT.TYPE.PERSONAL,
+                  ),
                   translate('walletPage.businessBankAccounts'),
-                  ...filteredPaymentMethods.filter((method) => (method as BankAccount).accountData?.type === CONST.BANK_ACCOUNT.TYPE.BUSINESS),
+                  ...filteredPaymentMethods.filter(
+                      (method) => typeof method !== 'string' && method.accountData && 'type' in method.accountData && method.accountData.type === CONST.BANK_ACCOUNT.TYPE.BUSINESS,
+                  ),
               ]
             : filteredPaymentMethods;
 

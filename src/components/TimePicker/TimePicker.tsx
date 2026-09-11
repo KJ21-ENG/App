@@ -2,7 +2,9 @@ import AmountTextInput from '@components/AmountTextInput';
 import BigNumberPad from '@components/BigNumberPad';
 import Button from '@components/ButtonComposed';
 import FormHelpMessage from '@components/FormHelpMessage';
+import type {AnimatedTextInputRef} from '@components/RNTextInput';
 import Text from '@components/Text';
+import type {BaseTextInputRef} from '@components/TextInput/BaseTextInput/types';
 
 import useAutoFocusInput from '@hooks/useAutoFocusInput';
 import useKeyboardShortcut from '@hooks/useKeyboardShortcut';
@@ -16,8 +18,7 @@ import {canUseTouchScreen as canUseTouchScreenDeviceCapabilities} from '@libs/De
 
 import CONST from '@src/CONST';
 
-import type {GestureResponderEvent, NativeSyntheticEvent} from 'react-native';
-import type {TextInput} from 'react-native-gesture-handler';
+import type {GestureResponderEvent, NativeSyntheticEvent, TextInput} from 'react-native';
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {View} from 'react-native';
@@ -46,6 +47,11 @@ type TimePickerProps = {
 const AMOUNT_VIEW_ID = 'amountView';
 const NUM_PAD_CONTAINER_VIEW_ID = 'numPadContainerView';
 const NUM_PAD_VIEW_ID = 'numPadView';
+
+/** Narrow the default AmountTextInput handle from the inherited input ref union. */
+function isTimePickerTextInput(ref: BaseTextInputRef): ref is AnimatedTextInputRef {
+    return typeof ref.isFocused === 'function';
+}
 
 /**
  * Replace the sub-string of the given string with the provided value
@@ -785,7 +791,8 @@ function TimePicker({defaultValue = '', onSubmit, onInputChange = () => {}, shou
                         }}
                         onChangeAmount={handleHourChange}
                         ref={(textInputRef) => {
-                            hourInputRef.current = textInputRef as TextInput | null;
+                            const input = textInputRef === null || isTimePickerTextInput(textInputRef) ? textInputRef : null;
+                            hourInputRef.current = input;
                         }}
                         onSelectionChange={(e) => {
                             setSelectionHour(e.nativeEvent.selection);
@@ -806,9 +813,10 @@ function TimePicker({defaultValue = '', onSubmit, onInputChange = () => {}, shou
                         }}
                         onChangeAmount={handleMinutesChange}
                         ref={(textInputRef) => {
-                            minuteInputRef.current = textInputRef as TextInput | null;
+                            const input = textInputRef === null || isTimePickerTextInput(textInputRef) ? textInputRef : null;
+                            minuteInputRef.current = input;
                             if (!showFullFormat) {
-                                inputCallbackRef(textInputRef as TextInput | null);
+                                inputCallbackRef(input);
                             }
                         }}
                         onSelectionChange={(e) => {
@@ -832,7 +840,8 @@ function TimePicker({defaultValue = '', onSubmit, onInputChange = () => {}, shou
                                 }}
                                 onChangeAmount={handleSecondsChange}
                                 ref={(textInputRef) => {
-                                    secondInputRef.current = textInputRef as TextInput | null;
+                                    const input = textInputRef === null || isTimePickerTextInput(textInputRef) ? textInputRef : null;
+                                    secondInputRef.current = input;
                                 }}
                                 onSelectionChange={(e) => {
                                     setSelectionSecond(e.nativeEvent.selection);
@@ -853,9 +862,10 @@ function TimePicker({defaultValue = '', onSubmit, onInputChange = () => {}, shou
                                 }}
                                 onChangeAmount={handleMillisecondsChange}
                                 ref={(textInputRef) => {
-                                    millisecondInputRef.current = textInputRef as TextInput | null;
+                                    const input = textInputRef === null || isTimePickerTextInput(textInputRef) ? textInputRef : null;
+                                    millisecondInputRef.current = input;
                                     if (showFullFormat) {
-                                        inputCallbackRef(textInputRef as TextInput | null);
+                                        inputCallbackRef(input);
                                     }
                                 }}
                                 onSelectionChange={(e) => {

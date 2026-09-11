@@ -1,6 +1,6 @@
 import variables from '@styles/variables';
 
-import type {TNode} from 'react-native-render-html';
+import type {TNode, TNodeDescriptor} from 'react-native-render-html';
 
 type Predicate = (node: TNode) => boolean;
 
@@ -34,7 +34,10 @@ function isCommentTag(tagName: string): boolean {
 /**
  * Check if there is an ancestor node for which the predicate returns true.
  */
-function isChildOfNode(tnode: TNode, predicate: Predicate): boolean {
+function isChildOfNode(tnode: TNode | TNodeDescriptor, predicate: Predicate): boolean {
+    if (!('parent' in tnode)) {
+        return false;
+    }
     let currentNode = tnode.parent;
     while (currentNode) {
         if (predicate(currentNode)) {
@@ -74,7 +77,7 @@ function isChildOfH1(tnode: TNode): boolean {
     return isChildOfNode(tnode, (node) => node.domNode?.name?.toLowerCase() === 'h1');
 }
 
-function isChildOfTaskTitle(tnode: TNode): boolean {
+function isChildOfTaskTitle(tnode: TNode | TNodeDescriptor): boolean {
     return isChildOfNode(tnode, (node) => node.domNode?.name?.toLowerCase() === 'task-title');
 }
 

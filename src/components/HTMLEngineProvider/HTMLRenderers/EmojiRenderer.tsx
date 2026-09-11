@@ -2,7 +2,6 @@ import EmojiWithTooltip from '@components/EmojiWithTooltip';
 
 import useThemeStyles from '@hooks/useThemeStyles';
 
-import type {TextStyle} from 'react-native';
 import type {CustomRendererProps, TPhrasing, TText} from 'react-native-render-html';
 
 import React from 'react';
@@ -12,9 +11,9 @@ function EmojiRenderer({tnode, style: styleProp}: CustomRendererProps<TText | TP
 
     let style;
     if ('islarge' in tnode.attributes) {
-        style = [styleProp as TextStyle, styles.onlyEmojisText];
+        style = [{...styleProp, fontSize: styles.onlyEmojisText.fontSize}, styles.onlyEmojisText];
     } else if ('ismedium' in tnode.attributes) {
-        style = [styleProp as TextStyle, styles.emojisWithTextFontSize, styles.verticalAlignTopText];
+        style = [{...styleProp, fontSize: styles.emojisWithTextFontSize.fontSize}, styles.emojisWithTextFontSize, styles.verticalAlignTopText];
     } else {
         style = null;
     }
