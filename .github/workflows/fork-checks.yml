@@ -21,12 +21,11 @@ on:
         required: true
         type: string
       sha:
-        description: Exact commit to validate (empty = branch tip at checkout time)
-        required: false
-        default: ''
+        description: Exact full commit SHA to validate
+        required: true
         type: string
       profile:
-        description: Validation profile metadata (targeted pilot default, or explicit full gate)
+        description: Validation profile (full TypeScript with targeted checks, or full lint/format too)
         required: false
         default: targeted
         type: choice
@@ -36,10 +35,10 @@ on:
       checks:
         description: 'Exact comma-separated check tokens supplied by fork_checks.py'
         required: false
-        default: 'format-targeted,lint-targeted,react-compiler'
+        default: 'format-targeted,lint-targeted,typecheck-full,react-compiler'
         type: string
       jest_args:
-        description: Arguments passed to jest (test paths, -t patterns, --runInBand). Empty = jest job no-ops.
+        description: Arguments passed to jest (test paths, -t patterns, --runInBand). Required when the jest check is selected.
         required: false
         default: ''
         type: string
@@ -91,7 +90,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          ref: ${{ inputs.sha }}
+
+      - name: Verify exact candidate commit
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]]
 
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
@@ -108,7 +113,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          ref: ${{ inputs.sha }}
+
+      - name: Verify exact candidate commit
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]]
 
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
@@ -155,7 +166,7 @@ jobs:
           key: ${{ steps.restore-eslint.outputs.cache-primary-key }}
 
   lint-targeted:
-    name: ESLint (changed files, targeted pilot)
+    name: ESLint (changed files)
     if: contains(format(',{0},', inputs.checks), ',lint-targeted,')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -163,7 +174,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          ref: ${{ inputs.sha }}
+
+      - name: Verify exact candidate commit
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]]
 
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
@@ -188,12 +205,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          ref: ${{ inputs.sha }}
+
+      - name: Verify exact candidate commit
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]]
 
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
 
-      # Auto-detects the branch's formatter era. The targeted pilot checks only
+      # Auto-detects the branch's formatter era. The targeted profile checks only
       # changed files; the explicit full profile mirrors the branch-wide gate.
       - name: Format check
         env:
@@ -244,7 +267,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          ref: ${{ inputs.sha }}
+
+      - name: Verify exact candidate commit
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]]
 
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
@@ -270,7 +299,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.sha != '' && inputs.sha || inputs.branch }}
+          ref: ${{ inputs.sha }}
+
+      - name: Verify exact candidate commit
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]]
 
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
@@ -287,8 +322,8 @@ jobs:
           JEST_ARGS: ${{ inputs.jest_args }}
         run: |
           if [ -z "$JEST_ARGS" ]; then
-            echo "::notice::No jest_args provided; nothing to run."
-            exit 0
+            echo "::error::Selected Jest checks require nonempty jest_args."
+            exit 1
           fi
           # shellcheck disable=SC2086
           npm test -- --silent $JEST_ARGS
