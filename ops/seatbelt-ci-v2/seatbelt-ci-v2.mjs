@@ -15,7 +15,8 @@ export function validateRequest(value) {
         && /^[A-Za-z0-9_./-]+$/.test(item) && !item.includes('..') && !item.includes('//')
         && !item.split('/').some((part) => !part || part.startsWith('.') || part.endsWith('.') || part.endsWith('.lock'));
     const required = ['typecheck', 'lint', 'format', 'react-compiler'];
-    if (Buffer.byteLength(JSON.stringify(value) ?? '') > 16384 || !keys(value, ['operationId', 'head', 'comparisonBase', 'branch', 'workflow', 'checks', 'jestFiles', 'jestNotApplicable'])
+    const merge = Object.hasOwn(value ?? {}, 'mergeRepair') ? value.mergeRepair : null;
+    if (Buffer.byteLength(JSON.stringify(value) ?? '') > 16384 || !keys(value, ['operationId', 'head', 'comparisonBase', 'branch', 'workflow', 'checks', 'jestFiles', 'jestNotApplicable', ...(merge === null ? [] : ['mergeRepair'])])
         || typeof value.operationId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(value.operationId)
         || !sha(value.head) || !sha(value.comparisonBase) || !ref(value.branch, 'refs/heads/')
         || !keys(value.workflow, ['id', 'path', 'ref', 'head', 'digest'])
@@ -32,7 +33,15 @@ export function validateRequest(value) {
         || !Array.isArray(value.checks) || new Set(value.checks).size !== value.checks.length
         || value.checks.length !== required.length + (value.jestFiles.length ? 1 : 0)
         || !required.every((name) => value.checks.includes(name))
-        || value.checks.some((name) => ![...required, ...(value.jestFiles.length ? ['jest'] : [])].includes(name))) {
+        || value.checks.some((name) => ![...required, ...(value.jestFiles.length ? ['jest'] : [])].includes(name))
+        || (merge !== null && (!keys(merge, ['secondParent', 'changedPaths', 'reviewedDiffDigest'])
+            || !sha(merge.secondParent) || merge.secondParent !== value.comparisonBase
+            || !/^sha256:[0-9a-f]{64}$/.test(merge.reviewedDiffDigest)
+            || !Array.isArray(merge.changedPaths) || merge.changedPaths.length < 1 || merge.changedPaths.length > 100
+            || new Set(merge.changedPaths).size !== merge.changedPaths.length
+            || merge.changedPaths.some(path => typeof path !== 'string' || path.length > 512
+                || !/^[A-Za-z0-9_@(). /-]+$/.test(path)
+                || path.split('/').some(part => !part || part === '.' || part === '..'))))) {
         throw new Error('Invalid complete Fork CI request');
     }
 }
@@ -67,6 +76,20 @@ function run(request, name, candidate, trusted, output) {
             throw new Error('Workflow or tested checkout identity mismatch');
         }
         git(candidate, ['merge-base', '--is-ancestor', request.comparisonBase, request.head]);
+        if (request.mergeRepair) {
+            const parents = git(candidate, ['show', '-s', '--format=%P', request.head]).split(' ');
+            const paths = git(candidate, ['diff', '--name-only', '-z', '--no-renames', request.comparisonBase, request.head, '--'])
+                .split('\0').filter(Boolean).sort();
+            const bytes = spawnSync('git', ['-C', candidate, 'diff', '--binary', '--full-index', '--no-ext-diff',
+                '--no-textconv', '--no-renames', request.comparisonBase, request.head, '--'],
+            {env, encoding: 'buffer', maxBuffer: 4194304});
+            if (parents.length !== 2 || parents[1] !== request.mergeRepair.secondParent
+                || !isDeepStrictEqual(paths, [...request.mergeRepair.changedPaths].sort())
+                || bytes.error || bytes.status !== 0
+                || `sha256:${createHash('sha256').update(bytes.stdout).digest('hex')}` !== request.mergeRepair.reviewedDiffDigest) {
+                throw new Error('Merge repair comparison proof mismatch');
+            }
+        }
         // Disable rename detection so every surviving destination is selected, while deleted paths are omitted.
         const lintFiles = name !== 'lint' ? [] : git(candidate, ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=ACMT', request.comparisonBase, request.head, '--'])
             .split('\0').filter(path => /\.(?:[cm]?js|jsx|tsx?|[cm]ts)$/.test(path));
