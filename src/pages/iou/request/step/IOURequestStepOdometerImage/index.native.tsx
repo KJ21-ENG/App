@@ -1,45 +1,57 @@
-import React, {useRef} from 'react';
-import {Alert, StyleSheet, View} from 'react-native';
-import type {LayoutRectangle} from 'react-native';
-import ReactNativeBlobUtil from 'react-native-blob-util';
-import {GestureDetector} from 'react-native-gesture-handler';
-import {RESULTS} from 'react-native-permissions';
-import Animated, {useAnimatedStyle, useSharedValue} from 'react-native-reanimated';
-import type {PhotoFile} from 'react-native-vision-camera';
 import ActivityIndicator from '@components/ActivityIndicator';
 import AttachmentPicker from '@components/AttachmentPicker';
-import Button from '@components/Button';
+import Button from '@components/ButtonComposed';
 import {useFullScreenLoaderActions} from '@components/FullScreenLoaderContext';
 import Icon from '@components/Icon';
 import ImageSVG from '@components/ImageSVG';
 import PressableWithFeedback from '@components/Pressable/PressableWithFeedback';
 import RenderHTML from '@components/RenderHTML';
+import ScrollView from '@components/ScrollView';
 import Text from '@components/Text';
+
 import useFilesValidation from '@hooks/useFilesValidation';
+import useIsInLandscapeMode from '@hooks/useIsInLandscapeMode';
 import {useMemoizedLazyExpensifyIcons, useMemoizedLazyIllustrations} from '@hooks/useLazyAsset';
 import useLocalize from '@hooks/useLocalize';
 import useNativeCamera from '@hooks/useNativeCamera';
 import useTheme from '@hooks/useTheme';
 import useThemeStyles from '@hooks/useThemeStyles';
+
+import {setMoneyRequestOdometerImage} from '@libs/actions/OdometerTransactionUtils';
+import {getMimeTypeFromUri} from '@libs/fileDownload/FileUtils';
 import getPhotoSource from '@libs/fileDownload/getPhotoSource';
 import getReceiptsUploadFolderPath from '@libs/getReceiptsUploadFolderPath';
 import {shouldUseTransactionDraft} from '@libs/IOUUtils';
 import Log from '@libs/Log';
-import moveReceiptToDurableStorage from '@libs/moveReceiptToDurableStorage';
 import Navigation from '@libs/Navigation/Navigation';
-import {getOdometerImageUri} from '@libs/OdometerImageUtils';
+import {getOdometerImageUri} from '@libs/OdometerUtils';
+import ReceiptStorage from '@libs/ReceiptStorage';
+import {cancelSpan, endSpan, startSpan} from '@libs/telemetry/activeSpans';
+import {logReceiptAdoptFailed} from '@libs/telemetry/ReceiptObservability';
+
 import NavigationAwareCamera from '@pages/iou/request/step/IOURequestStepScan/components/NavigationAwareCamera/Camera';
 import {cropImageToAspectRatio} from '@pages/iou/request/step/IOURequestStepScan/cropImageToAspectRatio';
 import type {ImageObject} from '@pages/iou/request/step/IOURequestStepScan/cropImageToAspectRatio';
 import StepScreenWrapper from '@pages/iou/request/step/StepScreenWrapper';
 import withFullTransactionOrNotFound from '@pages/iou/request/step/withFullTransactionOrNotFound';
 import type {WithFullTransactionOrNotFoundProps} from '@pages/iou/request/step/withFullTransactionOrNotFound';
+
 import variables from '@styles/variables';
-import {setMoneyRequestOdometerImage} from '@userActions/IOU';
+
 import CONST from '@src/CONST';
 import ROUTES from '@src/ROUTES';
 import type SCREENS from '@src/SCREENS';
 import type {FileObject} from '@src/types/utils/Attachment';
+
+import type {LayoutRectangle} from 'react-native';
+import type {PhotoFile} from 'react-native-vision-camera';
+
+import React, {useRef} from 'react';
+import {Alert, StyleSheet, View} from 'react-native';
+import ReactNativeBlobUtil from 'react-native-blob-util';
+import {GestureDetector} from 'react-native-gesture-handler';
+import {RESULTS} from 'react-native-permissions';
+import Animated, {useAnimatedStyle, useSharedValue} from 'react-native-reanimated';
 
 type IOURequestStepOdometerImageProps = WithFullTransactionOrNotFoundProps<typeof SCREENS.MONEY_REQUEST.ODOMETER_IMAGE>;
 
@@ -58,6 +70,8 @@ function IOURequestStepOdometerImage({
     const viewfinderLayout = useRef<LayoutRectangle>(null);
     const isTransactionDraft = shouldUseTransactionDraft(action ?? CONST.IOU.ACTION.CREATE, iouType ?? CONST.IOU.TYPE.REQUEST);
 
+    const isInLandscapeMode = useIsInLandscapeMode();
+
     const {
         camera,
         device,
@@ -73,8 +87,11 @@ function IOURequestStepOdometerImage({
         askForPermissions,
         tapGesture,
         cameraFocusIndicatorAnimatedStyle,
-        cameraLoadingReasonAttributes,
-    } = useNativeCamera({context: 'IOURequestStepOdometerImage'});
+    } = useNativeCamera({
+        onFocusCleanup: () => {
+            cancelSpan(CONST.TELEMETRY.SPAN_ODOMETER_IMAGE_CAPTURE);
+        },
+    });
     const {setIsLoaderVisible} = useFullScreenLoaderActions();
 
     const title = imageType === 'start' ? translate('distance.odometer.startTitle') : translate('distance.odometer.endTitle');
@@ -104,11 +121,41 @@ function IOURequestStepOdometerImage({
         if (!file) {
             return;
         }
-        setMoneyRequestOdometerImage(transaction, imageType, getOdometerImageUri(file), isTransactionDraft, false);
-        navigateBack();
+
+        const sourceUri = getOdometerImageUri(file);
+        const filename = file.name ?? `odometer-${imageType}.jpg`;
+
+        if (!sourceUri) {
+            navigateBack();
+            return;
+        }
+
+        ReceiptStorage.adopt(sourceUri, filename)
+            .then((durableName) => ReceiptStorage.toLocalUri(durableName))
+            .catch((error: unknown) => {
+                logReceiptAdoptFailed({error, captureSource: 'gallery'});
+                return sourceUri;
+            })
+            .then((uri) => {
+                setMoneyRequestOdometerImage(
+                    transaction,
+                    imageType,
+                    {
+                        uri,
+                        name: filename,
+                        type: file.type ?? getMimeTypeFromUri(uri) ?? 'image/jpeg',
+                        size: file.size,
+                    },
+                    isTransactionDraft,
+                    false,
+                );
+            })
+            .finally(() => {
+                navigateBack();
+            });
     };
 
-    const {validateFiles, ErrorModal} = useFilesValidation(handleImageSelected);
+    const {validateFiles} = useFilesValidation(handleImageSelected);
 
     const capturePhoto = () => {
         if (!camera.current && (cameraPermissionStatus === RESULTS.DENIED || cameraPermissionStatus === RESULTS.BLOCKED)) {
@@ -130,6 +177,15 @@ function IOURequestStepOdometerImage({
         }
 
         setDidCapturePhoto(true);
+
+        startSpan(CONST.TELEMETRY.SPAN_ODOMETER_IMAGE_CAPTURE, {
+            name: CONST.TELEMETRY.SPAN_ODOMETER_IMAGE_CAPTURE,
+            op: CONST.TELEMETRY.SPAN_ODOMETER_IMAGE_CAPTURE,
+            attributes: {
+                [CONST.TELEMETRY.ATTRIBUTE_ODOMETER_IMAGE_TYPE]: imageType,
+                [CONST.TELEMETRY.ATTRIBUTE_PLATFORM]: CONST.TELEMETRY.SPAN_PLATFORM.NATIVE,
+            },
+        });
 
         const path = getReceiptsUploadFolderPath();
 
@@ -157,7 +213,9 @@ function IOURequestStepOdometerImage({
                     .then((photo: PhotoFile) => {
                         const imageObject: ImageObject = {file: photo, filename: photo.path, source: getPhotoSource(photo.path)};
                         cropImageToAspectRatio(imageObject, viewfinderLayout.current?.width, viewfinderLayout.current?.height, undefined, photo.orientation)
-                            .then(({file, filename, source}) => moveReceiptToDurableStorage(source, filename).then((durableSource) => ({file, filename, source: durableSource})))
+                            .then(({file, filename, source}) =>
+                                ReceiptStorage.adopt(source, filename).then((durableName) => ({file, filename, source: ReceiptStorage.toLocalUri(durableName)})),
+                            )
                             .then(({file, filename, source}) => {
                                 setMoneyRequestOdometerImage(
                                     transaction,
@@ -165,21 +223,24 @@ function IOURequestStepOdometerImage({
                                     {
                                         uri: source,
                                         name: filename,
-                                        type: (file as FileObject | undefined)?.type ?? 'image/jpeg',
+                                        type: (file as FileObject | undefined)?.type ?? getMimeTypeFromUri(source) ?? 'image/jpeg',
                                         size: (file as FileObject | undefined)?.size,
                                     },
                                     isTransactionDraft,
                                     false,
                                 );
+                                endSpan(CONST.TELEMETRY.SPAN_ODOMETER_IMAGE_CAPTURE);
                                 navigateBack();
                             })
                             .catch((error: unknown) => {
+                                cancelSpan(CONST.TELEMETRY.SPAN_ODOMETER_IMAGE_CAPTURE);
                                 setDidCapturePhoto(false);
                                 showCameraAlert();
                                 Log.warn('Error cropping photo', error instanceof Error ? error.message : String(error));
                             });
                     })
                     .catch((error: unknown) => {
+                        cancelSpan(CONST.TELEMETRY.SPAN_ODOMETER_IMAGE_CAPTURE);
                         setDidCapturePhoto(false);
                         showCameraAlert();
                         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -203,26 +264,29 @@ function IOURequestStepOdometerImage({
         >
             <View style={styles.flex1}>
                 {cameraPermissionStatus !== RESULTS.GRANTED && (
-                    <View style={[styles.cameraView, styles.permissionView, styles.userSelectNone]}>
-                        <ImageSVG
-                            contentFit="contain"
-                            src={lazyIllustrationsOnly.Hand}
-                            width={CONST.RECEIPT.HAND_ICON_WIDTH}
-                            height={CONST.RECEIPT.HAND_ICON_HEIGHT}
-                            style={styles.pb5}
-                        />
+                    <ScrollView contentContainerStyle={styles.flexGrow1}>
+                        <View style={[styles.cameraView, isInLandscapeMode ? styles.permissionViewLandscape : styles.permissionView, styles.userSelectNone]}>
+                            <ImageSVG
+                                contentFit="contain"
+                                src={lazyIllustrationsOnly.Hand}
+                                width={CONST.RECEIPT.HAND_ICON_WIDTH}
+                                height={CONST.RECEIPT.HAND_ICON_HEIGHT}
+                                style={styles.pb5}
+                            />
 
-                        <Text style={[styles.textFileUpload]}>{translate('receipt.takePhoto')}</Text>
-                        <Text style={[styles.subTextFileUpload]}>{translate('distance.odometer.cameraAccessRequired')}</Text>
-                        <Button
-                            success
-                            text={translate('common.continue')}
-                            accessibilityLabel={translate('common.continue')}
-                            style={[styles.p9, styles.pt5]}
-                            onPress={capturePhoto}
-                            sentryLabel={CONST.SENTRY_LABEL.REQUEST_STEP.ODOMETER_IMAGE.CONTINUE_BUTTON}
-                        />
-                    </View>
+                            <Text style={[styles.textFileUpload]}>{translate('receipt.takePhoto')}</Text>
+                            <Text style={[styles.subTextFileUpload]}>{translate('distance.odometer.cameraAccessRequired')}</Text>
+                            <Button
+                                variant={CONST.BUTTON_VARIANT.SUCCESS}
+                                accessibilityLabel={translate('common.continue')}
+                                style={[styles.p9, styles.pt5]}
+                                onPress={capturePhoto}
+                                sentryLabel={CONST.SENTRY_LABEL.REQUEST_STEP.ODOMETER_IMAGE.CONTINUE_BUTTON}
+                            >
+                                <Button.Text>{translate('common.continue')}</Button.Text>
+                            </Button>
+                        </View>
+                    </ScrollView>
                 )}
                 {cameraPermissionStatus === RESULTS.GRANTED && device == null && (
                     <View style={[styles.cameraView]}>
@@ -230,7 +294,6 @@ function IOURequestStepOdometerImage({
                             size={CONST.ACTIVITY_INDICATOR_SIZE.LARGE}
                             style={[styles.flex1]}
                             color={theme.textSupporting}
-                            reasonAttributes={cameraLoadingReasonAttributes}
                         />
                     </View>
                 )}
@@ -337,7 +400,6 @@ function IOURequestStepOdometerImage({
                     {/* Empty View matching gallery size so justifyContentAround keeps the shutter exactly centered - it's the simplest solution */}
                     <View style={{width: variables.iconSizeMenuItem, height: variables.iconSizeMenuItem}} />
                 </View>
-                {ErrorModal}
             </View>
         </StepScreenWrapper>
     );
@@ -345,7 +407,6 @@ function IOURequestStepOdometerImage({
 
 IOURequestStepOdometerImage.displayName = 'IOURequestStepOdometerImage';
 
-// eslint-disable-next-line rulesdir/no-negated-variables -- withFullTransactionOrNotFound HOC requires this pattern
 const IOURequestStepOdometerImageWithFullTransactionOrNotFound = withFullTransactionOrNotFound(IOURequestStepOdometerImage);
 
 export default IOURequestStepOdometerImageWithFullTransactionOrNotFound;

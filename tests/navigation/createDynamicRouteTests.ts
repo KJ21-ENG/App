@@ -1,6 +1,5 @@
 import createDynamicRoute from '@libs/Navigation/helpers/dynamicRoutesUtils/createDynamicRoute';
 import Navigation from '@libs/Navigation/Navigation';
-import type {DynamicRouteSuffix} from '@src/ROUTES';
 
 jest.mock('@libs/Navigation/Navigation', () => ({
     getActiveRoute: jest.fn(),
@@ -20,11 +19,12 @@ jest.mock('@src/ROUTES', () => ({
         ADDRESS_COUNTRY: {path: 'country', getRoute: (country: string) => `country?country=${country}`},
         FLAG_COMMENT: {path: 'flag/:reportID/:reportActionID'},
         MEMBER_DETAILS: {path: 'member-details/:accountID'},
+        NETSUITE_EXPORT_EXPENSES_TEST: {path: 'expenses/:expenseType'},
     },
 }));
 
 describe('createDynamicRoute', () => {
-    const mockGetActiveRoute = Navigation.getActiveRoute as jest.Mock;
+    const mockGetActiveRoute = jest.mocked(Navigation.getActiveRoute);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -43,6 +43,35 @@ describe('createDynamicRoute', () => {
         expect(mockGetActiveRoute).toHaveBeenCalled();
     });
 
+    it('should append suffix using provided base path', () => {
+        const suffix = 'verify-account';
+        const basePath = 'workspace/123/categories';
+        const expectedPath = 'workspace/123/categories/verify-account';
+
+        const result = createDynamicRoute(suffix, basePath);
+
+        expect(result).toBe(expectedPath);
+        expect(mockGetActiveRoute).not.toHaveBeenCalled();
+    });
+
+    it('should append suffix using provided base path with query params', () => {
+        const suffix = 'verify-account';
+        const basePath = 'workspace/123/categories?foo=bar';
+        const expectedPath = 'workspace/123/categories/verify-account?foo=bar';
+
+        const result = createDynamicRoute(suffix, basePath);
+
+        expect(result).toBe(expectedPath);
+        expect(mockGetActiveRoute).not.toHaveBeenCalled();
+    });
+
+    it('should return suffix when provided base path is empty', () => {
+        const result = createDynamicRoute('verify-account', '');
+
+        expect(result).toBe('verify-account');
+        expect(mockGetActiveRoute).not.toHaveBeenCalled();
+    });
+
     it('should append suffix and preserve query parameters at the end', () => {
         const activeRoute = 'report/123?sortBy=date';
         const suffix = 'details';
@@ -50,7 +79,7 @@ describe('createDynamicRoute', () => {
 
         mockGetActiveRoute.mockReturnValue(activeRoute);
 
-        const result = createDynamicRoute(suffix as unknown as DynamicRouteSuffix);
+        const result = createDynamicRoute(suffix);
 
         expect(result).toBe(expectedPath);
     });
@@ -58,7 +87,9 @@ describe('createDynamicRoute', () => {
     it('should throw an error if the suffix is invalid', () => {
         const suffix = 'invalid-suffix';
 
-        expect(() => createDynamicRoute(suffix as unknown as DynamicRouteSuffix)).toThrow(`The route name ${suffix} is not supported in createDynamicRoute`);
+        expect(() => {
+            createDynamicRoute(suffix);
+        }).toThrow(`The route name ${suffix} is not supported in createDynamicRoute`);
         expect(mockGetActiveRoute).not.toHaveBeenCalled();
     });
 
@@ -69,7 +100,7 @@ describe('createDynamicRoute', () => {
 
         mockGetActiveRoute.mockReturnValue(activeRoute);
 
-        const result = createDynamicRoute(suffix as unknown as DynamicRouteSuffix);
+        const result = createDynamicRoute(suffix);
 
         expect(result).toBe(expectedPath);
     });
@@ -81,7 +112,7 @@ describe('createDynamicRoute', () => {
 
         mockGetActiveRoute.mockReturnValue(activeRoute);
 
-        const result = createDynamicRoute(suffix as unknown as DynamicRouteSuffix);
+        const result = createDynamicRoute(suffix);
 
         expect(result).toBe(expectedPath);
     });
@@ -145,5 +176,13 @@ describe('createDynamicRoute', () => {
 
     it('should throw for suffix that does not match any parametric pattern', () => {
         expect(() => createDynamicRoute('unknown/456/abc')).toThrow();
+    });
+
+    it('should append path parametric expenses suffix', () => {
+        mockGetActiveRoute.mockReturnValue('workspaces/p/connections/netsuite/export');
+
+        const result = createDynamicRoute('expenses/reimbursable');
+
+        expect(result).toBe('workspaces/p/connections/netsuite/export/expenses/reimbursable');
     });
 });

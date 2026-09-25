@@ -1,21 +1,27 @@
-import React, {useCallback, useMemo} from 'react';
-import RadioListItem from '@components/SelectionList/ListItem/RadioListItem';
 import type {ListItem} from '@components/SelectionList/types';
 import SelectionScreen from '@components/SelectionScreen';
 import Text from '@components/Text';
+
 import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import useDynamicBackPath from '@hooks/useDynamicBackPath';
 import useLocalize from '@hooks/useLocalize';
 import useThemeStyles from '@hooks/useThemeStyles';
+
 import {updateQuickbooksOnlinePreferredExporter} from '@libs/actions/connections/QuickbooksOnline';
 import {getLatestErrorField} from '@libs/ErrorUtils';
 import {getAdminEmployees, isExpensifyTeam, settingsPendingAction} from '@libs/PolicyUtils';
+
 import Navigation from '@navigation/Navigation';
+
 import type {WithPolicyConnectionsProps} from '@pages/workspace/withPolicyConnections';
 import withPolicyConnections from '@pages/workspace/withPolicyConnections';
+
 import {clearQBOErrorField} from '@userActions/Policy/Policy';
+
 import CONST from '@src/CONST';
-import ROUTES, {DYNAMIC_ROUTES} from '@src/ROUTES';
+import {DYNAMIC_ROUTES} from '@src/ROUTES';
+
+import React, {useCallback, useMemo} from 'react';
 
 type CardListItem = ListItem & {
     value: string;
@@ -53,8 +59,8 @@ function DynamicQuickbooksPreferredExporterConfigurationPage({policy}: WithPolic
     );
 
     const goBack = useCallback(() => {
-        Navigation.goBack(backPath || ROUTES.POLICY_ACCOUNTING_QUICKBOOKS_ONLINE_EXPORT.getRoute(policyID));
-    }, [policyID, backPath]);
+        Navigation.goBack(backPath);
+    }, [backPath]);
 
     const selectExporter = useCallback(
         (row: CardListItem) => {
@@ -83,7 +89,6 @@ function DynamicQuickbooksPreferredExporterConfigurationPage({policy}: WithPolic
             featureName={CONST.POLICY.MORE_FEATURES.ARE_CONNECTIONS_ENABLED}
             displayName="QuickbooksPreferredExporterConfigurationPage"
             data={data}
-            listItem={RadioListItem}
             headerContent={headerContent}
             onBackButtonPress={goBack}
             onSelectRow={selectExporter}
