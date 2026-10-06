@@ -24,15 +24,15 @@ REPOSITORY_ID = 1146901517
 OWNER_ID = 140263938
 OWNER = "KJ21-ENG"
 UPSTREAM = "Expensify/App"
-CONTROL_BRANCH = 'qa-batch-102962-e982098ad848b3bf2977efc63f131616'
-ORIGIN = 'http://127.0.0.1:18517'
+CONTROL_BRANCH = 'qa-batch-102918-b61a1bd3ee70cd5875eff5d191eae436'
+ORIGIN = 'http://127.0.0.1:18516'
 APP = Path("/srv/expensify-qa-static")
 STATE = Path("/opt/expensify-qa-state")
 OUT = Path("/opt/expensify-qa-artifact")
 MAX_FILES = 20000
 MAX_BYTES = 256 * 1024 * 1024
 MAX_FILE_BYTES = 64 * 1024 * 1024
-COMPATIBILITY = {'absentPaths': ['npm-shrinkwrap.json', '.env', '.env.local', '.env.development', '.env.development.local'], 'blobs': {'.npmrc': '2a14ea859d36bcf902b00e71608da173e9dbc4a9', '.nvmrc': '3eb1386fcc084ec86ac8d453d7e77fccc10d1fb0', 'babel.config.js': '3f80cb755e547ee7d74724227b9dcb6d7cb17222', 'config/rsbuild/rsbuild.common.ts': '016ae81044a9db0ef6e47c1999bb4817556fbc3c', 'config/rsbuild/rsbuild.config.ts': 'd5140d759494faf761ba19b3feaeeef26354e67b', 'scripts/postInstall.sh': 'bd95fa016e403440bece001187ca467b2f040ffc', 'src/CONFIG.ts': '3681f9f0038667f6e73f80f8f37ced231b304bee', 'src/libs/ApiUtils.ts': '9cc5fb8de91baf5df0f5b395323da6f8e96bb544', 'src/libs/HttpUtils.ts': 'd4ad52b448b9050714c02807b90d94439cdb4de8', 'src/libs/VersionUtils.ts': 'f5fc175eed5d9afa4ea76abfb6263dce0b646573', 'src/libs/telemetry/sentryApplicationKey.ts': 'dbd328d93f84e2e2ab35ec70c45056ca7b9a47a6', 'src/setup/platformSetup/index.ts': '55503509e6d4fd7fa2ddb5f4d78bdf0e31abcac3', 'tsconfig.app.json': 'ff95333aff5cb032553c99590dc08e1d812cfaf0', 'tsconfig.base.json': '2ef26e24d0fae2995162a3984005f938f0f89e27', 'tsconfig.json': '992f4ceb291b212495f9839744dcef2ae13f0ab0', 'web/index.html': 'da7a135748b5763f62558874bd498fe93ff7d497', 'web/proxy.ts': '101a859abb7fa040181d27b5d4201d3ede992d6d'}, 'id': 'expensify-rsbuild-static-pr102962-v1', 'packageJsonCanonicalSha256': '9ed3d28ba4460d741dad35ccd99fefd75d350e17856dfadbf24191e6737dc940', 'packageLockCanonicalSha256': '14b2437a84b7fc781026184e1ac9d13690c238d3e6c1453d43bdcacfa598d956', 'trees': {'config': '1cce4aad53f1068272477b3fb5b322718e48080e', 'modules': '2282bab02c93c5d1ac0196f1b4f30909237df02b', 'patches': 'f7e0e053a4bb5ba5f8d2498daaaee9ba3e04d9a4', 'scripts': '948bf5f369e41fa04ce65e5c85493c6f38af84e0'}}
+COMPATIBILITY = {'absentPaths': ['npm-shrinkwrap.json', '.env', '.env.local', '.env.development', '.env.development.local'], 'blobs': {'.npmrc': '2a14ea859d36bcf902b00e71608da173e9dbc4a9', '.nvmrc': '3eb1386fcc084ec86ac8d453d7e77fccc10d1fb0', 'babel.config.js': '3f80cb755e547ee7d74724227b9dcb6d7cb17222', 'config/rsbuild/rsbuild.common.ts': '016ae81044a9db0ef6e47c1999bb4817556fbc3c', 'config/rsbuild/rsbuild.config.ts': 'd5140d759494faf761ba19b3feaeeef26354e67b', 'scripts/postInstall.sh': 'bd95fa016e403440bece001187ca467b2f040ffc', 'src/CONFIG.ts': '3681f9f0038667f6e73f80f8f37ced231b304bee', 'src/libs/ApiUtils.ts': '9cc5fb8de91baf5df0f5b395323da6f8e96bb544', 'src/libs/HttpUtils.ts': 'd4ad52b448b9050714c02807b90d94439cdb4de8', 'src/libs/VersionUtils.ts': 'f5fc175eed5d9afa4ea76abfb6263dce0b646573', 'src/libs/telemetry/sentryApplicationKey.ts': 'dbd328d93f84e2e2ab35ec70c45056ca7b9a47a6', 'src/setup/platformSetup/index.ts': '55503509e6d4fd7fa2ddb5f4d78bdf0e31abcac3', 'tsconfig.app.json': 'ff95333aff5cb032553c99590dc08e1d812cfaf0', 'tsconfig.base.json': '2ef26e24d0fae2995162a3984005f938f0f89e27', 'tsconfig.json': '992f4ceb291b212495f9839744dcef2ae13f0ab0', 'web/index.html': 'da7a135748b5763f62558874bd498fe93ff7d497', 'web/proxy.ts': '101a859abb7fa040181d27b5d4201d3ede992d6d'}, 'id': 'expensify-rsbuild-static-pr102918-v1', 'packageJsonCanonicalSha256': '9ed3d28ba4460d741dad35ccd99fefd75d350e17856dfadbf24191e6737dc940', 'packageLockCanonicalSha256': '14b2437a84b7fc781026184e1ac9d13690c238d3e6c1453d43bdcacfa598d956', 'trees': {'config': '1cce4aad53f1068272477b3fb5b322718e48080e', 'modules': '2282bab02c93c5d1ac0196f1b4f30909237df02b', 'patches': '77af93f18f39b1d140d9f49c9cadf927629e22ea', 'scripts': '948bf5f369e41fa04ce65e5c85493c6f38af84e0'}}
 BLOBS = COMPATIBILITY["blobs"]
 
 ENVIRONMENT = {
@@ -100,7 +100,7 @@ def valid_sha(value):
 
 def validate_inputs(e):
     # Selection is code-reviewed and immutable in this exact control commit.
-    expected = {'pr': 102962, 'source_sha': '7eba07f2f85679e4b4fb4477a0ab948effabded8', 'head_sha': '7eba07f2f85679e4b4fb4477a0ab948effabded8', 'tree_sha': '4b94a416a7ca16e6258207f90a738c57d65dbedf', 'session_id': 'qa-e982098ad848b3bf2977efc63f131616'}
+    expected = {'pr': 102918, 'source_sha': 'c8e4a3ab8c0ce6a21a3db34c0c15a2c9b8a60ec8', 'head_sha': 'c8e4a3ab8c0ce6a21a3db34c0c15a2c9b8a60ec8', 'tree_sha': '52e5c3139d1b793872adc696bd58809b8349478e', 'session_id': 'qa-b61a1bd3ee70cd5875eff5d191eae436'}
     require(all(e.get("INPUT_" + key.upper()) == str(value) for key, value in expected.items()),
             "Batch source or session differs from the reviewed control commit")
     require(expected["source_sha"] == expected["head_sha"], "Batch must build the current PR head")
