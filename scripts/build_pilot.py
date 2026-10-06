@@ -206,9 +206,35 @@ def prepare(checkout):
     print("Exact selected merge source, nonsecret loopback environment and HTML-only overlay prepared.")
 
 
+
+def discard_verified_install_cache(root, snapshot):
+    # Exact pilot module postinstall runs tsc. Its tsconfig sets this cache path,
+    # inheriting noEmit:true and incremental:true from tsconfig.base.json.
+    # This is disposable compiler metadata, not executable output or source.
+    relative = "modules/ExpensifyNitroUtils/tsconfig.ts7.tsbuildinfo"
+    path = root / relative
+    if not path.exists() and not path.is_symlink():
+        return False
+    require(relative not in snapshot, "Generated cache unexpectedly overlaps tracked source")
+    require(path.resolve().is_relative_to(root.resolve()), "Generated cache escaped source root")
+    info = path.lstat()
+    require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and not info.st_mode & 0o111,
+            "Unexpected generated compiler-cache type, link count or executable mode")
+    require(info.st_size <= 16 * 1024 * 1024, "Generated compiler cache exceeds expected bound")
+    path.unlink()
+    print("Discarded verified generated compiler cache: " + relative)
+    return True
+
+
+def diagnostic_path(relative):
+    # Filenames only, never file contents. Avoid control/workflow-command syntax.
+    return re.sub(r"[^A-Za-z0-9_./-]", "?", relative)[:240]
+
+
 def inspect_untracked(root, snapshot):
     dependency_roots = {(Path(name).parent / "node_modules").as_posix() for name in snapshot if Path(name).name == "package.json"}
     directories = set()
+    unexpected = []
     for folder, dirs, files in os.walk(root, followlinks=False):
         parent = Path(folder)
         directories.add(parent)
@@ -217,10 +243,12 @@ def inspect_untracked(root, snapshot):
             if relative in dependency_roots or relative in (".git", "dist"):
                 dirs.remove(name)
                 continue
-            require(not (parent / name).is_symlink(), "Untracked source directory symlink")
+            require(not (parent / name).is_symlink(), "Untracked source directory symlink: " + diagnostic_path(relative))
         for name in files:
             relative = (parent / name).relative_to(root).as_posix()
-            require(relative in snapshot or relative == ".env", "Untracked source overlay outside dependency/output allowlist")
+            if relative not in snapshot and relative != ".env":
+                unexpected.append(diagnostic_path(relative))
+    require(not unexpected, "Untracked source overlay outside dependency/output allowlist: " + json.dumps(unexpected[:20]) + (" (additional paths omitted)" if len(unexpected) > 20 else ""))
     return directories
 
 
@@ -234,6 +262,8 @@ def verify_source(lock=False):
         if lock:
             os.chown(path, 0, 0)
             path.chmod(0o755 if item["executable"] else 0o644)
+    if lock:
+        discard_verified_install_cache(APP, snapshot)
     parents.update(inspect_untracked(APP, snapshot))
     app_user = pwd.getpwnam("qaapp")
     if lock:
