@@ -24,15 +24,15 @@ REPOSITORY_ID = 1146901517
 OWNER_ID = 140263938
 OWNER = "KJ21-ENG"
 UPSTREAM = "Expensify/App"
-CONTROL_BRANCH = 'qa-batch-102962-0e372fb5571f6ad946435b9df0504fd5'
-ORIGIN = 'http://127.0.0.1:18517'
+CONTROL_BRANCH = 'qa-batch-100026-9708b9857a7342c802f37100deae60db'
+ORIGIN = 'http://127.0.0.1:18512'
 APP = Path("/srv/expensify-qa-static")
 STATE = Path("/opt/expensify-qa-state")
 OUT = Path("/opt/expensify-qa-artifact")
 MAX_FILES = 20000
 MAX_BYTES = 256 * 1024 * 1024
 MAX_FILE_BYTES = 64 * 1024 * 1024
-COMPATIBILITY = {'absentPaths': ['npm-shrinkwrap.json', '.env', '.env.local', '.env.development', '.env.development.local'], 'blobs': {'.npmrc': '2a14ea859d36bcf902b00e71608da173e9dbc4a9', '.nvmrc': '3eb1386fcc084ec86ac8d453d7e77fccc10d1fb0', 'babel.config.js': '3f80cb755e547ee7d74724227b9dcb6d7cb17222', 'config/rsbuild/rsbuild.common.ts': '016ae81044a9db0ef6e47c1999bb4817556fbc3c', 'config/rsbuild/rsbuild.config.ts': 'd5140d759494faf761ba19b3feaeeef26354e67b', 'scripts/postInstall.sh': 'bd95fa016e403440bece001187ca467b2f040ffc', 'src/CONFIG.ts': '3681f9f0038667f6e73f80f8f37ced231b304bee', 'src/libs/ApiUtils.ts': '9cc5fb8de91baf5df0f5b395323da6f8e96bb544', 'src/libs/HttpUtils.ts': 'd4ad52b448b9050714c02807b90d94439cdb4de8', 'src/libs/VersionUtils.ts': 'f5fc175eed5d9afa4ea76abfb6263dce0b646573', 'src/libs/telemetry/sentryApplicationKey.ts': 'dbd328d93f84e2e2ab35ec70c45056ca7b9a47a6', 'src/setup/platformSetup/index.ts': '55503509e6d4fd7fa2ddb5f4d78bdf0e31abcac3', 'tsconfig.app.json': 'ff95333aff5cb032553c99590dc08e1d812cfaf0', 'tsconfig.base.json': '2ef26e24d0fae2995162a3984005f938f0f89e27', 'tsconfig.json': '992f4ceb291b212495f9839744dcef2ae13f0ab0', 'web/index.html': 'da7a135748b5763f62558874bd498fe93ff7d497', 'web/proxy.ts': '101a859abb7fa040181d27b5d4201d3ede992d6d'}, 'id': 'expensify-rsbuild-static-pr102962-v1', 'packageJsonCanonicalSha256': '9ed3d28ba4460d741dad35ccd99fefd75d350e17856dfadbf24191e6737dc940', 'packageLockCanonicalSha256': '14b2437a84b7fc781026184e1ac9d13690c238d3e6c1453d43bdcacfa598d956', 'trees': {'config': '1cce4aad53f1068272477b3fb5b322718e48080e', 'modules': '2282bab02c93c5d1ac0196f1b4f30909237df02b', 'patches': 'f7e0e053a4bb5ba5f8d2498daaaee9ba3e04d9a4', 'scripts': '948bf5f369e41fa04ce65e5c85493c6f38af84e0'}}
+COMPATIBILITY = {'absentPaths': ['npm-shrinkwrap.json', '.env', '.env.local', '.env.development', '.env.development.local', 'src/libs/VersionUtils.ts', 'tsconfig.app.json'], 'blobs': {'.npmrc': 'b6f27f135954640c8cc5bfd7b8c9922ca6eb2aad', '.nvmrc': '3eb1386fcc084ec86ac8d453d7e77fccc10d1fb0', 'babel.config.js': '779ff3d0378e7b2f74faa634f3c6e95711d4311d', 'config/rsbuild/rsbuild.common.ts': '91a498bd8a147cab18ddd503e4256a865eb8f0f9', 'config/rsbuild/rsbuild.config.ts': 'd5140d759494faf761ba19b3feaeeef26354e67b', 'scripts/postInstall.sh': 'da4b92602de14ad809f68cca6c0e1e9e2ba0b826', 'src/CONFIG.ts': 'efc043001428e8657c019498ea01349ad0d7f7a8', 'src/libs/ApiUtils.ts': '120457c0b60c9b361329884daf80d71e215d1b10', 'src/libs/HttpUtils.ts': '4aeafacbff4eef32d66dea8dcf8d905a7074cf3d', 'src/libs/telemetry/sentryApplicationKey.ts': 'dbd328d93f84e2e2ab35ec70c45056ca7b9a47a6', 'src/setup/platformSetup/index.ts': '55503509e6d4fd7fa2ddb5f4d78bdf0e31abcac3', 'tsconfig.base.json': 'eca65ec97f85bf434f5bc4dbade440a408bef458', 'tsconfig.json': '1e76f426b4397a65b059875c68b59f19ea0a9f71', 'web/index.html': 'ba733691beaf39c3fa7ebdda03e0ebfe49ab18b7', 'web/proxy.ts': '101a859abb7fa040181d27b5d4201d3ede992d6d'}, 'id': 'expensify-rsbuild-static-pr100026-cc8b98d-v1', 'packageJsonCanonicalSha256': 'f8850eb0d6224b5ac5ed142e277fc679a7cba1fd1941e30eaa877e85c4706cd7', 'packageLockCanonicalSha256': '43c23d41124a820f9951b067f8602120feb843e113fb8e8fec16298dbc19dbb6', 'trees': {'config': '9b7afe96e730b87e79d93fdace23ec79317e0e6d', 'modules': '1ccda4dd4211a0443128d1306fb3af4121c3651e', 'patches': '50f6030580cd1174956c68357c6380b53804002b', 'scripts': '94e8f1f119711eda554c2911c1fef81fd2060bf1'}}
 BLOBS = COMPATIBILITY["blobs"]
 
 ENVIRONMENT = {
@@ -100,7 +100,7 @@ def valid_sha(value):
 
 def validate_inputs(e):
     # Selection is code-reviewed and immutable in this exact control commit.
-    expected = {'pr': 102962, 'source_sha': '7eba07f2f85679e4b4fb4477a0ab948effabded8', 'head_sha': '7eba07f2f85679e4b4fb4477a0ab948effabded8', 'tree_sha': '4b94a416a7ca16e6258207f90a738c57d65dbedf', 'session_id': 'qa-0e372fb5571f6ad946435b9df0504fd5'}
+    expected = {'pr': 100026, 'source_sha': 'cc8b98d484b4d156c27448cf769633ee6b6564bf', 'head_sha': 'cc8b98d484b4d156c27448cf769633ee6b6564bf', 'tree_sha': '40edd2b615159f2b134dee5993820813f6357b5f', 'session_id': 'qa-9708b9857a7342c802f37100deae60db'}
     require(all(e.get("INPUT_" + key.upper()) == str(value) for key, value in expected.items()),
             "Batch source or session differs from the reviewed control commit")
     require(expected["source_sha"] == expected["head_sha"], "Batch must build the current PR head")
@@ -241,45 +241,20 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def github_response(path, token=None):
+    # Fixed service/path family; no user-controlled URLs or token persistence.
     require(path.startswith("repos/"), "Unexpected metadata endpoint")
-    require(token is None, "Batch metadata must remain public and credential-free")
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "owned-fork-static-qa"}
+    if token is not None:
+        headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request("https://api.github.com/" + path, headers=headers)
-    for attempt in range(2):
-        delay = 5
-        try:
-            with urllib.request.build_opener(NoRedirect).open(request, timeout=20) as response:
-                raw = response.read(8 * 1024 * 1024 + 1)
-                response_headers = dict(response.headers)
-            require(len(raw) <= 8 * 1024 * 1024, "Metadata response exceeds limit")
-            return json.loads(raw), response_headers
-        except urllib.error.HTTPError as exc:
-            # Status only: no response body, URL, header secret, or credentials.
-            status = int(exc.code)
-            print("Public GitHub metadata HTTP status: " + str(status), flush=True)
-            retry_after = exc.headers.get("Retry-After", "") if exc.headers else ""
-            remaining = exc.headers.get("X-RateLimit-Remaining", "") if exc.headers else ""
-            reset = exc.headers.get("X-RateLimit-Reset", "") if exc.headers else ""
-            if status == 403:
-                print("Anonymous metadata rate limit exhausted" if remaining == "0" else
-                      "HTTP 403 without an exhausted-rate-limit header; no permission bypass", flush=True)
-                if remaining == "0" and re.fullmatch(r"[0-9]{1,12}", reset):
-                    print("Anonymous rate reset epoch: " + reset, flush=True)
-            exc.close()
-            if status not in (429, 502, 503, 504) or attempt == 1:
-                raise SystemExit("Public metadata request failed; no source code was executed") from None
-            if retry_after:
-                require(re.fullmatch(r"[0-9]{1,3}", retry_after) is not None and int(retry_after) <= 10,
-                        "Server retry delay exceeds this bounded attempt; no bypass")
-                delay = max(5, int(retry_after))
-        except (urllib.error.URLError, TimeoutError):
-            print("Public GitHub metadata transport failure", flush=True)
-            if attempt == 1:
-                raise SystemExit("Public metadata transport failed; no source code was executed") from None
-        except (ValueError, UnicodeError):
-            raise SystemExit("Invalid public metadata response; no source code was executed") from None
-        time.sleep(delay)
-    raise SystemExit("Public metadata attempt exhausted")
+    try:
+        with urllib.request.build_opener(NoRedirect).open(request, timeout=25) as response:
+            raw = response.read(8 * 1024 * 1024 + 1)
+            response_headers = dict(response.headers)
+        require(len(raw) <= 8 * 1024 * 1024, "Metadata response exceeds limit")
+        return json.loads(raw), response_headers
+    except (urllib.error.URLError, ValueError, TimeoutError):
+        raise SystemExit("GitHub metadata verification failed; no source code was executed") from None
 
 
 def github_read(path, token=None):
@@ -466,7 +441,7 @@ def discard_verified_install_cache(root, snapshot):
     # Exact pilot module postinstall runs tsc. Its tsconfig sets this cache path,
     # inheriting noEmit:true and incremental:true from tsconfig.base.json.
     # This is disposable compiler metadata, not executable output or source.
-    relative = 'modules/ExpensifyNitroUtils/tsconfig.ts7.tsbuildinfo'
+    relative = 'modules/ExpensifyNitroUtils/lib/tsconfig.tsbuildinfo'
     path = root / relative
     if not path.exists() and not path.is_symlink():
         return False
