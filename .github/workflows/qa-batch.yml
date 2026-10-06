@@ -1,7 +1,7 @@
 # Push only this isolated two-file tree. Never register or modify a workflow on main.
 # Trusted helper checkout uses github.workflow_sha, never a mutable helper ref.
 name: Fork batch static QA
-run-name: "qa-static: PR100768 source=72f2ccbbb866fb06c1ee11a1188fb2badf4f7988 head=72f2ccbbb866fb06c1ee11a1188fb2badf4f7988 tree=c72e9f689fa418aa73d1b380a8d8afe87ccd374f session=qa-12717b29dee12aeb3cd353c30061be4b"
+run-name: "qa-static: PR102992 source=6872eaf1d7f24fa612f7876687677fbad10bad1e head=6872eaf1d7f24fa612f7876687677fbad10bad1e tree=3810037b5541e1f6228b05eb2b44906020075925 session=qa-dc9905d1770c6336f87ae76fcdbfae01"
 "on":
   push:
     branches:
@@ -9,20 +9,20 @@ run-name: "qa-static: PR100768 source=72f2ccbbb866fb06c1ee11a1188fb2badf4f7988 h
 permissions:
   contents: read
 concurrency:
-  group: fork-static-qa-batch-qa-12717b29dee12aeb3cd353c30061be4b
+  group: fork-static-qa-batch-qa-dc9905d1770c6336f87ae76fcdbfae01
   cancel-in-progress: false
 jobs:
   build:
-    if: github.repository == 'KJ21-ENG/App' && github.event.repository.private == false && github.ref == 'refs/heads/qa-batch-100768-12717b29dee12aeb3cd353c30061be4b'
+    if: github.repository == 'KJ21-ENG/App' && github.event.repository.private == false && github.ref == 'refs/heads/qa-batch-102992-dc9905d1770c6336f87ae76fcdbfae01'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       QA_REPOSITORY_VISIBILITY: ${{ github.event.repository.private == false && 'public' || 'private' }}
-      INPUT_PR: '100768'
-      INPUT_SOURCE_SHA: 72f2ccbbb866fb06c1ee11a1188fb2badf4f7988
-      INPUT_HEAD_SHA: 72f2ccbbb866fb06c1ee11a1188fb2badf4f7988
-      INPUT_TREE_SHA: c72e9f689fa418aa73d1b380a8d8afe87ccd374f
-      INPUT_SESSION_ID: qa-12717b29dee12aeb3cd353c30061be4b
+      INPUT_PR: '102992'
+      INPUT_SOURCE_SHA: 6872eaf1d7f24fa612f7876687677fbad10bad1e
+      INPUT_HEAD_SHA: 6872eaf1d7f24fa612f7876687677fbad10bad1e
+      INPUT_TREE_SHA: 3810037b5541e1f6228b05eb2b44906020075925
+      INPUT_SESSION_ID: qa-dc9905d1770c6336f87ae76fcdbfae01
     defaults:
       run:
         shell: bash
@@ -44,7 +44,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           repository: KJ21-ENG/App
-          ref: 72f2ccbbb866fb06c1ee11a1188fb2badf4f7988
+          ref: 6872eaf1d7f24fa612f7876687677fbad10bad1e
           path: source
           persist-credentials: false
           fetch-depth: 1
