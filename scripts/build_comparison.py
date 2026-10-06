@@ -24,15 +24,15 @@ REPOSITORY_ID = 1146901517
 OWNER_ID = 140263938
 OWNER = "KJ21-ENG"
 UPSTREAM = "Expensify/App"
-CONTROL_BRANCH = 'qa-batch-102986-eb299b0acd9cdd38e12d522366f46c45'
-ORIGIN = 'http://127.0.0.1:18522'
+CONTROL_BRANCH = 'qa-batch-comparison-100026-2d8b48f3f6e8bc4c09e3448fe5130975'
+ORIGIN = 'http://127.0.0.1:18540'
 APP = Path("/srv/expensify-qa-static")
 STATE = Path("/opt/expensify-qa-state")
 OUT = Path("/opt/expensify-qa-artifact")
 MAX_FILES = 20000
 MAX_BYTES = 256 * 1024 * 1024
 MAX_FILE_BYTES = 64 * 1024 * 1024
-COMPATIBILITY = {'absentPaths': ['npm-shrinkwrap.json', '.env', '.env.local', '.env.development', '.env.development.local'], 'blobs': {'.npmrc': '2a14ea859d36bcf902b00e71608da173e9dbc4a9', '.nvmrc': '3eb1386fcc084ec86ac8d453d7e77fccc10d1fb0', 'babel.config.js': '3f80cb755e547ee7d74724227b9dcb6d7cb17222', 'config/rsbuild/rsbuild.common.ts': '016ae81044a9db0ef6e47c1999bb4817556fbc3c', 'config/rsbuild/rsbuild.config.ts': 'd5140d759494faf761ba19b3feaeeef26354e67b', 'scripts/postInstall.sh': 'bd95fa016e403440bece001187ca467b2f040ffc', 'src/CONFIG.ts': '3681f9f0038667f6e73f80f8f37ced231b304bee', 'src/libs/ApiUtils.ts': '9cc5fb8de91baf5df0f5b395323da6f8e96bb544', 'src/libs/HttpUtils.ts': 'd4ad52b448b9050714c02807b90d94439cdb4de8', 'src/libs/VersionUtils.ts': 'f5fc175eed5d9afa4ea76abfb6263dce0b646573', 'src/libs/telemetry/sentryApplicationKey.ts': 'dbd328d93f84e2e2ab35ec70c45056ca7b9a47a6', 'src/setup/platformSetup/index.ts': '55503509e6d4fd7fa2ddb5f4d78bdf0e31abcac3', 'tsconfig.app.json': 'ff95333aff5cb032553c99590dc08e1d812cfaf0', 'tsconfig.base.json': '2ef26e24d0fae2995162a3984005f938f0f89e27', 'tsconfig.json': '992f4ceb291b212495f9839744dcef2ae13f0ab0', 'web/index.html': 'da7a135748b5763f62558874bd498fe93ff7d497', 'web/proxy.ts': '101a859abb7fa040181d27b5d4201d3ede992d6d'}, 'id': 'expensify-rsbuild-static-20261005-v1', 'packageJsonCanonicalSha256': '9ed3d28ba4460d741dad35ccd99fefd75d350e17856dfadbf24191e6737dc940', 'packageLockCanonicalSha256': '14b2437a84b7fc781026184e1ac9d13690c238d3e6c1453d43bdcacfa598d956', 'trees': {'config': '1cce4aad53f1068272477b3fb5b322718e48080e', 'modules': '2282bab02c93c5d1ac0196f1b4f30909237df02b', 'patches': 'f7e0e053a4bb5ba5f8d2498daaaee9ba3e04d9a4', 'scripts': '948bf5f369e41fa04ce65e5c85493c6f38af84e0'}}
+COMPATIBILITY = {'absentPaths': ['npm-shrinkwrap.json', '.env', '.env.local', '.env.development', '.env.development.local'], 'blobs': {'.npmrc': '2a14ea859d36bcf902b00e71608da173e9dbc4a9', '.nvmrc': '3eb1386fcc084ec86ac8d453d7e77fccc10d1fb0', 'babel.config.js': '3f80cb755e547ee7d74724227b9dcb6d7cb17222', 'config/rsbuild/rsbuild.common.ts': 'f610e45b943e277ef96c77cc554b2c497dc5acce', 'config/rsbuild/rsbuild.config.ts': 'd5140d759494faf761ba19b3feaeeef26354e67b', 'scripts/postInstall.sh': 'bd95fa016e403440bece001187ca467b2f040ffc', 'src/CONFIG.ts': '3681f9f0038667f6e73f80f8f37ced231b304bee', 'src/libs/ApiUtils.ts': '9cc5fb8de91baf5df0f5b395323da6f8e96bb544', 'src/libs/HttpUtils.ts': 'd4ad52b448b9050714c02807b90d94439cdb4de8', 'src/libs/VersionUtils.ts': 'f5fc175eed5d9afa4ea76abfb6263dce0b646573', 'src/libs/telemetry/sentryApplicationKey.ts': 'dbd328d93f84e2e2ab35ec70c45056ca7b9a47a6', 'src/setup/platformSetup/index.ts': '55503509e6d4fd7fa2ddb5f4d78bdf0e31abcac3', 'tsconfig.app.json': 'ff95333aff5cb032553c99590dc08e1d812cfaf0', 'tsconfig.base.json': '2ef26e24d0fae2995162a3984005f938f0f89e27', 'tsconfig.json': '992f4ceb291b212495f9839744dcef2ae13f0ab0', 'web/index.html': 'da7a135748b5763f62558874bd498fe93ff7d497', 'web/proxy.ts': '101a859abb7fa040181d27b5d4201d3ede992d6d'}, 'id': 'expensify-rsbuild-static-main-d357996-v1', 'packageJsonCanonicalSha256': '144874ff137fc673ef462eeff62bc751af1460657a2acd9d43f1e21139759b0b', 'packageLockCanonicalSha256': '8d06c0dbfc9da3584a430ea0bfca0b7890c3609de7e22005e8276b71b109c9c5', 'trees': {'config': '9c51fdbeb88779463dedc18a627b2d8fdbdf7472', 'modules': '2282bab02c93c5d1ac0196f1b4f30909237df02b', 'patches': '5a5f78ec5e04053162b1743ee45872c5ae5ca20d', 'scripts': '3a1ef4443d95b69bd30baa55b5dc1b496835459c'}}
 BLOBS = COMPATIBILITY["blobs"]
 
 ENVIRONMENT = {
@@ -99,18 +99,15 @@ def valid_sha(value):
 
 
 def validate_inputs(e):
-    # Selection is code-reviewed and immutable in this exact control commit.
-    expected = {'pr': 102986, 'source_sha': '94d5c173beb87160391078f325b75345add8191e', 'head_sha': '94d5c173beb87160391078f325b75345add8191e', 'tree_sha': '08183af22aca18cf042d87e9bd6ddd8c70e17fca', 'session_id': 'qa-eb299b0acd9cdd38e12d522366f46c45'}
+    expected = {'pr': 100026, 'source_sha': 'd357996bc09e6dedd3aec272884e9897b4e18ecd', 'head_sha': 'cc8b98d484b4d156c27448cf769633ee6b6564bf', 'tree_sha': '3472e686f99dbf775744a6198de46bac4b32b26d', 'session_id': 'qa-2d8b48f3f6e8bc4c09e3448fe5130975'}
     require(all(e.get("INPUT_" + key.upper()) == str(value) for key, value in expected.items()),
-            "Batch source or session differs from the reviewed control commit")
-    require(expected["source_sha"] == expected["head_sha"], "Batch must build the current PR head")
+            "Comparison source, candidate or session differs from immutable control commit")
+    require(expected["source_sha"] != expected["head_sha"], "Baseline must not masquerade as candidate")
     return dict(expected)
 
 
 def expected_run_name(request):
-    return ("qa-static: PR" + str(request["pr"]) + " source=" + request["source_sha"]
-            + " head=" + request["head_sha"] + " tree=" + request["tree_sha"]
-            + " session=" + request["session_id"])
+    return 'qa-comparison: baseline=comparison_main PR100026 source=d357996bc09e6dedd3aec272884e9897b4e18ecd head=cc8b98d484b4d156c27448cf769633ee6b6564bf tree=3472e686f99dbf775744a6198de46bac4b32b26d session=qa-2d8b48f3f6e8bc4c09e3448fe5130975'
 
 
 def validate_identity(e):
@@ -118,19 +115,19 @@ def validate_identity(e):
     require(e.get("GITHUB_REPOSITORY") == REPOSITORY, "Unexpected repository")
     require(e.get("GITHUB_REPOSITORY_ID") == str(REPOSITORY_ID), "Repository ID changed")
     require(e.get("GITHUB_REPOSITORY_OWNER_ID") == str(OWNER_ID), "Repository owner changed")
-    require(e.get("GITHUB_EVENT_NAME") == "push", "Only the approved dedicated-branch push is supported")
+    require(e.get("GITHUB_EVENT_NAME") == "push", "Only approved dedicated-branch push is supported")
     require(e.get("GITHUB_REF") == "refs/heads/" + CONTROL_BRANCH, "Use the reviewed dedicated control ref, never main")
     require(e.get("GITHUB_RUN_ATTEMPT") == "1", "A rerun is not a new reviewed session")
     for name in ("GITHUB_SHA", "GITHUB_WORKFLOW_SHA"):
         require(valid_sha(e.get(name)), "Exact workflow commit missing")
     require(e["GITHUB_SHA"] == e["GITHUB_WORKFLOW_SHA"], "Workflow and immutable helper commit differ")
-    expected_path = REPOSITORY + "/.github/workflows/qa-batch.yml@" + e["GITHUB_REF"]
+    expected_path = REPOSITORY + "/.github/workflows/qa-comparison.yml@" + e["GITHUB_REF"]
     require(e.get("GITHUB_WORKFLOW_REF") == expected_path, "Unexpected workflow path or ref")
     require(re.fullmatch(r"[1-9][0-9]{0,19}", e.get("GITHUB_RUN_ID", "")), "Invalid run ID")
     require(e.get("QA_REPOSITORY_VISIBILITY") == "public", "Public-repository $0 boundary failed")
     return {
         "repository": REPOSITORY,
-        "workflowPath": '.github/workflows/qa-batch.yml',
+        "workflowPath": '.github/workflows/qa-comparison.yml',
         "workflowCommit": e["GITHUB_SHA"],
         "controlCommit": e["GITHUB_WORKFLOW_SHA"],
         "ref": e["GITHUB_REF"],
@@ -141,30 +138,60 @@ def validate_identity(e):
     }
 
 
-def validate_source_metadata(request, repository, pr, commit, timeline_events=None):
-    require(repository.get("full_name") == REPOSITORY and repository.get("id") == REPOSITORY_ID, "Own-fork identity mismatch")
-    require(repository.get("private") is False and repository.get("fork") is True, "Own fork must remain public")
-    require(repository.get("owner", {}).get("login") == OWNER and repository.get("owner", {}).get("id") == OWNER_ID, "Own-fork owner mismatch")
-    require(repository.get("parent", {}).get("full_name") == UPSTREAM and repository.get("source", {}).get("full_name") == UPSTREAM, "Unexpected fork parent/network")
-    require(pr.get("number") == request["pr"] and pr.get("base", {}).get("repo", {}).get("full_name") == UPSTREAM, "Upstream PR mismatch")
-    require(pr.get("user", {}).get("login") == OWNER and pr.get("user", {}).get("id") == OWNER_ID, "PR is not owned by the selected user")
-    head_repo = pr.get("head", {}).get("repo") or {}
-    require(head_repo.get("full_name") == REPOSITORY and head_repo.get("id") == REPOSITORY_ID, "PR head is not in the owned fork")
-    require(head_repo.get("private") is False and head_repo.get("owner", {}).get("id") == OWNER_ID, "PR head owner/visibility mismatch")
-    require(pr.get("head", {}).get("sha") == request["head_sha"], "PR head changed since source review")
-    direct_merge = pr.get("merge_commit_sha")
-    require(direct_merge is None or valid_sha(direct_merge), "Malformed non-null merge commit field")
-    if request["source_sha"] == request["head_sha"]:
-        kind = "head"
-    else:
-        require(resolve_merge_sha(pr, timeline_events) == request["source_sha"], "Source is neither current PR head nor its verified merged commit")
-        kind = "merge"
-    require(commit.get("sha") == request["source_sha"], "Source is unavailable in the owned fork")
-    require(commit.get("tree", {}).get("sha") == request["tree_sha"], "Source tree changed or was not reviewed")
-    require(kind == "head", "Batch source must remain the current PR head")
-    return {"repository": REPOSITORY, "upstreamRepository": UPSTREAM, "pr": request["pr"],
-            "sha": request["source_sha"], "headSha": request["head_sha"], "treeSha": request["tree_sha"],
-            "kind": kind, "prAuthor": OWNER, "headRepository": REPOSITORY, "headRepositoryId": REPOSITORY_ID}
+def validate_source_metadata(request, repository, pr, commit, baseline):
+    expected = {'pr': 100026, 'source_sha': 'd357996bc09e6dedd3aec272884e9897b4e18ecd', 'head_sha': 'cc8b98d484b4d156c27448cf769633ee6b6564bf', 'tree_sha': '3472e686f99dbf775744a6198de46bac4b32b26d', 'session_id': 'qa-2d8b48f3f6e8bc4c09e3448fe5130975', 'branch': 'qa-batch-comparison-100026-2d8b48f3f6e8bc4c09e3448fe5130975', 'port': 18540, 'origin': 'http://127.0.0.1:18540', 'kind': 'comparison_main', 'source': {'repository': 'KJ21-ENG/App', 'upstreamRepository': 'Expensify/App', 'pr': 100026, 'sha': 'd357996bc09e6dedd3aec272884e9897b4e18ecd', 'headSha': 'cc8b98d484b4d156c27448cf769633ee6b6564bf', 'treeSha': '3472e686f99dbf775744a6198de46bac4b32b26d', 'kind': 'comparison_main', 'prAuthor': 'KJ21-ENG', 'headRepository': 'KJ21-ENG/App', 'headRepositoryId': 1146901517, 'baselineProvenance': {'label': 'Recorded upstream main 2026-10-06T20:43:45Z (d357996bc09e6dedd3aec272884e9897b4e18ecd)', 'method': 'recorded_upstream_main_ancestor', 'repository': 'Expensify/App', 'reference': 'https://api.github.com/repos/Expensify/App/git/commits/d357996bc09e6dedd3aec272884e9897b4e18ecd', 'observedAt': '2026-10-06T20:43:45Z', 'recordedRef': 'refs/heads/main'}}}
+    """Verify the approved recorded snapshot remains upstream-main ancestry.
+
+    Kept separate so the frozen explicit-base helper bytes stay unchanged.
+    """
+    require(all(request.get(key) == expected[key] for key in
+                ('pr', 'source_sha', 'head_sha', 'tree_sha', 'session_id')), 'Comparison request drift')
+    require(repository.get('full_name') == REPOSITORY and repository.get('id') == REPOSITORY_ID,
+            'Own-fork identity mismatch')
+    require(repository.get('private') is False and repository.get('fork') is True,
+            'Own fork must remain public')
+    require(repository.get('owner', {}).get('login') == OWNER
+            and repository.get('owner', {}).get('id') == OWNER_ID, 'Own-fork owner mismatch')
+    require(repository.get('parent', {}).get('full_name') == UPSTREAM
+            and repository.get('source', {}).get('full_name') == UPSTREAM, 'Unexpected fork network')
+    require(pr.get('number') == expected['pr']
+            and pr.get('html_url') == 'https://github.com/' + UPSTREAM + '/pull/' + str(expected['pr'])
+            and pr.get('base', {}).get('repo', {}).get('full_name') == UPSTREAM,
+            'Authoritative upstream PR mismatch')
+    require(pr.get('user', {}).get('login') == OWNER and pr.get('user', {}).get('id') == OWNER_ID,
+            'PR is not owned by the selected user')
+    head_repo = pr.get('head', {}).get('repo') or {}
+    require(head_repo.get('full_name') == REPOSITORY and head_repo.get('id') == REPOSITORY_ID
+            and head_repo.get('private') is False and head_repo.get('owner', {}).get('id') == OWNER_ID,
+            'PR head repository boundary failed')
+    require(pr.get('head', {}).get('sha') == expected['head_sha'], 'Assigned candidate head changed')
+    require(commit.get('sha') == expected['source_sha']
+            and commit.get('url') == 'https://api.github.com/repos/' + REPOSITORY + '/git/commits/' + expected['source_sha']
+            and commit.get('tree', {}).get('sha') == expected['tree_sha'],
+            'Exact reviewed baseline commit and tree unavailable in owned fork')
+    require(expected['kind'] == 'comparison_main', 'Recorded-main validator is comparison-only')
+    require(type(baseline) is dict and set(baseline) == {'upstreamRef', 'upstreamCompare'},
+            'Authoritative current main and recorded-snapshot ancestry required')
+    ref = baseline['upstreamRef']
+    current_sha = ref.get('object', {}).get('sha')
+    require(ref.get('ref') == 'refs/heads/main'
+            and ref.get('url') == 'https://api.github.com/repos/' + UPSTREAM + '/git/refs/heads/main'
+            and ref.get('object', {}).get('type') == 'commit'
+            and isinstance(current_sha, str) and re.fullmatch(r'[0-9a-f]{40}', current_sha)
+            and current_sha != '0' * 40,
+            'Malformed authoritative upstream-main reference')
+    comparison = baseline['upstreamCompare']
+    same = current_sha == expected['source_sha']
+    require(comparison.get('url') == 'https://api.github.com/repos/' + UPSTREAM + '/compare/'
+            + expected['source_sha'] + '...' + current_sha
+            and comparison.get('base_commit', {}).get('sha') == expected['source_sha']
+            and comparison.get('merge_base_commit', {}).get('sha') == expected['source_sha']
+            and comparison.get('status') == ('identical' if same else 'ahead')
+            and type(comparison.get('ahead_by')) is int
+            and ((same and comparison['ahead_by'] == 0) or (not same and comparison['ahead_by'] > 0))
+            and type(comparison.get('behind_by')) is int and comparison['behind_by'] == 0,
+            'Recorded snapshot is not verified upstream-main ancestry')
+    return copy.deepcopy(expected['source'])
 
 
 
@@ -269,20 +296,19 @@ def preflight(control):
     workflow = validate_identity(os.environ)
     request = validate_inputs(os.environ)
     head = subprocess.check_output(["git", "-C", str(control), "rev-parse", "HEAD"]).decode().strip()
-    require(head == workflow["controlCommit"], "Helper was not checked out at the immutable workflow commit")
+    require(head == workflow["controlCommit"], "Helper differs from immutable workflow commit")
     files = subprocess.check_output(["git", "-C", str(control), "ls-files", "-z"]).decode().split("\0")
-    require(set(filter(None, files)) == {'.github/workflows/qa-batch.yml', 'scripts/build_batch.py'}, "Unexpected content in the reviewed control tree")
-    # Public metadata only; no new token, secret, or credential flow.
+    require(set(filter(None, files)) == {'.github/workflows/qa-comparison.yml', 'scripts/build_comparison.py'}, "Comparison control tree must contain exactly two files")
     own = github_read("repos/" + REPOSITORY)
-    # Upstream PR metadata is public. Do not grant or assume cross-repository token permissions.
     pr = github_read("repos/" + UPSTREAM + "/pulls/" + str(request["pr"]))
     commit = github_read("repos/" + REPOSITORY + "/git/commits/" + request["source_sha"])
-    timeline = None
-    if request["source_sha"] != request["head_sha"] and pr.get("merged") is True and pr.get("merge_commit_sha") is None:
-        timeline = fetch_merge_timeline(request["pr"])
-    source = validate_source_metadata(request, own, pr, commit, timeline)
+    ref = github_read("repos/" + UPSTREAM + "/git/ref/heads/main")
+    current_sha = ref.get("object", {}).get("sha")
+    require(valid_sha(current_sha), "Invalid current-main SHA; refusing comparison request")
+    baseline = {"upstreamRef": ref, "upstreamCompare": github_read("repos/" + UPSTREAM + "/compare/" + request["source_sha"] + "..." + current_sha)}
+    source = validate_source_metadata(request, own, pr, commit, baseline)
     write_json(request_path(), {"inputs": request, "source": source, "workflow": workflow})
-    print("Owned public-fork PR, immutable source/head/tree, control commit and session verified.")
+    print("Separately labeled baseline, current candidate, exact source tree and authoritative comparison provenance verified.")
 
 
 def no_duplicate_keys(pairs):
@@ -413,7 +439,7 @@ def prepare(checkout):
     os.chown(env, 0, app_user.pw_gid)
     env.chmod(0o440)
     data = {
-        "schemaVersion": 3,
+        "schemaVersion": 4,
         "artifactName": "qa-static-" + workflow["sessionId"] + "-" + str(workflow["runId"]) + "-1",
         "source": source,
         "compatibility": COMPATIBILITY,
@@ -433,7 +459,7 @@ def prepare(checkout):
     write_json(STATE / "manifest-base.json", data)
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
         output.write("package_version=" + package_info["packageVersion"] + "\n")
-    print("Exact selected PR source, nonsecret loopback environment and HTML-only overlay prepared.")
+    print("Exact comparison baseline source, nonsecret loopback environment and HTML-only overlay prepared.")
 
 
 

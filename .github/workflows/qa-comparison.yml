@@ -1,28 +1,28 @@
 # Push only this isolated two-file tree. Never register or modify a workflow on main.
 # Trusted helper checkout uses github.workflow_sha, never a mutable helper ref.
-name: Fork batch static QA
-run-name: "qa-static: PR102986 source=94d5c173beb87160391078f325b75345add8191e head=94d5c173beb87160391078f325b75345add8191e tree=08183af22aca18cf042d87e9bd6ddd8c70e17fca session=qa-eb299b0acd9cdd38e12d522366f46c45"
+name: Fork baseline comparison QA
+run-name: "qa-comparison: baseline=comparison_main PR100026 source=d357996bc09e6dedd3aec272884e9897b4e18ecd head=cc8b98d484b4d156c27448cf769633ee6b6564bf tree=3472e686f99dbf775744a6198de46bac4b32b26d session=qa-2d8b48f3f6e8bc4c09e3448fe5130975"
 "on":
   push:
     branches:
-      - "qa-batch-*"
+      - "qa-batch-comparison-*"
 permissions:
   contents: read
 concurrency:
-  group: fork-static-qa-batch-qa-eb299b0acd9cdd38e12d522366f46c45
+  group: fork-static-qa-comparison-qa-2d8b48f3f6e8bc4c09e3448fe5130975
   cancel-in-progress: false
 jobs:
   build:
-    if: github.repository == 'KJ21-ENG/App' && github.event.repository.private == false && github.ref == 'refs/heads/qa-batch-102986-eb299b0acd9cdd38e12d522366f46c45'
+    if: github.repository == 'KJ21-ENG/App' && github.event.repository.private == false && github.ref == 'refs/heads/qa-batch-comparison-100026-2d8b48f3f6e8bc4c09e3448fe5130975'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       QA_REPOSITORY_VISIBILITY: ${{ github.event.repository.private == false && 'public' || 'private' }}
-      INPUT_PR: '102986'
-      INPUT_SOURCE_SHA: 94d5c173beb87160391078f325b75345add8191e
-      INPUT_HEAD_SHA: 94d5c173beb87160391078f325b75345add8191e
-      INPUT_TREE_SHA: 08183af22aca18cf042d87e9bd6ddd8c70e17fca
-      INPUT_SESSION_ID: qa-eb299b0acd9cdd38e12d522366f46c45
+      INPUT_PR: '100026'
+      INPUT_SOURCE_SHA: d357996bc09e6dedd3aec272884e9897b4e18ecd
+      INPUT_HEAD_SHA: cc8b98d484b4d156c27448cf769633ee6b6564bf
+      INPUT_TREE_SHA: 3472e686f99dbf775744a6198de46bac4b32b26d
+      INPUT_SESSION_ID: qa-2d8b48f3f6e8bc4c09e3448fe5130975
     defaults:
       run:
         shell: bash
@@ -35,16 +35,16 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
           submodules: false
-      - name: Verify owned public fork, PR source and unique session
+      - name: Verify owned public fork, baseline authority, candidate and session
         timeout-minutes: 3
         run: |
           set -euo pipefail
-          python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" preflight --checkout "$GITHUB_WORKSPACE/control"
-      - name: Checkout the exact reviewed PR source
+          python3 "$GITHUB_WORKSPACE/control/scripts/build_comparison.py" preflight --checkout "$GITHUB_WORKSPACE/control"
+      - name: Checkout the exact reviewed baseline source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           repository: KJ21-ENG/App
-          ref: 94d5c173beb87160391078f325b75345add8191e
+          ref: d357996bc09e6dedd3aec272884e9897b4e18ecd
           path: source
           persist-credentials: false
           fetch-depth: 1
@@ -82,7 +82,7 @@ jobs:
           sudo install -m 755 "$(command -v bun)" /opt/expensify-qa-tools/bin/bun
           sudo install -m 600 /dev/null /opt/expensify-qa-state/install.log
           sudo install -m 600 /dev/null /opt/expensify-qa-state/build.log
-          sudo -E python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" prepare --checkout "$GITHUB_WORKSPACE/source"
+          sudo -E python3 "$GITHUB_WORKSPACE/control/scripts/build_comparison.py" prepare --checkout "$GITHUB_WORKSPACE/source"
         id: prepare
       - name: Install locked dependencies once as an isolated unprivileged user
         timeout-minutes: 12
@@ -101,7 +101,7 @@ jobs:
             PATH=/opt/expensify-qa-tools/node/bin:/opt/expensify-qa-tools/bin:/usr/bin:/bin \
             CI=true STANDALONE_NEW_DOT=true NPM_CONFIG_USERCONFIG=/dev/null \
             npm ci --no-audit --no-fund
-          sudo python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" lock
+          sudo python3 "$GITHUB_WORKSPACE/control/scripts/build_comparison.py" lock
       - name: Build static Rsbuild assets with no server or source maps
         timeout-minutes: 12
         run: |
@@ -129,7 +129,7 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          sudo -E python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" finalize
+          sudo -E python3 "$GITHUB_WORKSPACE/control/scripts/build_comparison.py" finalize
       - name: Upload only the static site and its nonsecret manifest
         id: artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -159,7 +159,7 @@ jobs:
         if: ${{ failure() }}
         run: |
           set -euo pipefail
-          sudo python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" diagnostics
+          sudo python3 "$GITHUB_WORKSPACE/control/scripts/build_comparison.py" diagnostics
       - name: Stop owned build processes and remove transient inputs
         if: ${{ always() }}
         timeout-minutes: 1
