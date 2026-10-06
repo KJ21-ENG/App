@@ -24,15 +24,15 @@ REPOSITORY_ID = 1146901517
 OWNER_ID = 140263938
 OWNER = "KJ21-ENG"
 UPSTREAM = "Expensify/App"
-CONTROL_BRANCH = 'qa-batch-100614-ceac5476df267dc257a7527a689bf51b'
-ORIGIN = 'http://127.0.0.1:18513'
+CONTROL_BRANCH = 'qa-batch-100768-12717b29dee12aeb3cd353c30061be4b'
+ORIGIN = 'http://127.0.0.1:18511'
 APP = Path("/srv/expensify-qa-static")
 STATE = Path("/opt/expensify-qa-state")
 OUT = Path("/opt/expensify-qa-artifact")
 MAX_FILES = 20000
 MAX_BYTES = 256 * 1024 * 1024
 MAX_FILE_BYTES = 64 * 1024 * 1024
-COMPATIBILITY = {'absentPaths': ['npm-shrinkwrap.json', '.env', '.env.local', '.env.development', '.env.development.local', 'src/libs/VersionUtils.ts', 'tsconfig.app.json'], 'blobs': {'.npmrc': 'b6f27f135954640c8cc5bfd7b8c9922ca6eb2aad', '.nvmrc': '3eb1386fcc084ec86ac8d453d7e77fccc10d1fb0', 'babel.config.js': '779ff3d0378e7b2f74faa634f3c6e95711d4311d', 'config/rsbuild/rsbuild.common.ts': 'a2f72d8b085972b01aa5507cfc2188811d7042be', 'config/rsbuild/rsbuild.config.ts': 'd5140d759494faf761ba19b3feaeeef26354e67b', 'scripts/postInstall.sh': 'da4b92602de14ad809f68cca6c0e1e9e2ba0b826', 'src/CONFIG.ts': '3244dad9a01f33ca6ac887ef3345f69fc2acbba3', 'src/libs/ApiUtils.ts': 'bc40e963e0da895d40c4db9bd3a877cdf7b8bada', 'src/libs/HttpUtils.ts': '4aeafacbff4eef32d66dea8dcf8d905a7074cf3d', 'src/libs/telemetry/sentryApplicationKey.ts': 'dbd328d93f84e2e2ab35ec70c45056ca7b9a47a6', 'src/setup/platformSetup/index.ts': '55503509e6d4fd7fa2ddb5f4d78bdf0e31abcac3', 'tsconfig.base.json': 'eca65ec97f85bf434f5bc4dbade440a408bef458', 'tsconfig.json': '49f4efed1e41f6877445318127e828f50771da2d', 'web/index.html': '36e10f9ccfd3f563b07328f6e21a197c05b9bb02', 'web/proxy.ts': '101a859abb7fa040181d27b5d4201d3ede992d6d'}, 'id': 'expensify-rsbuild-static-pr100614-348f1dc-v1', 'packageJsonCanonicalSha256': '89a6c52bb6ff90ed5e11550fa76fd3d517b9e1da799072a701255536f83b77ab', 'packageLockCanonicalSha256': 'd40d59452c5cea31b40b93526ff237c44edbdae198f7babb39b424687b45bb6d', 'trees': {'config': '599649febadcdff106fbd1889ff90aaef2741a92', 'modules': '1ccda4dd4211a0443128d1306fb3af4121c3651e', 'patches': '0f051115db7bb6713de10c600f8133938bfa0d21', 'scripts': '1966e7950308e908639b295d5d7086fad2a5c4c0'}}
+COMPATIBILITY = {'absentPaths': ['npm-shrinkwrap.json', '.env', '.env.local', '.env.development', '.env.development.local'], 'blobs': {'.npmrc': '2a14ea859d36bcf902b00e71608da173e9dbc4a9', '.nvmrc': '3eb1386fcc084ec86ac8d453d7e77fccc10d1fb0', 'babel.config.js': '3f80cb755e547ee7d74724227b9dcb6d7cb17222', 'config/rsbuild/rsbuild.common.ts': '5fa24d76aa5c7094e619245940d3ab76a7986ea4', 'config/rsbuild/rsbuild.config.ts': 'd5140d759494faf761ba19b3feaeeef26354e67b', 'scripts/postInstall.sh': 'bd95fa016e403440bece001187ca467b2f040ffc', 'src/CONFIG.ts': '3681f9f0038667f6e73f80f8f37ced231b304bee', 'src/libs/ApiUtils.ts': 'fef6b1a242f84068c27bca51183ec62e9be1c413', 'src/libs/HttpUtils.ts': 'd4ad52b448b9050714c02807b90d94439cdb4de8', 'src/libs/VersionUtils.ts': 'f5fc175eed5d9afa4ea76abfb6263dce0b646573', 'src/libs/telemetry/sentryApplicationKey.ts': 'dbd328d93f84e2e2ab35ec70c45056ca7b9a47a6', 'src/setup/platformSetup/index.ts': '55503509e6d4fd7fa2ddb5f4d78bdf0e31abcac3', 'tsconfig.app.json': 'ff95333aff5cb032553c99590dc08e1d812cfaf0', 'tsconfig.base.json': '2ef26e24d0fae2995162a3984005f938f0f89e27', 'tsconfig.json': '992f4ceb291b212495f9839744dcef2ae13f0ab0', 'web/index.html': '613ebe68e501087a867a0c525c886c0ce7e05248', 'web/proxy.ts': '101a859abb7fa040181d27b5d4201d3ede992d6d'}, 'id': 'expensify-rsbuild-static-pr100768-72f2ccb-v1', 'packageJsonCanonicalSha256': '26a7d4eb558a60e03057dea3bde647a4d1ae2b34906020013e5b46737a16f7d0', 'packageLockCanonicalSha256': '7d55322f35acac37bc97ac9de4b53fffa0d0567a93d5334ef46348df3530acbb', 'trees': {'config': '8a58b05a79decefa54eeeb0b279463a984e54995', 'modules': '2282bab02c93c5d1ac0196f1b4f30909237df02b', 'patches': 'e7db983ceb9058f871d700f01f41d234e076676d', 'scripts': '092d2f1293bf7de140c73de4be4b5214d9048691'}}
 BLOBS = COMPATIBILITY["blobs"]
 
 ENVIRONMENT = {
@@ -100,7 +100,7 @@ def valid_sha(value):
 
 def validate_inputs(e):
     # Selection is code-reviewed and immutable in this exact control commit.
-    expected = {'pr': 100614, 'source_sha': '348f1dc16dac654336ef8e9d99be94706628946b', 'head_sha': '348f1dc16dac654336ef8e9d99be94706628946b', 'tree_sha': 'a62b76713f544916ed3c215c139c333ba3ca3ba7', 'session_id': 'qa-ceac5476df267dc257a7527a689bf51b'}
+    expected = {'pr': 100768, 'source_sha': '72f2ccbbb866fb06c1ee11a1188fb2badf4f7988', 'head_sha': '72f2ccbbb866fb06c1ee11a1188fb2badf4f7988', 'tree_sha': 'c72e9f689fa418aa73d1b380a8d8afe87ccd374f', 'session_id': 'qa-12717b29dee12aeb3cd353c30061be4b'}
     require(all(e.get("INPUT_" + key.upper()) == str(value) for key, value in expected.items()),
             "Batch source or session differs from the reviewed control commit")
     require(expected["source_sha"] == expected["head_sha"], "Batch must build the current PR head")
@@ -441,7 +441,7 @@ def discard_verified_install_cache(root, snapshot):
     # Exact pilot module postinstall runs tsc. Its tsconfig sets this cache path,
     # inheriting noEmit:true and incremental:true from tsconfig.base.json.
     # This is disposable compiler metadata, not executable output or source.
-    relative = 'modules/ExpensifyNitroUtils/lib/tsconfig.tsbuildinfo'
+    relative = 'modules/ExpensifyNitroUtils/tsconfig.ts7.tsbuildinfo'
     path = root / relative
     if not path.exists() and not path.is_symlink():
         return False
