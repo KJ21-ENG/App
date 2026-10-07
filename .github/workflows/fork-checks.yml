@@ -143,30 +143,8 @@ jobs:
       # cause stale errors. Mirror upstream CI's clear-cache-and-retry, but only
       # when a cache was actually restored — a failure on a cold cache is
       # deterministic, and retrying it just doubles a ~45-minute run.
-      - name: Warm ESLint cache in bounded batches
-        if: steps.restore-eslint.outputs.cache-hit != 'true'
-        env:
-          ESLINT_CONCURRENCY: 'off'
-          NODE_OPTIONS: '--max-old-space-size=12288'
-        run: |
-          python3 - <<'PYTHON'
-          import pathlib
-          import subprocess
-          suffixes = {'.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts'}
-          tracked = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
-          files = [p for p in tracked if p and pathlib.Path(p).is_file() and pathlib.Path(p).suffix in suffixes]
-          if not files:
-              raise SystemExit('No tracked JavaScript or TypeScript files found')
-          for offset in range(0, len(files), 250):
-              batch = files[offset:offset + 250]
-              print(f'Warming full-lint cache: {offset + 1}-{offset + len(batch)} of {len(files)}', flush=True)
-              subprocess.run(['npm', 'run', 'lint', '--', *batch], check=True)
-          PYTHON
-
       - name: Lint JavaScript and TypeScript with ESLint
         env:
-          ESLINT_CONCURRENCY: 'off'
-          NODE_OPTIONS: '--max-old-space-size=12288'
           RESTORED_ESLINT_CACHE: ${{ steps.restore-eslint.outputs.cache-matched-key }}
         run: |
           if ! npm run lint; then
