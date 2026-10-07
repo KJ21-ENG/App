@@ -1,0 +1,174 @@
+# Push only this isolated two-file tree. Never register or modify a workflow on main.
+# Trusted helper checkout uses github.workflow_sha, never a mutable helper ref.
+name: Fork batch static QA
+run-name: "qa-static: PR102992 source=6872eaf1d7f24fa612f7876687677fbad10bad1e head=6872eaf1d7f24fa612f7876687677fbad10bad1e tree=3810037b5541e1f6228b05eb2b44906020075925 session=qa-d23fc98f8c2db5bf3a7375fc9aadeba7"
+"on":
+  push:
+    branches:
+      - "qa-batch-*"
+permissions:
+  contents: read
+concurrency:
+  group: fork-static-qa-batch-qa-d23fc98f8c2db5bf3a7375fc9aadeba7
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'KJ21-ENG/App' && github.event.repository.private == false && github.ref == 'refs/heads/qa-batch-102992-d23fc98f8c2db5bf3a7375fc9aadeba7'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      QA_REPOSITORY_VISIBILITY: ${{ github.event.repository.private == false && 'public' || 'private' }}
+      INPUT_PR: '102992'
+      INPUT_SOURCE_SHA: 6872eaf1d7f24fa612f7876687677fbad10bad1e
+      INPUT_HEAD_SHA: 6872eaf1d7f24fa612f7876687677fbad10bad1e
+      INPUT_TREE_SHA: 3810037b5541e1f6228b05eb2b44906020075925
+      INPUT_SESSION_ID: qa-d23fc98f8c2db5bf3a7375fc9aadeba7
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout trusted helper at the immutable workflow commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: control
+          persist-credentials: false
+          fetch-depth: 1
+          submodules: false
+      - name: Verify owned public fork, PR source and unique session
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" preflight --checkout "$GITHUB_WORKSPACE/control"
+      - name: Checkout the exact reviewed PR source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: KJ21-ENG/App
+          ref: 6872eaf1d7f24fa612f7876687677fbad10bad1e
+          path: source
+          persist-credentials: false
+          fetch-depth: 1
+          submodules: false
+          lfs: false
+      - name: Setup Node without persistent dependency caching
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 26.5.0
+          package-manager-cache: false
+      - name: Setup Bun without persistent caching
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+          no-cache: true
+      - name: Prepare isolated source and the disclosed nonsecret QA overlay
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = v26.5.0
+          if test "$(npm --version)" != 11.17.0; then
+            timeout 120s npm install --global --ignore-scripts --no-audit --no-fund npm@11.17.0
+          fi
+          test "$(npm --version)" = 11.17.0
+          test "$(bun --version)" = 1.3.14
+          sudo install -d -m 700 /opt/expensify-qa-state
+          sudo install -d -m 755 /opt/expensify-qa-tools/bin
+          sudo useradd --system --user-group --home-dir /var/lib/qaapp --create-home --shell /usr/sbin/nologin qaapp
+          sudo chmod 700 /var/lib/qaapp "$HOME"
+          sudo install -d -o qaapp -g qaapp -m 755 /srv/expensify-qa-static
+          sudo cp -a "$GITHUB_WORKSPACE/source/." /srv/expensify-qa-static/
+          sudo chown -R qaapp:qaapp /srv/expensify-qa-static
+          NODE_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v node)")")")"
+          case "$NODE_HOME" in /opt/hostedtoolcache/node/26.5.0/*) ;; *) echo 'Unexpected Node tool path'; exit 1;; esac
+          sudo ln -s "$NODE_HOME" /opt/expensify-qa-tools/node
+          sudo install -m 755 "$(command -v bun)" /opt/expensify-qa-tools/bin/bun
+          sudo install -m 600 /dev/null /opt/expensify-qa-state/install.log
+          sudo install -m 600 /dev/null /opt/expensify-qa-state/build.log
+          sudo -E python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" prepare --checkout "$GITHUB_WORKSPACE/source"
+        id: prepare
+      - name: Install locked dependencies once as an isolated unprivileged user
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          sudo systemd-run --quiet --wait --collect --unit=expensify-static-install \
+            --working-directory=/srv/expensify-qa-static \
+            -p User=qaapp -p Group=qaapp -p NoNewPrivileges=yes -p ProtectHome=yes \
+            -p ProtectSystem=strict -p 'ReadWritePaths=/srv/expensify-qa-static /var/lib/qaapp' \
+            -p PrivateTmp=yes -p PrivateDevices=yes -p ProtectProc=invisible \
+            -p ProtectKernelTunables=yes -p ProtectControlGroups=yes -p RestrictSUIDSGID=yes \
+            -p RuntimeMaxSec=660 -p KillMode=control-group -p TimeoutStopSec=15 \
+            -p StandardOutput=append:/opt/expensify-qa-state/install.log \
+            -p StandardError=append:/opt/expensify-qa-state/install.log \
+            /usr/bin/env -i HOME=/var/lib/qaapp USER=qaapp LOGNAME=qaapp \
+            PATH=/opt/expensify-qa-tools/node/bin:/opt/expensify-qa-tools/bin:/usr/bin:/bin \
+            CI=true STANDALONE_NEW_DOT=true NPM_CONFIG_USERCONFIG=/dev/null \
+            npm ci --no-audit --no-fund
+          sudo python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" lock
+      - name: Build static Rsbuild assets with no server or source maps
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          sudo systemd-run --quiet --wait --collect --unit=expensify-static-build \
+            --working-directory=/srv/expensify-qa-static \
+            -p User=qaapp -p Group=qaapp -p NoNewPrivileges=yes -p ProtectHome=yes \
+            -p ProtectSystem=strict -p 'ReadWritePaths=/srv/expensify-qa-static /var/lib/qaapp' \
+            -p PrivateTmp=yes -p PrivateDevices=yes -p ProtectProc=invisible \
+            -p ProtectKernelTunables=yes -p ProtectControlGroups=yes -p RestrictSUIDSGID=yes \
+            -p RuntimeMaxSec=660 -p KillMode=control-group -p TimeoutStopSec=15 \
+            -p StandardOutput=append:/opt/expensify-qa-state/build.log \
+            -p StandardError=append:/opt/expensify-qa-state/build.log \
+            /usr/bin/env -i HOME=/var/lib/qaapp USER=qaapp LOGNAME=qaapp \
+            PATH=/opt/expensify-qa-tools/node/bin:/opt/expensify-qa-tools/bin:/usr/bin:/bin \
+            CI=true STANDALONE_NEW_DOT=true NPM_CONFIG_USERCONFIG=/dev/null \
+            ENV=development NODE_ENV=development USE_THIRD_PARTY_SCRIPTS=false \
+            npm_package_name=new.expensify npm_package_version="$QA_PACKAGE_VERSION" \
+            NODE_OPTIONS=--max_old_space_size=5632 \
+            node ./node_modules/.bin/rsbuild build --mode development --no-source-map \
+            --config config/rsbuild/rsbuild.config.ts
+        env:
+          QA_PACKAGE_VERSION: ${{ steps.prepare.outputs.package_version }}
+      - name: Verify source and package every output file with its digest
+        id: package
+        run: |
+          set -euo pipefail
+          sudo -E python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" finalize
+      - name: Upload only the static site and its nonsecret manifest
+        id: artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: |
+            /opt/expensify-qa-artifact/artifact-manifest.json
+            /opt/expensify-qa-artifact/dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 6
+      - name: Publish the authenticated artifact identity
+        env:
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          MANIFEST_SHA256: ${{ steps.package.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re
+          assert re.fullmatch(r'[1-9][0-9]*', os.environ['ARTIFACT_ID'])
+          assert re.fullmatch(r'[0-9a-f]{64}', os.environ['ARTIFACT_DIGEST'])
+          print(json.dumps({'artifactId': int(os.environ['ARTIFACT_ID']), 'artifactSha256': os.environ['ARTIFACT_DIGEST'], 'manifestSha256': os.environ['MANIFEST_SHA256'], 'sourceSha': os.environ['INPUT_SOURCE_SHA'], 'sessionId': os.environ['INPUT_SESSION_ID'], 'runId': int(os.environ['GITHUB_RUN_ID']), 'runAttempt': 1}))
+          PY
+      - name: Show only bounded redacted diagnostics when a build stage fails
+        if: ${{ failure() }}
+        run: |
+          set -euo pipefail
+          sudo python3 "$GITHUB_WORKSPACE/control/scripts/build_batch.py" diagnostics
+      - name: Stop owned build processes and remove transient inputs
+        if: ${{ always() }}
+        timeout-minutes: 1
+        run: |
+          set +e
+          sudo systemctl stop expensify-static-install expensify-static-build >/dev/null 2>&1
+          sudo rm -f /srv/expensify-qa-static/.env
+          sudo rm -rf /opt/expensify-qa-state
+          if sudo systemctl is-active --quiet expensify-static-install || sudo systemctl is-active --quiet expensify-static-build; then
+            echo 'ERROR: an owned build process remains active'
+            exit 1
+          fi
