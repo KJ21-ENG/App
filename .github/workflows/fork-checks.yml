@@ -145,6 +145,7 @@ jobs:
       # deterministic, and retrying it just doubles a ~45-minute run.
       - name: Lint JavaScript and TypeScript with ESLint
         env:
+          ESLINT_CONCURRENCY: 'off'
           RESTORED_ESLINT_CACHE: ${{ steps.restore-eslint.outputs.cache-matched-key }}
         run: |
           if ! npm run lint; then
