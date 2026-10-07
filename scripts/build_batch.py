@@ -24,7 +24,7 @@ REPOSITORY_ID = 1146901517
 OWNER_ID = 140263938
 OWNER = "KJ21-ENG"
 UPSTREAM = "Expensify/App"
-CONTROL_BRANCH = 'qa-batch-102964-bf8de73dae25013be2020766e84c4dd7'
+CONTROL_BRANCH = 'qa-batch-102964-9300ef7b66a896bef3e9142722183a28'
 ORIGIN = 'http://127.0.0.1:18519'
 APP = Path("/srv/expensify-qa-static")
 STATE = Path("/opt/expensify-qa-state")
@@ -100,7 +100,7 @@ def valid_sha(value):
 
 def validate_inputs(e):
     # Selection is code-reviewed and immutable in this exact control commit.
-    expected = {'pr': 102964, 'source_sha': '985e9ad5bb0933dce44c2c6e3eca9316af557533', 'head_sha': '985e9ad5bb0933dce44c2c6e3eca9316af557533', 'tree_sha': 'd002fcba4998ca76e7d3a37a1921ec141dae3671', 'session_id': 'qa-bf8de73dae25013be2020766e84c4dd7'}
+    expected = {'pr': 102964, 'source_sha': '985e9ad5bb0933dce44c2c6e3eca9316af557533', 'head_sha': '985e9ad5bb0933dce44c2c6e3eca9316af557533', 'tree_sha': 'd002fcba4998ca76e7d3a37a1921ec141dae3671', 'session_id': 'qa-9300ef7b66a896bef3e9142722183a28'}
     require(all(e.get("INPUT_" + key.upper()) == str(value) for key, value in expected.items()),
             "Batch source or session differs from the reviewed control commit")
     require(expected["source_sha"] == expected["head_sha"], "Batch must build the current PR head")

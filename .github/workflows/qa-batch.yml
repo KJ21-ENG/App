@@ -1,7 +1,7 @@
 # Push only this isolated two-file tree. Never register or modify a workflow on main.
 # Trusted helper checkout uses github.workflow_sha, never a mutable helper ref.
 name: Fork batch static QA
-run-name: "qa-static: PR102964 source=985e9ad5bb0933dce44c2c6e3eca9316af557533 head=985e9ad5bb0933dce44c2c6e3eca9316af557533 tree=d002fcba4998ca76e7d3a37a1921ec141dae3671 session=qa-bf8de73dae25013be2020766e84c4dd7"
+run-name: "qa-static: PR102964 source=985e9ad5bb0933dce44c2c6e3eca9316af557533 head=985e9ad5bb0933dce44c2c6e3eca9316af557533 tree=d002fcba4998ca76e7d3a37a1921ec141dae3671 session=qa-9300ef7b66a896bef3e9142722183a28"
 "on":
   push:
     branches:
@@ -9,11 +9,11 @@ run-name: "qa-static: PR102964 source=985e9ad5bb0933dce44c2c6e3eca9316af557533 h
 permissions:
   contents: read
 concurrency:
-  group: fork-static-qa-batch-qa-bf8de73dae25013be2020766e84c4dd7
+  group: fork-static-qa-batch-qa-9300ef7b66a896bef3e9142722183a28
   cancel-in-progress: false
 jobs:
   build:
-    if: github.repository == 'KJ21-ENG/App' && github.event.repository.private == false && github.ref == 'refs/heads/qa-batch-102964-bf8de73dae25013be2020766e84c4dd7'
+    if: github.repository == 'KJ21-ENG/App' && github.event.repository.private == false && github.ref == 'refs/heads/qa-batch-102964-9300ef7b66a896bef3e9142722183a28'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -22,7 +22,7 @@ jobs:
       INPUT_SOURCE_SHA: 985e9ad5bb0933dce44c2c6e3eca9316af557533
       INPUT_HEAD_SHA: 985e9ad5bb0933dce44c2c6e3eca9316af557533
       INPUT_TREE_SHA: d002fcba4998ca76e7d3a37a1921ec141dae3671
-      INPUT_SESSION_ID: qa-bf8de73dae25013be2020766e84c4dd7
+      INPUT_SESSION_ID: qa-9300ef7b66a896bef3e9142722183a28
     defaults:
       run:
         shell: bash
