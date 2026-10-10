@@ -102,7 +102,34 @@ jobs:
         uses: ./.github/actions/composite/setupNode
 
       - name: Type check with TypeScript
-        run: npm run typecheck
+        run: |
+          # Check the same full solution sequentially to reduce peak compiler memory on the fork runner.
+          node_modules/typescript/bin/tsc -p tsconfig.json --showConfig > "$RUNNER_TEMP/typecheck-solution.json"
+          node --input-type=module - "$RUNNER_TEMP/typecheck-solution.json" > "$RUNNER_TEMP/typecheck-projects.txt" <<'NODE'
+          import {readFileSync, readdirSync} from 'node:fs';
+          import {basename} from 'node:path';
+          const config = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (!Array.isArray(config.references) || config.references.length === 0) {
+              throw new Error('The root TypeScript solution must reference every project.');
+          }
+          const projects = config.references.map((reference) => {
+              if (!reference || typeof reference.path !== 'string' || reference.path === '') {
+                  throw new Error('Malformed TypeScript project reference.');
+              }
+              return reference.path;
+          });
+          const referenced = new Set(projects.map((project) => basename(project)));
+          const unreferenced = readdirSync('.').filter((entry) => /^tsconfig\..+\.json$/.test(entry) && entry !== 'tsconfig.base.json' && !referenced.has(entry));
+          if (unreferenced.length > 0) {
+              throw new Error(`Unreferenced TypeScript projects: ${unreferenced.join(', ')}`);
+          }
+          console.log(projects.join('\n'));
+          NODE
+          status=0
+          while IFS= read -r project; do
+            npm run typecheck -- "$project" || status=1
+          done < "$RUNNER_TEMP/typecheck-projects.txt"
+          exit "$status"
 
   lint:
     name: ESLint (full repo, CI merge gate)
