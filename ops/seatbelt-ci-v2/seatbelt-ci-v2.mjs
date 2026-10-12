@@ -31,9 +31,9 @@ export function validateRequest(value) {
         || (value.jestFiles.length ? value.jestNotApplicable !== null
             : typeof value.jestNotApplicable !== 'string' || !value.jestNotApplicable.trim() || value.jestNotApplicable.length > 500)
         || !Array.isArray(value.checks) || new Set(value.checks).size !== value.checks.length
-        || value.checks.length !== required.length + (value.jestFiles.length ? 1 : 0)
+        || value.checks.length !== required.length + (value.jestFiles.length ? 1 : 0) + (value.checks.includes('knip') ? 1 : 0)
         || !required.every((name) => value.checks.includes(name))
-        || value.checks.some((name) => ![...required, ...(value.jestFiles.length ? ['jest'] : [])].includes(name))
+        || value.checks.some((name) => ![...required, ...(value.jestFiles.length ? ['jest'] : []), 'knip'].includes(name))
         || (merge !== null && (!keys(merge, ['secondParent', 'changedPaths', 'reviewedDiffDigest'])
             || !sha(merge.secondParent) || merge.secondParent !== value.comparisonBase
             || !/^sha256:[0-9a-f]{64}$/.test(merge.reviewedDiffDigest)
@@ -105,9 +105,23 @@ function run(request, name, candidate, trusted, output) {
             if (realpathSync(absolute) !== absolute || !lstatSync(absolute).isFile()
                 || !git(candidate, ['ls-files', '--error-unmatch', '--', path])) throw new Error('Missing exact Jest file');
         }
+        // The usual upstream knip script suppresses errors and checks dependencies only.
+        // An explicitly selected export check needs the candidate's existing full script.
+        const exactPackage = name === 'knip' ? git(candidate, ['show', `${request.head}:package.json`]) : null;
+        if (exactPackage !== null) {
+            const command = JSON.parse(exactPackage).scripts?.['knip:full'];
+            // Accept only the observed direct invocation with its environment/reporter options.
+            // Exact matching also rejects shell composition, wrappers and coverage-limiting flags.
+            if (command !== 'KNIP=true knip --reporter compact') {
+                throw new Error('Candidate has no supported failure-capable full upstream Knip script');
+            }
+        }
         const npm = (args, childEnv = env) => spawnSync('npm', args, {cwd: candidate, env: childEnv, stdio: 'inherit'});
         const install = npm(['ci']);
         if (install.error || install.status !== 0) throw new Error('Dependency installation failed');
+        if (exactPackage !== null && readFileSync(join(candidate, 'package.json'), 'utf8').trim() !== exactPackage) {
+            throw new Error('Candidate Knip script changed during setup');
+        }
         result.setup = 'passed';
         if (name === 'lint' && lintFiles.length === 0) {
             console.log('No changed lintable files in the exact comparison');
@@ -118,7 +132,8 @@ function run(request, name, candidate, trusted, output) {
         const args = name === 'jest' ? ['test', '--', '--runInBand', '--json', '--outputFile', jestOutput, '--runTestsByPath', ...request.jestFiles]
             : name === 'react-compiler' ? ['run', 'react-compiler-compliance-check', '--', 'check-changed']
                 : name === 'lint' ? ['run', 'lint', '--', ...lintFiles.map(path => `./${path}`)]
-                : ['run', name === 'format' ? 'fmt' : name];
+                    : name === 'knip' ? ['run', 'knip:full']
+                        : ['run', name === 'format' ? 'fmt' : name];
         // Formatting is compared with its own pre-command diff.
         const before = name === 'format' ? git(candidate, ['diff', '--binary', 'HEAD', '--']) : '';
         // Upstream tests CI === 'true'; local diff uses the exact base without PR API context.
