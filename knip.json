@@ -1,0 +1,10 @@
+{
+  "entry": [
+    "src/index.ts",
+    "scripts/check.mjs"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "scripts/**/*.mjs"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "seatbelt-issue44-hosted-verification-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "node scripts/check.mjs lint",
+    "fmt": "node scripts/check.mjs format",
+    "react-compiler-compliance-check": "node scripts/check.mjs react-compiler",
+    "knip:full": "KNIP=true knip --reporter compact"
+  },
+  "devDependencies": {
+    "knip": "6.34.0",
+    "typescript": "5.8.3"
+  }
+}
