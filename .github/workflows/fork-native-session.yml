@@ -140,6 +140,38 @@ jobs:
           sudo /usr/sbin/sshd -p 2222
           echo "TIMING[sshd] $(( $(date +%s) - T0 ))s"
 
+      - name: Verify tailnet and publish T3 connection metadata
+        env:
+          T3_DEVICE_PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          # github-action@v3 can exit successfully after all auth retries fail.
+          # Require an authenticated node before starting an expensive runtime.
+          python3 - <<'PYMETA'
+          import ipaddress, json, os, pathlib, subprocess
+          status = json.loads(subprocess.check_output(['tailscale', 'status', '--json'], text=True))
+          if status.get('BackendState') != 'Running':
+              raise SystemExit('Tailscale is not authenticated. Renew the fork TS_AUTHKEY secret.')
+          ips = [ip for ip in status.get('TailscaleIPs', []) if ipaddress.ip_address(ip).version == 4]
+          if len(ips) != 1:
+              raise SystemExit('Expected one authenticated Tailscale IPv4 address')
+          directory = pathlib.Path('/tmp/t3-device-connection')
+          directory.mkdir(exist_ok=True)
+          data = {'runId': os.environ['GITHUB_RUN_ID'], 'platform': os.environ['T3_DEVICE_PLATFORM'],
+                  'ip': ips[0], 'dnsName': status.get('Self', {}).get('DNSName', ''),
+                  'hostKey': pathlib.Path('/etc/ssh/ssh_host_ed25519_key.pub').read_text().strip()}
+          (directory / 'connection.json').write_text(json.dumps(data) + '\n')
+          print('T3 device host:', data['ip'], 'SSH port 2222')
+          PYMETA
+
+      - name: Upload T3 connection metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: t3-device-connection-${{ inputs.tag || github.run_id }}
+          path: /tmp/t3-device-connection/connection.json
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Enable KVM and launch emulator early (boots during npm ci)
         if: ${{ inputs.device_target == 'remote' }}
         run: |
@@ -569,6 +601,38 @@ jobs:
           sudo ssh-keygen -A || true
           sudo /usr/sbin/sshd -p 2222
           echo "TIMING[sshd] $(( $(date +%s) - T0 ))s"
+
+      - name: Verify tailnet and publish T3 connection metadata
+        env:
+          T3_DEVICE_PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          # github-action@v3 can exit successfully after all auth retries fail.
+          # Require an authenticated node before starting an expensive runtime.
+          python3 - <<'PYMETA'
+          import ipaddress, json, os, pathlib, subprocess
+          status = json.loads(subprocess.check_output(['tailscale', 'status', '--json'], text=True))
+          if status.get('BackendState') != 'Running':
+              raise SystemExit('Tailscale is not authenticated. Renew the fork TS_AUTHKEY secret.')
+          ips = [ip for ip in status.get('TailscaleIPs', []) if ipaddress.ip_address(ip).version == 4]
+          if len(ips) != 1:
+              raise SystemExit('Expected one authenticated Tailscale IPv4 address')
+          directory = pathlib.Path('/tmp/t3-device-connection')
+          directory.mkdir(exist_ok=True)
+          data = {'runId': os.environ['GITHUB_RUN_ID'], 'platform': os.environ['T3_DEVICE_PLATFORM'],
+                  'ip': ips[0], 'dnsName': status.get('Self', {}).get('DNSName', ''),
+                  'hostKey': pathlib.Path('/etc/ssh/ssh_host_ed25519_key.pub').read_text().strip()}
+          (directory / 'connection.json').write_text(json.dumps(data) + '\n')
+          print('T3 device host:', data['ip'], 'SSH port 2222')
+          PYMETA
+
+      - name: Upload T3 connection metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: t3-device-connection-${{ inputs.tag || github.run_id }}
+          path: /tmp/t3-device-connection/connection.json
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Verify Xcode and boot simulator early (boots during npm ci)
         if: ${{ inputs.device_target == 'remote' }}
