@@ -74,6 +74,9 @@ jobs:
                   if (p.path == ':app') {
                       def android = p.extensions.findByName('android')
                       if (android != null) {
+                          // Public contributor QA: optional vendor SafetyNet classes are unavailable to R8.
+                          android.buildTypes.release.minifyEnabled = false
+                          android.buildTypes.release.shrinkResources = false
                           android.signingConfigs.release.storeFile = p.file('debug.keystore')
                           android.signingConfigs.release.storePassword = 'android'
                           android.signingConfigs.release.keyAlias = 'androiddebugkey'
@@ -115,7 +118,7 @@ jobs:
               'workflow_sha': os.environ['GITHUB_SHA'],
               'workflow_run_id': os.environ['GITHUB_RUN_ID'],
               'configuration': 'developmentRelease',
-              'packaging_override': 'Repository debug signing key through external Gradle init script only',
+              'packaging_override': 'External Gradle init: repository debug signing key; native R8 and resource shrinking disabled for public contributor QA. Normal release JavaScript bundling retained.',
               'app_id': 'com.expensify.chat.dev',
               'apk_sha256': hashlib.file_digest(apk.open('rb'), 'sha256').hexdigest(),
               'contains_js_bundle': True,
