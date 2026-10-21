@@ -8,6 +8,11 @@ on:
         description: Exact existing KJ21-ENG/App commit to build
         required: true
         type: string
+      build_android:
+        description: Produce self-contained physical Android APK
+        required: true
+        default: true
+        type: boolean
       build_web:
         description: Also produce web assets for physical Chrome mWeb QA
         required: true
@@ -19,6 +24,7 @@ permissions:
 
 jobs:
   android:
+    if: inputs.build_android
     runs-on: ubuntu-24.04
     timeout-minutes: 165
     env:
@@ -153,7 +159,7 @@ jobs:
       - name: Build web assets
         run: |
           printf 'ENVIRONMENT=development\nUSE_WEB_PROXY=true\nUSE_THIRD_PARTY_SCRIPTS=false\n' > .env
-          npx rsbuild build
+          npx rsbuild build --config config/rsbuild/rsbuild.config.ts
           git diff --exit-code -- src package.json package-lock.json
           printf '%s\n' "$SOURCE_SHA" > dist/qa-source-sha.txt
           tar -czf web-qa.tar.gz dist
