@@ -1,0 +1,165 @@
+name: Fork standalone Android QA
+run-name: "standalone-qa: ${{ inputs.source_sha }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact existing KJ21-ENG/App commit to build
+        required: true
+        type: string
+      build_web:
+        description: Also produce web assets for physical Chrome mWeb QA
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 165
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      SENTRY_DISABLE_AUTO_UPLOAD: "true"
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          repository: KJ21-ENG/App
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Verify source and read toolchain
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          printf 'java=%s\n' "$(tr -d '[:space:]' < .java-version)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install exact dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_VERSION=$(node -p 'require("./package.json").engines.npm')
+          npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: ${{ steps.toolchain.outputs.java }}
+      - uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e
+      - name: Configure contributor build
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Public contributor defaults only; no personal .env or account data.
+          printf 'ENVIRONMENT=development\nUSE_WEB_PROXY=false\n' > .env
+          # Release JavaScript and normal asset packaging, signed with the
+          # repository's public debug key so the existing Dev app can update.
+          cat > "$RUNNER_TEMP/qa-signing.gradle" <<'GRADLE'
+          gradle.beforeProject { p ->
+              p.afterEvaluate {
+                  if (p.path == ':app') {
+                      def android = p.extensions.findByName('android')
+                      if (android != null) {
+                          android.signingConfigs.release.storeFile = p.file('debug.keystore')
+                          android.signingConfigs.release.storePassword = 'android'
+                          android.signingConfigs.release.keyAlias = 'androiddebugkey'
+                          android.signingConfigs.release.keyPassword = 'android'
+                      }
+                  }
+              }
+          }
+          GRADLE
+      - name: Build self-contained APK
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleDevelopmentRelease \
+            --init-script "$RUNNER_TEMP/qa-signing.gradle" \
+            -PreactNativeArchitectures=arm64-v8a --max-workers=2 --no-daemon
+      - name: Verify package and create provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir qa-output
+          cp android/app/build/outputs/apk/development/release/*.apk qa-output/app.apk
+          SDK_ROOT=$(printenv ANDROID_HOME)
+          BUILD_TOOLS=$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$BUILD_TOOLS/aapt2" dump badging qa-output/app.apk > qa-output/package.txt
+          grep -Fq "package: name='com.expensify.chat.dev'" qa-output/package.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs qa-output/app.apk > qa-output/signature.txt
+          git diff --exit-code -- src android package.json package-lock.json
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, zipfile
+          p = pathlib.Path('qa-output')
+          apk = p / 'app.apk'
+          with zipfile.ZipFile(apk) as z:
+              assert z.getinfo('assets/index.android.bundle').file_size > 1000
+              assert any(n.startswith('lib/arm64-v8a/') for n in z.namelist())
+          manifest = {
+              'source_sha': os.environ['SOURCE_SHA'],
+              'workflow_sha': os.environ['GITHUB_SHA'],
+              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
+              'configuration': 'developmentRelease',
+              'packaging_override': 'Repository debug signing key through external Gradle init script only',
+              'app_id': 'com.expensify.chat.dev',
+              'apk_sha256': hashlib.file_digest(apk.open('rb'), 'sha256').hexdigest(),
+              'contains_js_bundle': True,
+              'device_launch_verification': 'pending',
+          }
+          (p / 'provenance.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-qa-${{ inputs.source_sha }}
+          path: qa-output/
+          if-no-files-found: error
+          retention-days: 14
+
+  web:
+    if: inputs.build_web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      SENTRY_DISABLE_AUTO_UPLOAD: "true"
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          repository: KJ21-ENG/App
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Verify exact source
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install exact dependencies
+        run: |
+          NPM_VERSION=$(node -p 'require("./package.json").engines.npm')
+          npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
+      - name: Build web assets
+        run: |
+          printf 'ENVIRONMENT=development\nUSE_WEB_PROXY=true\nUSE_THIRD_PARTY_SCRIPTS=false\n' > .env
+          npx rsbuild build
+          git diff --exit-code -- src package.json package-lock.json
+          printf '%s\n' "$SOURCE_SHA" > dist/qa-source-sha.txt
+          tar -czf web-qa.tar.gz dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: web-qa-${{ inputs.source_sha }}
+          path: web-qa.tar.gz
+          if-no-files-found: error
+          retention-days: 14
