@@ -164,6 +164,13 @@ jobs:
           print('T3 device host:', data['ip'], 'SSH port 2222')
           PYMETA
 
+      - name: Install T3 Android video encoder
+        if: ${{ inputs.platform == 'android' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -hide_banner -encoders 2>/dev/null | grep 'libx264'
+
       - name: Upload T3 connection metadata
         uses: actions/upload-artifact@v4
         with:
