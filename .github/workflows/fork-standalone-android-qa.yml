@@ -178,24 +178,10 @@ jobs:
           set -euo pipefail
           printf 'ENVIRONMENT=development\nUSE_WEB_PROXY=false\n' > .env
           mkdir out
-          GHW=node_modules/react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper.ts
-          grep -q '} catch (e) {' "$GHW"
-          sed -i "s/} catch (e) {/} catch (e) { console.error('AGDIAG wrapper threw', String(e), (e as Error)?.stack);/" "$GHW"
-          grep -n AGDIAG "$GHW"
-          python3 - <<'PYD'
-          import re, subprocess
-          out = subprocess.run("grep -rlE \"require\\(['\\\"]react-native-reanimated(/[^'\\\"]*)?['\\\"]\\)\" node_modules --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --exclude-dir=__tests__ --exclude-dir=.bin", shell=True, capture_output=True, text=True).stdout.split()
-          for f in out:
-              s = open(f).read(); n, c = re.subn(r"catch\s*(\((\w+)\))?\s*\{", lambda m: "catch (%s) { console.error('AGDIAG catch', %r, String(%s), (%s as any)?.stack);" % (m.group(2) or '__e', f, m.group(2) or '__e', m.group(2) or '__e') if f.endswith(('.ts','.tsx')) else "catch (%s) { console.error('AGDIAG catch', %r, String(%s), %s && %s.stack);" % (m.group(2) or '__e', f, m.group(2) or '__e', m.group(2) or '__e', m.group(2) or '__e'), s)
-              if c: open(f, 'w').write(n); print('patched', f, c)
-          r = 'node_modules/react-native-reanimated/src/publicGlobals.ts'
-          open(r, 'w').write("console.error('AGDIAG reanimated begin', new Error().stack);\n" + open(r).read())
-          r = 'node_modules/react-native-reanimated/src/index.ts'
-          s = open(r).read(); k = 'initializeReanimatedModule(ReanimatedModule);'; assert s.count(k) == 1
-          open(r, 'w').write(s.replace(k, "console.error('AGDIAG reanimated imports done');\n" + k + "\nconsole.error('AGDIAG reanimated init done');"))
-          r = 'index.js'
-          open(r, 'w').write("Error.stackTraceLimit = 60;\nconsole.error('AGDIAG entry');\ntry { require('react-native-reanimated'); console.error('AGDIAG rea ok'); } catch (e) { console.error('AGDIAG rea threw', String(e), e && e.stack); }\n" + open(r).read())
-          PYD
+          # QA only: load Worklets before Reanimated so its native install finds the UI runtime holder.
+          grep -q "^import App from './src/App';" index.js
+          sed -i "s#^import App from './src/App';#import 'react-native-worklets';\nimport App from './src/App';#" index.js
+          grep -n -A1 "react-native-worklets" index.js
           node_modules/.bin/rock bundle --platform android --dev false --entry-file index.js --bundle-output out/index.android.bundle.js --sourcemap-output out/packager.map --assets-dest out/res --minify true
           HC=$(find node_modules -path '*linux64-bin/hermesc' | head -1)
           echo "hermesc=$HC"; "$HC" --version | head -5
