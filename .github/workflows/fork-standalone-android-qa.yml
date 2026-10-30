@@ -193,6 +193,8 @@ jobs:
           r = 'node_modules/react-native-reanimated/src/index.ts'
           s = open(r).read(); k = 'initializeReanimatedModule(ReanimatedModule);'; assert s.count(k) == 1
           open(r, 'w').write(s.replace(k, "console.error('AGDIAG reanimated imports done');\n" + k + "\nconsole.error('AGDIAG reanimated init done');"))
+          r = 'index.js'
+          open(r, 'w').write("Error.stackTraceLimit = 60;\nconsole.error('AGDIAG entry');\ntry { require('react-native-reanimated'); console.error('AGDIAG rea ok'); } catch (e) { console.error('AGDIAG rea threw', String(e), e && e.stack); }\n" + open(r).read())
           PYD
           node_modules/.bin/rock bundle --platform android --dev false --entry-file index.js --bundle-output out/index.android.bundle.js --sourcemap-output out/packager.map --assets-dest out/res --minify true
           HC=$(find node_modules -path '*linux64-bin/hermesc' | head -1)
