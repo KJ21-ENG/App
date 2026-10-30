@@ -184,44 +184,12 @@ jobs:
           grep -n -A1 "react-native-worklets" index.js
           node_modules/.bin/rock bundle --platform android --dev false --entry-file index.js --bundle-output out/index.android.bundle.js --sourcemap-output out/packager.map --assets-dest out/res --minify true
           HC=$(find node_modules -path '*linux64-bin/hermesc' | head -1)
-          echo "hermesc=$HC"; "$HC" --version | head -5
-          "$HC" -w -emit-binary -max-diagnostic-width=80 -out out/index.android.bundle -O -output-source-map out/index.android.bundle.js
+          grep -o '.\{320\}__UI_WORKLET_RUNTIME_HOLDER.\{320\}' out/index.android.bundle.js > out/holder.txt || true
+          cat out/holder.txt | cut -c1-900
+          grep -oE '.{80}\bglobalThis *=[^=].{80}|[(,]globalThis[,)].{60}' out/index.android.bundle.js | head -12 || true
+          node_modules/.bin/rock bundle --platform android --dev false --entry-file index.js --bundle-output out/index.android.bundle.js --sourcemap-output out/packager.map --assets-dest out/res --minify false
+          "$HC" -w -emit-binary -max-diagnostic-width=80 -out out/index.android.bundle -O out/index.android.bundle.js
           ls -l out
-          cat > out/sym.js <<'JS'
-          const {SourceMapConsumer} = require('source-map');
-          const fs = require('fs');
-          (async () => {
-            for (const f of ['out/index.android.bundle.map', 'out/packager.map']) {
-              if (!fs.existsSync(f)) { console.log('missing', f); continue; }
-              const m = JSON.parse(fs.readFileSync(f, 'utf8'));
-              const c = await new SourceMapConsumer(m);
-              for (const col of [20602486, 17358210, 7585683, 7585559, 7584107, 4927018, 5436293, 4935265, 4459073, 7790535, 20809768]) {
-                console.log(f, col, JSON.stringify(c.originalPositionFor({line: 1, column: col})));
-              }
-            }
-          })();
-          JS
-          cp out/sym.js sym.js
-          node sym.js
-          cat > scan.js <<'JS'
-          const {SourceMapConsumer} = require('source-map');
-          const fs = require('fs');
-          (async () => {
-            const src = fs.readFileSync('out/index.android.bundle.js', 'utf8');
-            const c = await new SourceMapConsumer(JSON.parse(fs.readFileSync('out/packager.map', 'utf8')));
-            const lineStarts = [0];
-            for (let i = 0; i < src.length; i++) if (src.charCodeAt(i) === 10) lineStarts.push(i + 1);
-            const re = /get interpolate\(\)\{return ([^}]*)\}/g;
-            let m;
-            while ((m = re.exec(src))) {
-              let l = lineStarts.length - 1;
-              let lo = 0, hi = l;
-              while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (lineStarts[mid] <= m.index) lo = mid; else hi = mid - 1; }
-              const o = c.originalPositionFor({line: lo + 1, column: m.index - lineStarts[lo]});
-              console.log('GETTER', m[1], '=>', o.source, o.line);
-            }
-          })();
-          JS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: js-qa-${{ inputs.source_sha }}
