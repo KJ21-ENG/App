@@ -199,8 +199,26 @@ jobs:
           JS
           cp out/sym.js sym.js
           node sym.js
-          grep -c 'get interpolate' out/index.android.bundle.js || true
-          grep -o '.\{500\}get interpolate.\{300\}' out/index.android.bundle.js | head -4
+          cat > scan.js <<'JS'
+          const {SourceMapConsumer} = require('source-map');
+          const fs = require('fs');
+          (async () => {
+            const src = fs.readFileSync('out/index.android.bundle.js', 'utf8');
+            const c = await new SourceMapConsumer(JSON.parse(fs.readFileSync('out/packager.map', 'utf8')));
+            const lineStarts = [0];
+            for (let i = 0; i < src.length; i++) if (src.charCodeAt(i) === 10) lineStarts.push(i + 1);
+            const re = /get interpolate\(\)\{return ([^}]*)\}/g;
+            let m;
+            while ((m = re.exec(src))) {
+              let l = lineStarts.length - 1;
+              let lo = 0, hi = l;
+              while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (lineStarts[mid] <= m.index) lo = mid; else hi = mid - 1; }
+              const o = c.originalPositionFor({line: lo + 1, column: m.index - lineStarts[lo]});
+              console.log('GETTER', m[1], '=>', o.source, o.line);
+            }
+          })();
+          JS
+          node scan.js
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: js-qa-${{ inputs.source_sha }}
