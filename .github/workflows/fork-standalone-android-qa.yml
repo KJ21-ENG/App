@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   android:
@@ -97,6 +98,8 @@ jobs:
       - name: Build self-contained APK
         working-directory: android
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           ./gradlew :app:assembleDevelopmentRelease \
