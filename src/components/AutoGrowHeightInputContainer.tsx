@@ -84,6 +84,7 @@ function AutoGrowHeightInputContainer({
             return;
         }
 
+        console.debug(`AGDIAG start phase=${phase} next=${nextMaxAutoGrowHeight} replace=${shouldReplaceActiveMeasurement} avail=${availableHeightRef.current}`);
         measurementGenerationRef.current += 1;
         measurementPhaseRef.current = phase;
         maxAutoGrowHeightRef.current = nextMaxAutoGrowHeight;
@@ -111,6 +112,7 @@ function AutoGrowHeightInputContainer({
         }
 
         const keyboardHeightDelta = nativeKeyboardHeight - previousKeyboardHeight;
+        console.debug(`AGDIAG keyboard from=${previousKeyboardHeight} to=${nativeKeyboardHeight}`);
         // A native layout can arrive before the keyboard context update. Do not apply the same transition twice when that exact layout already accounts for it.
         const pendingNativeLayout = pendingNativeLayoutRef.current;
         const expectedLayoutHeight = pendingNativeLayout ? Math.max(pendingNativeLayout.baseHeight - keyboardHeightDelta, variables.componentSizeLarge) : 0;
@@ -138,6 +140,7 @@ function AutoGrowHeightInputContainer({
             }
 
             const availableHeight = availableHeightRef.current;
+            console.debug(`AGDIAG measured h=${contentHeight} phase=${measurementPhase} avail=${availableHeight} max=${maxAutoGrowHeight}`);
             if (measurementPhase === 'clamp') {
                 if (contentHeight > availableHeight && maxAutoGrowHeight > variables.componentSizeLarge) {
                     startMeasurement('probe', variables.componentSizeLarge);
@@ -173,6 +176,7 @@ function AutoGrowHeightInputContainer({
                 const previousAvailableHeight = availableHeightRef.current;
                 const isKeyboardTransitioning = isKeyboardAnimatingRef.current;
                 containerWidthRef.current = width;
+                console.debug(`AGDIAG container h=${height} prevAvail=${previousAvailableHeight} kbShown=${isKeyboardShown} kbActive=${isKeyboardActive} anim=${isKeyboardTransitioning} fallback=${nativeKeyboardFallbackRef.current}`);
 
                 if (isNativePlatform) {
                     if (isKeyboardShown && !isKeyboardActive) {
@@ -243,6 +247,7 @@ function AutoGrowHeightInputContainer({
                     const availableHeight = availableHeightRef.current;
                     const activeMeasurementPhase = measurementPhaseRef.current;
                     const activeMaxAutoGrowHeight = maxAutoGrowHeightRef.current;
+                    console.debug(`AGDIAG content h=${contentHeight} changed=${didContentLayoutChange} phase=${activeMeasurementPhase} avail=${availableHeight} max=${activeMaxAutoGrowHeight}`);
                     if (activeMeasurementPhase !== 'normal') {
                         if (didContentLayoutChange) {
                             startMeasurement(activeMeasurementPhase, activeMaxAutoGrowHeight, true);
