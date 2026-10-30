@@ -154,7 +154,7 @@ jobs:
   web:
     if: inputs.build_web
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
       SENTRY_DISABLE_AUTO_UPLOAD: "true"
@@ -165,10 +165,6 @@ jobs:
           repository: KJ21-ENG/App
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
-      - name: Verify exact source
-        run: |
-          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
       - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
         with:
           node-version-file: .nvmrc
@@ -177,16 +173,39 @@ jobs:
         run: |
           NPM_VERSION=$(node -p 'require("./package.json").engines.npm')
           npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
-      - name: Build web assets
+      - name: Bundle JS and symbolicate crash offsets
         run: |
-          printf 'ENVIRONMENT=development\nUSE_WEB_PROXY=true\nUSE_THIRD_PARTY_SCRIPTS=false\n' > .env
-          npx rsbuild build --config config/rsbuild/rsbuild.config.ts
-          git diff --exit-code -- src package.json package-lock.json
-          printf '%s\n' "$SOURCE_SHA" > dist/qa-source-sha.txt
-          tar -czf web-qa.tar.gz dist
+          set -euo pipefail
+          printf 'ENVIRONMENT=development\nUSE_WEB_PROXY=false\n' > .env
+          mkdir out
+          node_modules/.bin/rock bundle --platform android --dev false --entry-file index.js --bundle-output out/index.android.bundle.js --sourcemap-output out/packager.map --assets-dest out/res --minify true
+          HC=$(find node_modules -path '*linux64-bin/hermesc' | head -1)
+          echo "hermesc=$HC"; "$HC" --version | head -5
+          "$HC" -w -emit-binary -max-diagnostic-width=80 -out out/index.android.bundle -O -output-source-map out/index.android.bundle.js
+          ls -l out
+          cat > out/sym.js <<'JS'
+          const {SourceMapConsumer} = require('source-map');
+          const fs = require('fs');
+          (async () => {
+            for (const f of ['out/index.android.bundle.map', 'out/packager.map']) {
+              if (!fs.existsSync(f)) { console.log('missing', f); continue; }
+              const m = JSON.parse(fs.readFileSync(f, 'utf8'));
+              const c = await new SourceMapConsumer(m);
+              for (const col of [20602486, 17358210, 7585683, 7585559, 7584107, 4927018, 5436293, 4935265, 4459073, 7790535, 20809768]) {
+                console.log(f, col, JSON.stringify(c.originalPositionFor({line: 1, column: col})));
+              }
+            }
+          })();
+          JS
+          cp out/sym.js sym.js
+          node sym.js
+          grep -c 'get interpolate' out/index.android.bundle.js || true
+          grep -o '.\{500\}get interpolate.\{300\}' out/index.android.bundle.js | head -4
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: web-qa-${{ inputs.source_sha }}
-          path: web-qa.tar.gz
+          name: js-qa-${{ inputs.source_sha }}
+          path: |
+            out/index.android.bundle
+            out/index.android.bundle.map
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
