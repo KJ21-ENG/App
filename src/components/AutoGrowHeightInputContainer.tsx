@@ -86,6 +86,7 @@ function AutoGrowHeightInputContainer({
             return;
         }
 
+        console.debug(`AGDIAG start phase=${phase} next=${nextMaxAutoGrowHeight} replace=${shouldReplaceActiveMeasurement} avail=${availableHeightRef.current}`);
         measurementGenerationRef.current += 1;
         measurementPhaseRef.current = phase;
         maxAutoGrowHeightRef.current = nextMaxAutoGrowHeight;
@@ -138,6 +139,7 @@ function AutoGrowHeightInputContainer({
             }
 
             const availableHeight = availableHeightRef.current;
+            console.debug(`AGDIAG measured h=${contentHeight} phase=${measurementPhase} avail=${availableHeight} max=${maxAutoGrowHeight}`);
             if (measurementPhase === 'clamp') {
                 if (contentHeight > availableHeight && maxAutoGrowHeight > variables.componentSizeLarge) {
                     startMeasurement('probe', variables.componentSizeLarge);
@@ -173,6 +175,7 @@ function AutoGrowHeightInputContainer({
                 const previousAvailableHeight = availableHeightRef.current;
                 const isKeyboardTransitioning = isKeyboardAnimatingRef.current;
                 containerWidthRef.current = width;
+                console.debug(`AGDIAG container h=${height} w=${width} prevAvail=${previousAvailableHeight} kbActive=${isKeyboardActive}`);
 
                 if (isIOS) {
                     if (isKeyboardShown && !isKeyboardActive) {
@@ -243,6 +246,7 @@ function AutoGrowHeightInputContainer({
                     const availableHeight = availableHeightRef.current;
                     const activeMeasurementPhase = measurementPhaseRef.current;
                     const activeMaxAutoGrowHeight = maxAutoGrowHeightRef.current;
+                    console.debug(`AGDIAG content h=${contentHeight} changed=${didContentLayoutChange} phase=${activeMeasurementPhase} avail=${availableHeight} max=${activeMaxAutoGrowHeight}`);
                     if (activeMeasurementPhase !== 'normal') {
                         if (didContentLayoutChange) {
                             startMeasurement(activeMeasurementPhase, activeMaxAutoGrowHeight, true);
