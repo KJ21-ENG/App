@@ -57,6 +57,12 @@ jobs:
           set -euo pipefail
           NPM_VERSION=$(node -p 'require("./package.json").engines.npm')
           npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
+      - name: Expose project-pinned bun for the React Native artifact resolver
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
+          "$GITHUB_WORKSPACE/node_modules/.bin/bun" --version
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
           distribution: temurin
