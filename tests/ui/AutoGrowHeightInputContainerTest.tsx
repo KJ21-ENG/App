@@ -34,6 +34,9 @@ jest.mock('@hooks/useKeyboardState', () =>
 );
 jest.mock('@hooks/useSafeAreaInsets', () => jest.fn(() => ({top: 0, right: 0, bottom: 0, left: 0})));
 jest.mock('@hooks/useThemeStyles', () => () => ({flex1: {flex: 1}}));
+jest.mock('@hooks/useStyleUtils', () => () => ({
+    getAutoGrowHeightInputContainerStyles: jest.requireActual<{default: () => ReactNative.ViewStyle}>('@styles/utils/autoGrowHeightInputContainerStyles').default,
+}));
 jest.mock('@hooks/useWindowDimensions', () => jest.fn(() => ({windowWidth: 300, windowHeight: 800})));
 jest.mock('@libs/getKeyboardHeight', () => ({
     __esModule: true,
