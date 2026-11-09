@@ -1,0 +1,90 @@
+name: Fork standalone iOS QA
+run-name: "standalone-ios-qa: ${{ inputs.source_sha }}"
+
+# Builds a self-contained ReleaseDevelopment iOS Simulator app (JS bundle embedded, no Metro)
+# from an exact KJ21-ENG/App commit, for local simulator QA. Fork-only tooling; never part of a PR.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact existing KJ21-ENG/App commit to build
+        required: true
+        type: string
+      xcode_version:
+        description: Xcode version to select when available
+        required: false
+        default: "26.3"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      XCODE_VERSION: ${{ inputs.xcode_version }}
+      SENTRY_DISABLE_AUTO_UPLOAD: "true"
+      NODE_OPTIONS: --max-old-space-size=6144
+      # Same bundler lane as the standalone Android QA build.
+      BUNDLER: metro
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          repository: KJ21-ENG/App
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Verify exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install exact dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_VERSION=$(node -p 'require("./package.json").engines.npm')
+          npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
+      - name: Select Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          requested="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          if [ -d "$requested" ]; then
+            printf 'DEVELOPER_DIR=%s\n' "$requested" >> "$GITHUB_ENV"
+          fi
+      - name: Configure contributor build
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          # Public contributor defaults only; no personal .env or account data.
+          printf 'ENVIRONMENT=development\nUSE_WEB_PROXY=false\n' > .env
+      - name: Build Release simulator app
+        run: npx rock build:ios --configuration ReleaseDevelopment --scheme 'New Expensify Dev' --destination simulator --verbose
+      - name: Stage app and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" ios/build -type d -path '*ReleaseDevelopment-iphonesimulator/*.app' -prune 2>/dev/null | head -1)
+          test -n "$APP"
+          test -f "$APP/main.jsbundle"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" | tee bundle-id.txt
+          git diff --exit-code -- src package.json package-lock.json
+          mkdir qa-output
+          ditto -c -k --keepParent "$APP" qa-output/app.zip
+          printf '{"source_sha":"%s","configuration":"ReleaseDevelopment","destination":"simulator","bundler":"metro","bundle_id":"%s","run_id":"%s"}\n' "$SOURCE_SHA" "$(cat bundle-id.txt)" "$GITHUB_RUN_ID" > qa-output/provenance.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ios-qa-${{ inputs.source_sha }}
+          path: qa-output/
+          if-no-files-found: error
+          retention-days: 14
