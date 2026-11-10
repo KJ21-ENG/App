@@ -12,9 +12,9 @@ on:
         required: true
         type: string
       xcode_version:
-        description: Xcode version to select when available
+        description: Xcode version override (default is the version pinned by the source's getXcodeVersion action)
         required: false
-        default: "26.3"
+        default: ""
         type: string
 
 permissions:
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   ios:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 180
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
@@ -62,10 +62,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          requested="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
-          if [ -d "$requested" ]; then
-            printf 'DEVELOPER_DIR=%s\n' "$requested" >> "$GITHUB_ENV"
+          # Use the same Xcode as upstream iOS CI; older Xcodes fail to compile current native dependencies.
+          if [ -z "$XCODE_VERSION" ]; then
+            XCODE_VERSION=$(sed -n 's/^ *VERSION="\([0-9.]*\)"$/\1/p' .github/actions/composite/getXcodeVersion/action.yml)
           fi
+          requested="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          if [ ! -d "$requested" ]; then
+            echo "::error::Xcode ${XCODE_VERSION} is not installed on this runner"
+            ls -d /Applications/Xcode_* || true
+            exit 1
+          fi
+          printf 'DEVELOPER_DIR=%s\n' "$requested" >> "$GITHUB_ENV"
       - name: Configure contributor build
         shell: bash
         run: |
