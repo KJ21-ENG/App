@@ -16,12 +16,23 @@ on:
         required: false
         default: ""
         type: string
+      build_app:
+        description: Build the Release simulator app
+        required: false
+        default: true
+        type: boolean
+      build_unminified_js:
+        description: Also build an unminified iOS JS bundle to swap into the app when the minified bundle cannot be debugged
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
   ios:
+    if: inputs.build_app
     runs-on: macos-26
     timeout-minutes: 180
     env:
@@ -98,5 +109,49 @@ jobs:
         with:
           name: ios-qa-${{ inputs.source_sha }}
           path: qa-output/
+          if-no-files-found: error
+          retention-days: 14
+
+  js:
+    if: inputs.build_unminified_js
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      SENTRY_DISABLE_AUTO_UPLOAD: "true"
+      NODE_OPTIONS: --max-old-space-size=6144
+      BUNDLER: metro
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          repository: KJ21-ENG/App
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install exact dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_VERSION=$(node -p 'require("./package.json").engines.npm')
+          npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
+      - name: Bundle unminified iOS JS
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'ENVIRONMENT=development\nUSE_WEB_PROXY=false\n' > .env
+          mkdir out
+          # Plain JS source; Hermes runs it directly when it replaces main.jsbundle in the app, with readable stack traces.
+          node_modules/.bin/rock bundle --platform ios --dev false --minify false --entry-file index.js --bundle-output out/main.jsbundle --sourcemap-output out/main.jsbundle.map --assets-dest out/assets
+          git diff --exit-code -- src package.json package-lock.json
+          ls -l out
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ios-js-${{ inputs.source_sha }}
+          path: |
+            out/main.jsbundle
+            out/main.jsbundle.map
           if-no-files-found: error
           retention-days: 14
