@@ -11,8 +11,8 @@ import measureAutoGrowContent from '@libs/measureAutoGrowContent';
 
 import variables from '@styles/variables';
 
-import type {ReactNode} from 'react';
-import type {ScrollView as RNScrollView, StyleProp, ViewStyle} from 'react-native';
+import type {ComponentRef, ReactNode} from 'react';
+import type {StyleProp, ViewStyle} from 'react-native';
 
 import React, {useLayoutEffect, useRef, useState} from 'react';
 import {Platform, View} from 'react-native';
@@ -57,7 +57,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
     const viewportHeightRef = useRef(windowHeight);
     const keyboardHeightRef = useRef(nativeKeyboardHeight);
     const lastExactContainerHeightRef = useRef<number | null>(null);
-    const containerRef = useRef<RNScrollView>(null);
+    const containerRef = useRef<ComponentRef<typeof ScrollView>>(null);
     const keyboardBaselineHeightRef = useRef<number | null>(null);
     const settledKeyboardHeightRef = useRef(keyboardHeight);
     const pendingNativeLayoutRef = useRef<PendingNativeLayout | null>(null);
@@ -135,8 +135,8 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
         }
 
         settledKeyboardHeightRef.current = keyboardHeight;
-        qaLog(`SETTLE request kH=${keyboardHeight}`);
-        containerRef.current?.measure((_x, _y, _width, measuredHeight) => {
+        qaLog(`SETTLE request kH=${keyboardHeight} native=${!!containerRef.current?.getNativeScrollRef()}`);
+        containerRef.current?.getNativeScrollRef()?.measure((_x, _y, _width, measuredHeight) => {
             const settledHeight = Math.max(measuredHeight, variables.componentSizeLarge);
             const baselineHeight = keyboardBaselineHeightRef.current;
             qaLog(`SETTLE kH=${keyboardHeight} measured=${measuredHeight} baseline=${baselineHeight} avail=${availableHeightRef.current}`);
