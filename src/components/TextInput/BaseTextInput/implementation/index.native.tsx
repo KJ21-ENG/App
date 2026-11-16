@@ -120,7 +120,13 @@ function BaseTextInput({
     const [isFocused, setIsFocused] = useState(false);
     const [passwordHidden, setPasswordHidden] = useState(inputProps.secureTextEntry);
     const [textInputWidth, setTextInputWidth] = useState(0);
-    const [textInputHeight, setTextInputHeight] = useState(0);
+    const [textInputHeight, setTextInputHeightRaw] = useState(0);
+    // QA-DEBUG (temporary): hidden measurement vs real content size
+    const [tiDebug, setTiDebug] = useState({events: 0, last: 0, contentSize: 0});
+    const setTextInputHeight = (h: number) => {
+        setTiDebug((d) => ({...d, events: d.events + 1, last: h}));
+        setTextInputHeightRaw(h);
+    };
     const [height, setHeight] = useState<number>(variables.componentSizeLarge);
     const [width, setWidth] = useState<number | null>(null);
     const [prefixCharacterPadding, setPrefixCharacterPadding] = useState<number>(CONST.CHARACTER_WIDTH);
@@ -406,6 +412,11 @@ function BaseTextInput({
                                     input.current = elementRef;
                                 }}
                                 {...inputProps}
+                                onContentSizeChange={(e) => {
+                                    const h = e.nativeEvent.contentSize.height;
+                                    setTiDebug((d) => ({...d, contentSize: h}));
+                                    inputProps.onContentSizeChange?.(e);
+                                }}
                                 autoFocus={isInLandscapeMode && !shouldAllowFocusInLandscapeMode ? false : inputProps.autoFocus}
                                 accessibilityLabel={resolvedAccessibilityLabel}
                                 accessibilityLabelledBy={accessibilityLabelledBy}
@@ -529,6 +540,13 @@ function BaseTextInput({
                     />
                 )}
             </View>
+            {!!autoGrowHeight && (
+                <View
+                    accessible
+                    accessibilityLabel={`TIDEBUG th=${textInputHeight} ev=${tiDebug.events} last=${tiDebug.last} cs=${tiDebug.contentSize} len=${(value ?? '').length} max=${String(maxAutoGrowHeight)} w=${String(width)}`}
+                    style={{position: 'absolute', width: 1, height: 1, opacity: 0}}
+                />
+            )}
             <TextInputMeasurement
                 value={value}
                 placeholder={placeholder}
