@@ -133,6 +133,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
 
         let frameID: number | undefined;
         const adoptSettledLayout = () => {
+            qaLog('EVT keyboard did* fired');
             if (frameID !== undefined) {
                 cancelAnimationFrame(frameID);
             }
@@ -154,17 +155,14 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
                 }
 
                 availableHeightRef.current = settledHeight;
-                qaLog(`SETTLE adopt ${settledHeight}`);
                 startMeasurement('clamp', settledHeight);
             });
         };
         const keyboardDidShowListener = KeyboardEvents.addListener('keyboardDidShow', adoptSettledLayout);
         const keyboardDidHideListener = KeyboardEvents.addListener('keyboardDidHide', adoptSettledLayout);
 
+        // The keyboard event that schedules the frame also re-renders this container and re-runs this effect, so the frame must outlive the cleanup.
         return () => {
-            if (frameID !== undefined) {
-                cancelAnimationFrame(frameID);
-            }
             keyboardDidShowListener.remove();
             keyboardDidHideListener.remove();
         };
