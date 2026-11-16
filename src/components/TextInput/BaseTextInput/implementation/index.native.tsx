@@ -544,7 +544,7 @@ function BaseTextInput({
                 <View
                     accessible
                     accessibilityLabel={`TIDEBUG th=${textInputHeight} ev=${tiDebug.events} last=${tiDebug.last} cs=${tiDebug.contentSize} len=${(value ?? '').length} max=${String(maxAutoGrowHeight)} w=${String(width)}`}
-                    style={{position: 'absolute', width: 1, height: 1, opacity: 0}}
+                    style={{position: 'absolute', top: 0, left: 0, width: 2, height: 2}}
                 />
             )}
             <TextInputMeasurement
