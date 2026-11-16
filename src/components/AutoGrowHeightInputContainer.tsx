@@ -57,6 +57,8 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
     const viewportHeightRef = useRef(windowHeight);
     const keyboardHeightRef = useRef(nativeKeyboardHeight);
     const lastExactContainerHeightRef = useRef<number | null>(null);
+    const latestLayoutHeightRef = useRef<number | null>(null);
+    const settledKeyboardHeightRef = useRef(keyboardHeight);
     const pendingNativeLayoutRef = useRef<PendingNativeLayout | null>(null);
     const nativeKeyboardFallbackRef = useRef(false);
     const contentRef = useRef<View>(null);
@@ -113,6 +115,31 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
         startMeasurement('clamp', availableHeight);
     }, [nativeKeyboardHeight, startMeasurement]);
 
+    // The keyboard-derived slot rarely matches the real allocation: the form already reserves the bottom safe area, and a hardware keyboard shows only a shortcut bar.
+    // While it differs, layouts during the animation are ignored, and none arrives after it ends, so the cap would stay wrong.
+    // keyboardHeight changes only on keyboardDidShow and keyboardDidHide, once the keyboard has settled, so adopt the last real layout then. This runs after the keyboard effect above, so it replaces that effect's estimate.
+    useLayoutEffect(() => {
+        if (!isIOS || keyboardHeight === settledKeyboardHeightRef.current) {
+            return;
+        }
+
+        settledKeyboardHeightRef.current = keyboardHeight;
+        const settledHeight = latestLayoutHeightRef.current;
+        if (settledHeight === null) {
+            return;
+        }
+
+        pendingNativeLayoutRef.current = null;
+        nativeKeyboardFallbackRef.current = false;
+        lastExactContainerHeightRef.current = settledHeight;
+        if (areHeightsEqual(settledHeight, availableHeightRef.current)) {
+            return;
+        }
+
+        availableHeightRef.current = settledHeight;
+        startMeasurement('clamp', settledHeight);
+    }, [isIOS, keyboardHeight, startMeasurement]);
+
     useLayoutEffect(() => {
         if (measurementPhase === 'normal') {
             return;
@@ -161,6 +188,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
                 const previousAvailableHeight = availableHeightRef.current;
                 const isKeyboardTransitioning = isKeyboardAnimatingRef.current;
                 containerWidthRef.current = width;
+                latestLayoutHeightRef.current = availableHeight;
 
                 if (isIOS) {
                     if (isKeyboardShown && !isKeyboardActive) {

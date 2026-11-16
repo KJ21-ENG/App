@@ -413,6 +413,69 @@ describe('AutoGrowHeightInputContainer', () => {
         expect(screen.getByTestId('stale-native-layout-height').props.accessibilityLabel).toBe('476');
     });
 
+    it('adopts the real layout once the iOS keyboard settles when it differs from the keyboard estimate', async () => {
+        platformReplaceProperty.restore();
+        platformReplaceProperty = jest.replaceProperty(Platform, 'OS', 'ios');
+
+        let isKeyboardActive = false;
+        let keyboardActiveHeight = 0;
+        let keyboardHeight = 0;
+        let renderedMaxAutoGrowHeight: number = variables.textInputAutoGrowMaxHeight;
+        mockUseKeyboardState.mockImplementation(() => ({
+            isKeyboardShown: keyboardHeight !== 0,
+            isKeyboardActive,
+            keyboardHeight,
+            keyboardActiveHeight,
+            isKeyboardAnimatingRef: {current: true},
+        }));
+        mockMeasureContent.mockImplementation((_content, callback) => {
+            callback(renderedMaxAutoGrowHeight === variables.componentSizeLarge ? 76 : renderedMaxAutoGrowHeight + 24);
+        });
+        const renderInput = () => (
+            <AutoGrowHeightInputContainer>
+                {(maxAutoGrowHeight) => {
+                    renderedMaxAutoGrowHeight = maxAutoGrowHeight;
+                    return (
+                        <View
+                            testID="settled-keyboard-height"
+                            accessibilityLabel={String(maxAutoGrowHeight)}
+                        />
+                    );
+                }}
+            </AutoGrowHeightInputContainer>
+        );
+
+        // Given an input whose slot measured 800px before the keyboard opened
+        const {rerender} = render(renderInput());
+        const container = screen.UNSAFE_getByType(ScrollView);
+        fireEvent(container, 'layout', {nativeEvent: {layout: {height: 800, width: 300}}});
+        await waitFor(() => expect(screen.getByTestId('settled-keyboard-height').props.accessibilityLabel).toBe('776'));
+
+        // When a 335px keyboard opens but the form, which already reserves the bottom safe area, only gives up 311px
+        isKeyboardActive = true;
+        keyboardActiveHeight = 335;
+        rerender(renderInput());
+        await waitFor(() => expect(screen.getByTestId('settled-keyboard-height').props.accessibilityLabel).toBe('441'));
+        fireEvent(container, 'layout', {nativeEvent: {layout: {height: 489, width: 300}}});
+        expect(screen.getByTestId('settled-keyboard-height').props.accessibilityLabel).toBe('441');
+        keyboardHeight = 335;
+        rerender(renderInput());
+
+        // Then once the keyboard settles the cap follows the real 489px slot instead of staying on the 465px keyboard estimate
+        await waitFor(() => expect(screen.getByTestId('settled-keyboard-height').props.accessibilityLabel).toBe('465'));
+
+        // When the keyboard closes and the slot returns to 800px
+        isKeyboardActive = false;
+        keyboardActiveHeight = 0;
+        rerender(renderInput());
+        fireEvent(container, 'layout', {nativeEvent: {layout: {height: 800, width: 300}}});
+        keyboardHeight = 0;
+        rerender(renderInput());
+
+        // Then the cap returns to the full slot instead of an 824px estimate built on the old one
+        await waitFor(() => expect(screen.getByTestId('settled-keyboard-height').props.accessibilityLabel).toBe('776'));
+    });
+
     it('does not reuse an unrelated settled layout for a coincident keyboard delta', async () => {
         platformReplaceProperty.restore();
         platformReplaceProperty = jest.replaceProperty(Platform, 'OS', 'ios');
