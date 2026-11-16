@@ -14,8 +14,9 @@ import variables from '@styles/variables';
 import type {ReactNode} from 'react';
 import type {StyleProp, ViewStyle} from 'react-native';
 
-import React, {useLayoutEffect, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {Platform, View} from 'react-native';
+import {KeyboardEvents} from 'react-native-keyboard-controller';
 
 import ScrollView from './ScrollView';
 
@@ -57,6 +58,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
     const viewportHeightRef = useRef(windowHeight);
     const keyboardHeightRef = useRef(nativeKeyboardHeight);
     const lastExactContainerHeightRef = useRef<number | null>(null);
+    const latestLayoutHeightRef = useRef<number | null>(null);
     const pendingNativeLayoutRef = useRef<PendingNativeLayout | null>(null);
     const nativeKeyboardFallbackRef = useRef(false);
     const contentRef = useRef<View>(null);
@@ -113,6 +115,50 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
         startMeasurement('clamp', availableHeight);
     }, [nativeKeyboardHeight, startMeasurement]);
 
+    // The keyboard-derived slot rarely matches the real allocation: the form already reserves the bottom safe area, and a hardware keyboard shows only a shortcut bar.
+    // While it differs, layouts during the animation are ignored, and none arrives after it ends, so the cap would stay wrong. Once iOS reports the keyboard settled, adopt the last real layout.
+    useEffect(() => {
+        if (!isIOS) {
+            return;
+        }
+
+        let frameID: number | undefined;
+        const adoptSettledLayout = () => {
+            if (frameID !== undefined) {
+                cancelAnimationFrame(frameID);
+            }
+
+            // Wait a frame so the keyboard state update has re-rendered this container and its keyboard effect cannot replace the real layout with its estimate.
+            frameID = requestAnimationFrame(() => {
+                frameID = undefined;
+                const settledHeight = latestLayoutHeightRef.current;
+                if (settledHeight === null) {
+                    return;
+                }
+
+                pendingNativeLayoutRef.current = null;
+                nativeKeyboardFallbackRef.current = false;
+                lastExactContainerHeightRef.current = settledHeight;
+                if (areHeightsEqual(settledHeight, availableHeightRef.current)) {
+                    return;
+                }
+
+                availableHeightRef.current = settledHeight;
+                startMeasurement('clamp', settledHeight);
+            });
+        };
+        const keyboardDidShowListener = KeyboardEvents.addListener('keyboardDidShow', adoptSettledLayout);
+        const keyboardDidHideListener = KeyboardEvents.addListener('keyboardDidHide', adoptSettledLayout);
+
+        return () => {
+            if (frameID !== undefined) {
+                cancelAnimationFrame(frameID);
+            }
+            keyboardDidShowListener.remove();
+            keyboardDidHideListener.remove();
+        };
+    }, [isIOS, startMeasurement]);
+
     useLayoutEffect(() => {
         if (measurementPhase === 'normal') {
             return;
@@ -161,6 +207,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
                 const previousAvailableHeight = availableHeightRef.current;
                 const isKeyboardTransitioning = isKeyboardAnimatingRef.current;
                 containerWidthRef.current = width;
+                latestLayoutHeightRef.current = availableHeight;
 
                 if (isIOS) {
                     if (isKeyboardShown && !isKeyboardActive) {
