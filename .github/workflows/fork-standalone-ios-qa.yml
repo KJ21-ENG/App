@@ -21,6 +21,11 @@ on:
         required: false
         default: true
         type: boolean
+      runner:
+        description: macOS runner image for the app build (use macos-27 when the source pins Xcode 27)
+        required: false
+        default: macos-26
+        type: string
       build_unminified_js:
         description: Also build an unminified iOS JS bundle to swap into the app when the minified bundle cannot be debugged
         required: false
@@ -33,7 +38,7 @@ permissions:
 jobs:
   ios:
     if: inputs.build_app
-    runs-on: macos-26
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 180
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
