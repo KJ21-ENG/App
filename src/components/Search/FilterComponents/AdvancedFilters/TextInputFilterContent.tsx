@@ -21,7 +21,7 @@ import CONST from '@src/CONST';
 import type {WithRequiredSentryLabel} from '@src/types/utils/SentryLabel';
 
 import type {ComponentRef, ReactNode} from 'react';
-import type {TextInput as RNTextInput, StyleProp, ViewStyle} from 'react-native';
+import type {TextInput as RNTextInput, StyleProp, TextStyle, ViewStyle} from 'react-native';
 import type {ValueOf} from 'type-fest';
 
 import React, {useState} from 'react';
@@ -54,7 +54,7 @@ type TextInputFilterInputOptions = {
     maxAutoGrowHeight?: number;
     onSubmitEditing?: () => void;
     submitBehavior?: 'submit';
-    textInputContainerStyles?: StyleProp<ViewStyle>;
+    inputStyle?: StyleProp<TextStyle>;
 };
 
 function isTextInput(element: BaseTextInputRef | ComponentRef<typeof RNTextInput> | null): element is ComponentRef<typeof RNTextInput> {
@@ -84,7 +84,7 @@ function useTextInputFilterState({baseFilterKey, value: initialValue, isNegated:
         onChange(normalizedValue, isNegated);
     };
 
-    const renderTextInput = ({autoGrowHeight, maxAutoGrowHeight, onSubmitEditing, submitBehavior, textInputContainerStyles}: TextInputFilterInputOptions = {}) => (
+    const renderTextInput = ({autoGrowHeight, maxAutoGrowHeight, onSubmitEditing, submitBehavior, inputStyle}: TextInputFilterInputOptions = {}) => (
         <TextInput
             ref={(ref) => {
                 if (!autoFocus || !isTextInput(ref)) {
@@ -100,7 +100,7 @@ function useTextInputFilterState({baseFilterKey, value: initialValue, isNegated:
             accessibilityLabel={label}
             role={CONST.ROLE.PRESENTATION}
             containerStyles={[styles.ph5]}
-            textInputContainerStyles={textInputContainerStyles}
+            inputStyle={inputStyle}
             autoGrowHeight={autoGrowHeight}
             maxAutoGrowHeight={maxAutoGrowHeight}
             submitBehavior={submitBehavior}
@@ -238,7 +238,9 @@ function TextInputFilterContentFillHeight({
                             maxAutoGrowHeight: !value ? variables.componentSizeLarge : maxAutoGrowHeight,
                             onSubmitEditing: submit,
                             submitBehavior: 'submit',
-                            textInputContainerStyles: [styles.pt3],
+                            // The input sizes its visible box from a hidden copy of the text, which copies the input style but not the container style.
+                            // Padding on the container would leave the box that much shorter than the text and cut off the last line.
+                            inputStyle: styles.pt3,
                         })
                     }
                 </AutoGrowHeightInputContainer>

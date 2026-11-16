@@ -43,7 +43,7 @@ type TextInputMockProps = {
     onChangeText?: (nextValue: string) => void;
     onSubmitEditing?: () => void;
     submitBehavior?: string;
-    textInputContainerStyles?: unknown;
+    inputStyle?: unknown;
 };
 
 const mockButton = jest.fn<void, [ButtonMockProps]>();
@@ -199,7 +199,10 @@ describe('TextInputFilterContent', () => {
         // Then one normalized, negated filter is applied and the popup closes once.
         expect(mockTextInput.mock.calls.at(-1)?.[0].autoGrowHeight).toBe(true);
         expect(mockTextInput.mock.calls.at(-1)?.[0].maxAutoGrowHeight).toBe(variables.textInputAutoGrowMaxHeight);
-        expect(updateFilterForm).toHaveBeenCalledWith({[baseFilterKey]: undefined, [`${baseFilterKey}Not`]: 'Long prose'});
+        expect(updateFilterForm).toHaveBeenCalledWith({
+            [baseFilterKey]: undefined,
+            [`${baseFilterKey}Not`]: 'Long prose',
+        });
         expect(updateFilterForm).toHaveBeenCalledTimes(1);
         expect(closeOverlay).toHaveBeenCalledTimes(1);
 
@@ -247,7 +250,7 @@ describe('TextInputFilterContent', () => {
             expect.objectContaining({
                 autoGrowHeight: true,
                 maxAutoGrowHeight: 420,
-                textInputContainerStyles: [{paddingTop: 12}],
+                inputStyle: {paddingTop: 12},
             }),
         );
     });
@@ -267,7 +270,7 @@ describe('TextInputFilterContent', () => {
             expect.objectContaining({
                 autoGrowHeight: true,
                 maxAutoGrowHeight: variables.componentSizeLarge,
-                textInputContainerStyles: [{paddingTop: 12}],
+                inputStyle: {paddingTop: 12},
             }),
         );
     });
