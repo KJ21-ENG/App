@@ -71,6 +71,13 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
     const [measurementPhase, setMeasurementPhase] = useState<MeasurementPhase>('normal');
     const [measurementRequestVersion, setMeasurementRequestVersion] = useState(0);
     const [maxAutoGrowHeight, setMaxAutoGrowHeight] = useState<number>(variables.textInputAutoGrowMaxHeight);
+    // QA-DEBUG (temporary): rolling event log exposed through an invisible accessibility label
+    const debugLinesRef = useRef<string[]>([]);
+    const [debugText, setDebugText] = useState('');
+    const qaLog = (line: string) => {
+        debugLinesRef.current = [...debugLinesRef.current.slice(-24), `${Date.now() % 100000} ${line}`];
+        setDebugText(debugLinesRef.current.join(' || '));
+    };
 
     const startMeasurement = (phase: Exclude<MeasurementPhase, 'normal'>, nextMaxAutoGrowHeight: number, shouldReplaceActiveMeasurement = false) => {
         if (!shouldReplaceActiveMeasurement && measurementPhaseRef.current === phase && maxAutoGrowHeightRef.current === nextMaxAutoGrowHeight) {
@@ -105,6 +112,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
 
         const keyboardHeightDelta = nativeKeyboardHeight - previousKeyboardHeight;
         keyboardBaselineHeightRef.current = availableHeightRef.current;
+        qaLog(`KB ${previousKeyboardHeight}->${nativeKeyboardHeight} active=${isKeyboardActive} shown=${isKeyboardShown} kAH=${keyboardActiveHeight} kH=${keyboardHeight} pending=${JSON.stringify(pendingNativeLayoutRef.current)} avail=${availableHeightRef.current}`);
         // A native layout can arrive before the keyboard context update. Do not apply the same transition twice when that exact layout already accounts for it.
         const pendingNativeLayout = pendingNativeLayoutRef.current;
         const expectedLayoutHeight = pendingNativeLayout ? Math.max(pendingNativeLayout.baseHeight - keyboardHeightDelta, variables.componentSizeLarge) : 0;
@@ -114,6 +122,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
         nativeKeyboardFallbackRef.current = !didExactLayoutAccountForKeyboard;
         const availableHeight = didExactLayoutAccountForKeyboard ? availableHeightRef.current : Math.max(availableHeightRef.current - keyboardHeightDelta, variables.componentSizeLarge);
         availableHeightRef.current = availableHeight;
+        qaLog(`KBEFF exact=${didExactLayoutAccountForKeyboard} fallback=${nativeKeyboardFallbackRef.current} avail=${availableHeight}`);
         startMeasurement('clamp', availableHeight);
     }, [nativeKeyboardHeight, startMeasurement]);
 
@@ -126,9 +135,11 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
         }
 
         settledKeyboardHeightRef.current = keyboardHeight;
+        qaLog(`SETTLE request kH=${keyboardHeight} native=${!!containerRef.current?.getNativeScrollRef()}`);
         containerRef.current?.getNativeScrollRef()?.measure((_x, _y, _width, measuredHeight) => {
             const settledHeight = Math.max(measuredHeight, variables.componentSizeLarge);
             const baselineHeight = keyboardBaselineHeightRef.current;
+            qaLog(`SETTLE kH=${keyboardHeight} measured=${measuredHeight} baseline=${baselineHeight} avail=${availableHeightRef.current}`);
             // A slot that did not move is not resized by the keyboard, so the keyboard estimate stays the only way to keep the input above it.
             if (keyboardHeight !== settledKeyboardHeightRef.current || baselineHeight === null || areHeightsEqual(settledHeight, baselineHeight)) {
                 return;
@@ -159,6 +170,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
             }
 
             const availableHeight = availableHeightRef.current;
+            qaLog(`MEAS ${measurementPhase} content=${contentHeight} avail=${availableHeight} max=${maxAutoGrowHeight}`);
             if (measurementPhase === 'clamp') {
                 if (contentHeight > availableHeight && maxAutoGrowHeight > variables.componentSizeLarge) {
                     startMeasurement('probe', variables.componentSizeLarge);
@@ -174,6 +186,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
             maxAutoGrowHeightRef.current = Math.max(availableHeight - reservedContentHeight, variables.componentSizeLarge);
             setMeasurementPhase('normal');
             setMaxAutoGrowHeight(maxAutoGrowHeightRef.current);
+            qaLog(`CAP ${maxAutoGrowHeightRef.current}`);
         });
 
         return () => {
@@ -195,12 +208,14 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
                 const previousAvailableHeight = availableHeightRef.current;
                 const isKeyboardTransitioning = isKeyboardAnimatingRef.current;
                 containerWidthRef.current = width;
+                qaLog(`LAYOUT h=${height} prev=${previousAvailableHeight} anim=${isKeyboardTransitioning} active=${isKeyboardActive} shown=${isKeyboardShown} fallback=${nativeKeyboardFallbackRef.current} lastExact=${lastExactContainerHeightRef.current}`);
 
                 if (isIOS) {
                     if (isKeyboardShown && !isKeyboardActive) {
                         // On iOS, keyboardWillHide clears the active height before the view finishes animating back to its expanded allocation.
                         // Ignore those intermediate layouts until keyboardDidHide so they cannot become the next keyboard-open baseline.
                         viewportHeightRef.current = windowHeight;
+                        qaLog('IGNORE willHide');
                         startMeasurement('clamp', previousAvailableHeight, didWidthChange);
                         return;
                     }
@@ -219,6 +234,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
                         // Native can emit stale and intermediate allocations throughout the keyboard animation.
                         // Keep the keyboard-derived slot until onLayout reaches that exact allocation instead of adopting an animation frame as the next baseline.
                         viewportHeightRef.current = windowHeight;
+                        qaLog('IGNORE fallback');
                         startMeasurement('clamp', previousAvailableHeight, didWidthChange);
                         return;
                     } else if (pendingNativeLayoutRef.current) {
@@ -285,6 +301,11 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
                 }}
             >
                 {children(maxAutoGrowHeight)}
+                <View
+                    accessible
+                    accessibilityLabel={`AGDEBUG cap=${maxAutoGrowHeight} avail=${availableHeightRef.current} || ${debugText}`}
+                    style={{position: 'absolute', top: 0, left: 0, width: 2, height: 2}}
+                />
             </View>
         </ScrollView>
     );
