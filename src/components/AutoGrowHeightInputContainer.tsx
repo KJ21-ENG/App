@@ -12,7 +12,7 @@ import measureAutoGrowContent from '@libs/measureAutoGrowContent';
 import variables from '@styles/variables';
 
 import type {ReactNode} from 'react';
-import type {StyleProp, ViewStyle} from 'react-native';
+import type {ScrollView as RNScrollView, StyleProp, ViewStyle} from 'react-native';
 
 import React, {useLayoutEffect, useRef, useState} from 'react';
 import {Platform, View} from 'react-native';
@@ -57,7 +57,8 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
     const viewportHeightRef = useRef(windowHeight);
     const keyboardHeightRef = useRef(nativeKeyboardHeight);
     const lastExactContainerHeightRef = useRef<number | null>(null);
-    const latestLayoutHeightRef = useRef<number | null>(null);
+    const containerRef = useRef<RNScrollView>(null);
+    const keyboardBaselineHeightRef = useRef<number | null>(null);
     const settledKeyboardHeightRef = useRef(keyboardHeight);
     const pendingNativeLayoutRef = useRef<PendingNativeLayout | null>(null);
     const nativeKeyboardFallbackRef = useRef(false);
@@ -110,6 +111,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
         }
 
         const keyboardHeightDelta = nativeKeyboardHeight - previousKeyboardHeight;
+        keyboardBaselineHeightRef.current = availableHeightRef.current;
         qaLog(`KB ${previousKeyboardHeight}->${nativeKeyboardHeight} active=${isKeyboardActive} shown=${isKeyboardShown} kAH=${keyboardActiveHeight} kH=${keyboardHeight} pending=${JSON.stringify(pendingNativeLayoutRef.current)} avail=${availableHeightRef.current}`);
         // A native layout can arrive before the keyboard context update. Do not apply the same transition twice when that exact layout already accounts for it.
         const pendingNativeLayout = pendingNativeLayoutRef.current;
@@ -126,28 +128,33 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
 
     // The keyboard-derived slot rarely matches the real allocation: the form already reserves the bottom safe area, and a hardware keyboard shows only a shortcut bar.
     // While it differs, layouts during the animation are ignored, and none arrives after it ends, so the cap would stay wrong.
-    // keyboardHeight changes only on keyboardDidShow and keyboardDidHide, once the keyboard has settled, so adopt the last real layout then. This runs after the keyboard effect above, so it replaces that effect's estimate.
+    // keyboardHeight changes only on keyboardDidShow and keyboardDidHide, once the keyboard has settled, so measure the real slot then.
     useLayoutEffect(() => {
         if (!isIOS || keyboardHeight === settledKeyboardHeightRef.current) {
             return;
         }
 
         settledKeyboardHeightRef.current = keyboardHeight;
-        const settledHeight = latestLayoutHeightRef.current;
-        qaLog(`SETTLE kH=${keyboardHeight} latest=${settledHeight} avail=${availableHeightRef.current}`);
-        if (settledHeight === null) {
-            return;
-        }
+        qaLog(`SETTLE request kH=${keyboardHeight}`);
+        containerRef.current?.measure((_x, _y, _width, measuredHeight) => {
+            const settledHeight = Math.max(measuredHeight, variables.componentSizeLarge);
+            const baselineHeight = keyboardBaselineHeightRef.current;
+            qaLog(`SETTLE kH=${keyboardHeight} measured=${measuredHeight} baseline=${baselineHeight} avail=${availableHeightRef.current}`);
+            // A slot that did not move is not resized by the keyboard, so the keyboard estimate stays the only way to keep the input above it.
+            if (keyboardHeight !== settledKeyboardHeightRef.current || baselineHeight === null || areHeightsEqual(settledHeight, baselineHeight)) {
+                return;
+            }
 
-        pendingNativeLayoutRef.current = null;
-        nativeKeyboardFallbackRef.current = false;
-        lastExactContainerHeightRef.current = settledHeight;
-        if (areHeightsEqual(settledHeight, availableHeightRef.current)) {
-            return;
-        }
+            pendingNativeLayoutRef.current = null;
+            nativeKeyboardFallbackRef.current = false;
+            lastExactContainerHeightRef.current = settledHeight;
+            if (areHeightsEqual(settledHeight, availableHeightRef.current)) {
+                return;
+            }
 
-        availableHeightRef.current = settledHeight;
-        startMeasurement('clamp', settledHeight);
+            availableHeightRef.current = settledHeight;
+            startMeasurement('clamp', settledHeight);
+        });
     }, [isIOS, keyboardHeight, startMeasurement]);
 
     useLayoutEffect(() => {
@@ -189,6 +196,7 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
 
     return (
         <ScrollView
+            ref={containerRef}
             style={[StyleUtils.getAutoGrowHeightInputContainerStyles(shouldKeepMinimumHeight), style]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -200,7 +208,6 @@ function AutoGrowHeightInputContainer({children, style, shouldKeepMinimumHeight 
                 const previousAvailableHeight = availableHeightRef.current;
                 const isKeyboardTransitioning = isKeyboardAnimatingRef.current;
                 containerWidthRef.current = width;
-                latestLayoutHeightRef.current = availableHeight;
                 qaLog(`LAYOUT h=${height} prev=${previousAvailableHeight} anim=${isKeyboardTransitioning} active=${isKeyboardActive} shown=${isKeyboardShown} fallback=${nativeKeyboardFallbackRef.current} lastExact=${lastExactContainerHeightRef.current}`);
 
                 if (isIOS) {
