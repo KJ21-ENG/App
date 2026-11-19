@@ -100,6 +100,9 @@ jobs:
 
       - name: Setup Node
         uses: ./.github/actions/composite/setupNode
+        with:
+          # Same workspaces as upstream typecheck.yml; their tests and scripts import modules only these workspaces install.
+          WORKSPACES: '["server/victory-chart-renderer", "web/cloudflare-worker"]'
 
       - name: Type check with TypeScript
         run: |
