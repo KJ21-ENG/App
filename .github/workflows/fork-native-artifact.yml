@@ -227,7 +227,8 @@ jobs:
 
   ios:
     if: inputs.platform == 'ios'
-    runs-on: macos-15
+    # Xcode 27.1 matches upstream getXcodeVersion; macos-15 images do not ship it.
+    runs-on: xcode-27
     timeout-minutes: 210
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -245,9 +246,9 @@ jobs:
           [[ "$INPUT_BUILD_IDENTITY" =~ ^[0-9a-f]{64}$ ]]
           [[ "$INPUT_ARTIFACT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$ ]]
           [[ "$INPUT_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] # tag {1,128}
-          [[ "$INPUT_TOOLCHAIN" =~ ^macos-15-xcode-[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?$ ]] # toolchain {1,64}
+          [[ "$INPUT_TOOLCHAIN" =~ ^macos-27-xcode-[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?$ ]] # toolchain {1,64}
           [[ "$INPUT_XCODE_VERSION" =~ ^[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?$ ]]
-          [[ "$INPUT_TOOLCHAIN" == "macos-15-xcode-$INPUT_XCODE_VERSION" ]]
+          [[ "$INPUT_TOOLCHAIN" == "macos-27-xcode-$INPUT_XCODE_VERSION" ]]
           test "$(git rev-parse HEAD)" = "$INPUT_SHA"
       - name: Recompute build identity
         shell: bash
