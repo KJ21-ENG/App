@@ -1,6 +1,5 @@
 import {isValidAgentAccountID} from '@libs/AgentAccountIDMapping';
 
-import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 
 import {useEffect} from 'react';
@@ -20,7 +19,7 @@ type AgentNavigation = {
 function useAgentAccountID(accountID: number | string, navigation: AgentNavigation) {
     const [mappedAccountID, metadata] = useOnyx(ONYXKEYS.OPTIMISTIC_AGENT_ACCOUNT_ID_MAPPING, {selector: (mapping) => mapping?.[accountID]});
     const realAccountID = isValidAgentAccountID(mappedAccountID) ? mappedAccountID : undefined;
-    const [hasRealAgent] = useOnyx(`${ONYXKEYS.COLLECTION.AGENT}${realAccountID ?? CONST.DEFAULT_NUMBER_ID}`, {selector: (agent) => !!agent});
+    const [hasRealAgent] = useOnyx(`${ONYXKEYS.COLLECTION.AGENT}${realAccountID}`, {selector: (agent) => !!agent});
     const [hasRealDetails] = usePersonalDetail(realAccountID, (personalDetail) => !!personalDetail?.login);
     const [hasTemporaryAgent] = useOnyx(`${ONYXKEYS.COLLECTION.AGENT}${accountID}`, {selector: (agent) => !!agent});
     const [hasTemporaryDetails] = usePersonalDetail(Number(accountID), (personalDetail) => !!personalDetail);

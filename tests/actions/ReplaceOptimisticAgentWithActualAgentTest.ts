@@ -109,7 +109,7 @@ function buildRealAgentPersonalDetail(accountID: number) {
 
 async function addRealAgents(...realAccountIDs: number[]) {
     await Onyx.merge(ONYXKEYS.PERSONAL_DETAILS_LIST, Object.fromEntries(realAccountIDs.map((accountID) => [accountID, buildRealAgentPersonalDetail(accountID)])));
-    await Onyx.multiSet(Object.fromEntries(realAccountIDs.map((accountID) => [`${ONYXKEYS.COLLECTION.AGENT}${accountID}`, {prompt: 'Created instructions'}])));
+    await Promise.all(realAccountIDs.map((accountID) => Onyx.set(`${ONYXKEYS.COLLECTION.AGENT}${accountID}`, {prompt: 'Created instructions'})));
 }
 
 // What another tab receives from CreateAgent's response: the personal details list with the real agent and, because
