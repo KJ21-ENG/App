@@ -112,9 +112,12 @@ function prepareNewAgentOnyxData(
         },
     ];
 
-    // The optimistic personal detail and agent prompt are not cleared here: replaceOptimisticAgentWithActualAgent
-    // clears them after redirecting any open agent settings screen, so the cleanup can never beat the redirect.
+    // The temporary personal detail is removed here so that it leaves in the same personal details write as the real
+    // agent's details arrive in: every write of that list saves the whole list, so a separate cleanup write could drop
+    // another tab's newer entries. The temporary agent record stays until replaceOptimisticAgentWithActualAgent removes
+    // it in each tab that can show the real agent, so open agent screens always have an agent to show.
     const successData: AnyOnyxUpdate[] = [
+        buildPersonalDetailsUpdate({[optimisticAccountID]: null}),
         {
             onyxMethod: Onyx.METHOD.MERGE,
             key: `${ONYXKEYS.COLLECTION.REPORT}${optimisticReportID}`,
