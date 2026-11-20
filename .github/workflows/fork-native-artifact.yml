@@ -282,6 +282,13 @@ jobs:
           trap 'rm -rf "$NPM_CONFIG_ROOT"' EXIT
           touch "$NPM_CONFIG_ROOT/user.npmrc" "$NPM_CONFIG_ROOT/global.npmrc"
           env npm_config_userconfig="$NPM_CONFIG_ROOT/user.npmrc" npm_config_globalconfig="$NPM_CONFIG_ROOT/global.npmrc" npm_config_cache="$RUNNER_TEMP/native-npm-cache" npm_config_audit=false npm_config_fund=false npm_config_update_notifier=false npm exec --yes --package="npm@$NPM_VERSION" -- npm ci --no-audit --no-fund --no-update-notifier
+      - name: Setup Ruby
+        # Same pinned action as upstream buildIOS.yml; the runner default Ruby no longer installs the lockfile Bundler.
+        # v1.310.0
+        uses: ruby/setup-ruby@afeafc3d1ab54a631816aba4c914a0081c12ff2f
+        with:
+          bundler-cache: true
+
       - name: Select requested Xcode toolchain
         shell: bash
         run: |
