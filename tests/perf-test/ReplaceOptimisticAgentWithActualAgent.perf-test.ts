@@ -32,7 +32,8 @@ jest.mock('react-native-onyx', () => ({
         if (key === keys.COLLECTION.REPORT) {
             callback(mockReports);
         } else if (key === keys.COLLECTION.AGENT) {
-            callback({});
+            // The three real agents, as after CreateAgent's response; their temporary records were already removed.
+            callback({agent_12001: {}, agent_12002: {}, agent_12003: {}});
         } else if (key === keys.OPTIMISTIC_AGENT_ACCOUNT_ID_MAPPING) {
             mockMappingCallback = callback;
         }
