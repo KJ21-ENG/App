@@ -352,13 +352,18 @@ describe('createAgent', () => {
         expect(failureData.some((u) => u.key === ONYXKEYS.FORMS.ADD_AGENT_FORM)).toBe(false);
     });
 
-    it('success data leaves both optimistic entries in place so replaceOptimisticAgentWithActualAgent can clear them after redirecting', () => {
+    it('success data removes the temporary personal detail and leaves the temporary agent record', () => {
+        // Given a new agent
+        // When it is created
         createAgent('Bot', 'My prompt', OWNER_ACCOUNT_ID, OWNER_LOGIN);
 
+        // Then its success data removes the temporary personal detail, so it leaves in the same personal details write as
+        // the real agent's details arrive in, while the temporary agent record stays for
+        // replaceOptimisticAgentWithActualAgent to remove once a tab can show the real agent
         const {successData} = getWriteOptions();
         const accountID = getOptimisticAccountID();
 
-        expect(findUpdate(successData, ONYXKEYS.PERSONAL_DETAILS_LIST)).toBeUndefined();
+        expect(getPersonalDetailValue(successData, accountID)).toBeNull();
         expect(findUpdate(successData, `${ONYXKEYS.COLLECTION.AGENT}${accountID}`)).toBeUndefined();
     });
 
