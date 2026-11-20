@@ -43,9 +43,9 @@ const processedAccountIDs = new Map<number, number>();
 const pendingAccountIDs = new Map<number, number>();
 let isReplacementScheduled = false;
 
-// Mappings whose cleanup this tab skipped because its cache did not hold the real agent yet. The mapping is not delivered
-// again when that agent arrives, so they are retried on every personal details change until they are cleared or nothing
-// optimistic is left. A mapping with nothing to clear is never kept, so retained mappings cost nothing on app start.
+// Mappings whose cleanup or redirect this tab could not do yet. The mapping is not delivered again when the real agent
+// arrives, so they are retried when personal details or agents change until
+// nothing optimistic is left. A mapping with nothing to clear is never kept, so retained mappings cost nothing on app start.
 const skippedAccountIDs = new Map<number, number>();
 let unsubscribeFromPersonalDetails: (() => void) | undefined;
 
@@ -75,6 +75,8 @@ const agentsHydrationPromise = new Promise<void>((resolve) => {
         callback: (value) => {
             agents = value;
             resolve();
+            // The real agent's record can reach this tab after its personal details.
+            retrySkippedAccountIDs();
         },
     });
 });
@@ -156,22 +158,38 @@ function hasOptimisticAgentData(optimisticAccountID: number): boolean {
     return !!getPersonalDetail(optimisticAccountID) || !!agents?.[`${ONYXKEYS.COLLECTION.AGENT}${optimisticAccountID}`];
 }
 
+// The real agent's screens need both its record and its server details, so a tab moves its screens there only once it
+// holds both, or once nothing temporary is left to show.
+function holdsRealAgent(realAccountID: number): boolean {
+    return canClearOptimisticAgent(realAccountID) && !!agents?.[`${ONYXKEYS.COLLECTION.AGENT}${realAccountID}`];
+}
+
 function clearOptimisticAgentsWhenSafe(accountIDs: Map<number, number>) {
+    const accountIDsToRedirect = new Map<number, number>();
     const accountIDsToClear = new Map<number, number>();
     for (const [optimisticAccountID, realAccountID] of accountIDs) {
         skippedAccountIDs.delete(optimisticAccountID);
+        const hasTemporaryData = hasOptimisticAgentData(optimisticAccountID);
+        if (holdsRealAgent(realAccountID) || !hasTemporaryData) {
+            accountIDsToRedirect.set(optimisticAccountID, realAccountID);
+        }
         if (canClearOptimisticAgent(realAccountID)) {
             accountIDsToClear.set(optimisticAccountID, realAccountID);
-        } else if (hasOptimisticAgentData(optimisticAccountID)) {
+        } else if (hasTemporaryData) {
             skippedAccountIDs.set(optimisticAccountID, realAccountID);
         }
+    }
+
+    // Repair buried routes too; the hook only repairs a screen once it mounts.
+    if (accountIDsToRedirect.size > 0 && navigationRef.isReady()) {
+        redirectAgentSettingsScreens(accountIDsToRedirect);
     }
 
     if (skippedAccountIDs.size === 0) {
         unsubscribeFromPersonalDetails?.();
         unsubscribeFromPersonalDetails = undefined;
     } else if (!unsubscribeFromPersonalDetails) {
-        unsubscribeFromPersonalDetails = subscribeToPersonalDetails(() => clearOptimisticAgentsWhenSafe(new Map(skippedAccountIDs)));
+        unsubscribeFromPersonalDetails = subscribeToPersonalDetails(retrySkippedAccountIDs);
     }
 
     // The retry runs on every personal details change, so it must not scan the reports when there is nothing to clear.
@@ -180,6 +198,13 @@ function clearOptimisticAgentsWhenSafe(accountIDs: Map<number, number>) {
     }
     remapReportParticipants(accountIDsToClear);
     clearOptimisticAgentData(accountIDsToClear);
+}
+
+function retrySkippedAccountIDs() {
+    if (skippedAccountIDs.size === 0) {
+        return;
+    }
+    clearOptimisticAgentsWhenSafe(new Map(skippedAccountIDs));
 }
 
 function replaceOptimisticAgentWithActualAgent(optimisticAccountID: number, realAccountID: number) {
@@ -213,11 +238,6 @@ function replaceOptimisticAgentWithActualAgent(optimisticAccountID: number, real
                 const accountIDs = new Map(pendingAccountIDs);
                 pendingAccountIDs.clear();
                 isReplacementScheduled = false;
-
-                // Repair buried routes too; the hook only repairs a screen once it mounts.
-                if (navigationRef.isReady()) {
-                    redirectAgentSettingsScreens(accountIDs);
-                }
 
                 clearOptimisticAgentsWhenSafe(accountIDs);
             },
