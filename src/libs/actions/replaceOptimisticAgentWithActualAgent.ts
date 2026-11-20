@@ -1,3 +1,4 @@
+import {isClientTheLeader, onBecomeLeader} from '@libs/ActiveClientManager';
 import {isValidAgentAccountID, registerAgentAccountIDMapping} from '@libs/AgentAccountIDMapping';
 import Navigation, {navigationRef} from '@libs/Navigation/Navigation';
 import TransitionTracker from '@libs/Navigation/TransitionTracker';
@@ -44,7 +45,7 @@ const pendingAccountIDs = new Map<number, number>();
 let isReplacementScheduled = false;
 
 // Mappings whose cleanup or redirect this tab could not do yet. The mapping is not delivered again when the real agent
-// arrives, so they are retried when personal details or agents change until
+// arrives, so they are retried when personal details or agents change (and when this tab becomes the leader) until
 // nothing optimistic is left. A mapping with nothing to clear is never kept, so retained mappings cost nothing on app start.
 const skippedAccountIDs = new Map<number, number>();
 let unsubscribeFromPersonalDetails: (() => void) | undefined;
@@ -167,13 +168,15 @@ function holdsRealAgent(realAccountID: number): boolean {
 function clearOptimisticAgentsWhenSafe(accountIDs: Map<number, number>) {
     const accountIDsToRedirect = new Map<number, number>();
     const accountIDsToClear = new Map<number, number>();
+    // Every personal details write saves the whole list from the writer's cache, so only one tab writes the cleanup.
+    const isLeader = isClientTheLeader();
     for (const [optimisticAccountID, realAccountID] of accountIDs) {
         skippedAccountIDs.delete(optimisticAccountID);
         const hasTemporaryData = hasOptimisticAgentData(optimisticAccountID);
         if (holdsRealAgent(realAccountID) || !hasTemporaryData) {
             accountIDsToRedirect.set(optimisticAccountID, realAccountID);
         }
-        if (canClearOptimisticAgent(realAccountID)) {
+        if (isLeader && canClearOptimisticAgent(realAccountID)) {
             accountIDsToClear.set(optimisticAccountID, realAccountID);
         } else if (hasTemporaryData) {
             skippedAccountIDs.set(optimisticAccountID, realAccountID);
@@ -206,6 +209,9 @@ function retrySkippedAccountIDs() {
     }
     clearOptimisticAgentsWhenSafe(new Map(skippedAccountIDs));
 }
+
+// A tab that becomes the leader takes over the cleanup the previous leader did not finish.
+onBecomeLeader(retrySkippedAccountIDs);
 
 function replaceOptimisticAgentWithActualAgent(optimisticAccountID: number, realAccountID: number) {
     // An identity mapping would clear the real agent's data below, and a malformed realAccountID would redirect
