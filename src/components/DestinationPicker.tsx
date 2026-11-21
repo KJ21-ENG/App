@@ -29,11 +29,13 @@ type DestinationPickerProps = {
 
 function DestinationPicker({selectedDestination, policyID, onSubmit, ref}: DestinationPickerProps) {
     const policy = usePolicy(policyID);
-    const customUnit = getPerDiemCustomUnit(policy);
     const [policyRecentlyUsedDestinations] = useOnyx(`${ONYXKEYS.COLLECTION.POLICY_RECENTLY_USED_DESTINATIONS}${policyID}`);
 
     const {translate} = useLocalize();
     const [searchValue, debouncedSearchValue, setSearchValue] = useDebouncedState('');
+    // Read after the last hook, so React Compiler keeps the sections while only the typed text changes: the list is
+    // filtered by the debounced text, so each key would otherwise build the same sections twice.
+    const customUnit = getPerDiemCustomUnit(policy);
 
     const getSelectedOptions = (): Destination[] => {
         if (!selectedDestination) {
@@ -60,7 +62,7 @@ function DestinationPicker({selectedDestination, policyID, onSubmit, ref}: Desti
     const sections = getDestinationListSections({
         searchValue: debouncedSearchValue,
         selectedOptions,
-        destinations: Object.values(customUnit?.rates ?? {}),
+        destinations: customUnit?.rates ?? {},
         recentlyUsedDestinations: policyRecentlyUsedDestinations,
         translate,
     });

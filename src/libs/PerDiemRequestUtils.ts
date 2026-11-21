@@ -76,6 +76,39 @@ function getDestinationOptionTree(options: Destination[]): ModifiedOptionTree[] 
     return Array.from(optionCollection.values());
 }
 
+type SortedDestinationList = {
+    /** Every destination, sorted by name */
+    sortedDestinations: Destination[];
+
+    /** An option for every destination, in the same order, as the "All" section lists them */
+    allDestinationOptions: ModifiedOptionTree[];
+};
+
+// The destination picker builds its sections again for every search, and a workspace can have tens of thousands of
+// destinations. Sorting them and building an option for each one every time made opening the picker and typing in its
+// search slow, so both are kept per rates object. This is safe because Onyx never edits a stored rates object in place:
+// any change to the rates gives a new object, which is sorted again.
+const sortedDestinationListCache = new WeakMap<Record<string, Rate>, SortedDestinationList>();
+
+/**
+ * Sorts the destinations by name and builds an option for each, reusing the last result for the same rates object
+ */
+function getSortedDestinationList(rates: Record<string, Rate>): SortedDestinationList {
+    const cachedList = sortedDestinationListCache.get(rates);
+    if (cachedList) {
+        return cachedList;
+    }
+
+    const sortedDestinations: Destination[] = lodashSortBy(Object.values(rates), 'name').map((rate) => ({
+        name: rate.name ?? '',
+        rateID: rate.customUnitRateID,
+        currency: rate.currency ?? CONST.CURRENCY.USD,
+    }));
+    const sortedDestinationList = {sortedDestinations, allDestinationOptions: getDestinationOptionTree(sortedDestinations)};
+    sortedDestinationListCache.set(rates, sortedDestinationList);
+    return sortedDestinationList;
+}
+
 /**
  * Builds the section list for destinations
  */
@@ -87,18 +120,15 @@ function getDestinationListSections({
     maxRecentReportsToShow = CONST.IOU.MAX_RECENT_REPORTS_TO_SHOW,
     translate,
 }: {
-    destinations: Rate[];
+    /** The per diem rates, keyed by rate ID, as the custom unit stores them */
+    destinations: Record<string, Rate>;
     selectedOptions?: Destination[];
     searchValue?: string;
     recentlyUsedDestinations?: string[];
     maxRecentReportsToShow?: number;
     translate: LocalizedTranslate;
 }): DestinationTreeSection[] {
-    const sortedDestinations: Destination[] = lodashSortBy(destinations, 'name').map((rate) => ({
-        name: rate.name ?? '',
-        rateID: rate.customUnitRateID,
-        currency: rate.currency ?? CONST.CURRENCY.USD,
-    }));
+    const {sortedDestinations, allDestinationOptions} = getSortedDestinationList(destinations);
     const destinationSections: DestinationTreeSection[] = [];
 
     if (searchValue) {
@@ -160,11 +190,10 @@ function getDestinationListSections({
         });
     }
 
-    const data = getDestinationOptionTree(sortedDestinations);
     destinationSections.push({
         // "All" section when items amount more than the threshold
         title: translate('common.all'),
-        data,
+        data: allDestinationOptions,
         sectionIndex: 4,
     });
 

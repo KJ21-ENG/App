@@ -19,6 +19,18 @@ import createRandomPolicy from '../utils/collections/policies';
 import {translateLocal} from '../utils/TestHelper';
 import waitForBatchedUpdatesWithAct from '../utils/waitForBatchedUpdatesWithAct';
 
+// Counts the sorts of destinations by name, to check that the picker does not sort them again on every search
+let mockDestinationSortCount = 0;
+jest.mock('lodash/sortBy', () => {
+    const actualSortBy = jest.requireActual<(...args: unknown[]) => unknown[]>('lodash/sortBy');
+    return (...args: unknown[]) => {
+        if (args.at(1) === 'name') {
+            mockDestinationSortCount++;
+        }
+        return actualSortBy(...args);
+    };
+});
+
 const mockSelectionList = jest.fn<null, [SelectionListWithSectionsProps<ListItem>]>(() => null);
 jest.mock('@components/SelectionList/SelectionListWithSections', () => ({
     __esModule: true,
@@ -248,6 +260,32 @@ describe('DestinationPicker', () => {
         await typeSearch('germany');
         await mergeRates([['berlin', null]]);
         expect(summarize(getLastListProps().sections)).toStrictEqual([{title: '', sectionIndex: 0, rateIDs: ['germany-bonn'], selectedRateIDs: []}]);
+    });
+
+    it('sorts the destinations once while the user searches, and again only when the rates change', async () => {
+        // Given an open picker with a selected destination and recently used ones
+        await setRates(createRates(destinationRows));
+        await setRecentlyUsedDestinations(['zurich', 'cuba']);
+        mockDestinationSortCount = 0;
+        renderPicker('zone-9');
+        await waitForBatchedUpdatesWithAct();
+        expect(mockDestinationSortCount).toBe(1);
+
+        // When the user types, changes the search and clears it
+        await typeSearch('g');
+        await typeSearch('ger');
+        await typeSearch('germany b');
+        await typeSearch('');
+
+        // Then the destinations are not sorted again
+        expect(summarize(getLastListProps().sections).map((section) => section.rateIDs.length)).toStrictEqual([1, 2, sortedRateIDs.length]);
+        expect(mockDestinationSortCount).toBe(1);
+
+        // When a destination is renamed, they are sorted once more, and a search after that does not sort them again
+        await mergeRates([['zone-9', {name: 'Austria - Vienna'}]]);
+        await typeSearch('austria');
+        expect(summarize(getLastListProps().sections)).toStrictEqual([{title: '', sectionIndex: 0, rateIDs: ['zone-9'], selectedRateIDs: ['zone-9']}]);
+        expect(mockDestinationSortCount).toBe(2);
     });
 
     it('follows changes to the recently used destinations and to the selected destination', async () => {

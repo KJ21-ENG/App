@@ -76,7 +76,7 @@ describe('PerDiemRequestUtils', () => {
         ];
 
         const tokenizeSearchResult = getDestinationListSections({
-            destinations,
+            destinations: Object.fromEntries(destinations.map((destination) => [destination.customUnitRateID, destination])),
             searchValue: tokenizeSearch,
             translate: translateLocal,
         });
@@ -119,7 +119,7 @@ describe('PerDiemRequestUtils', () => {
         ) {
             const selectedRate = selectedRateID ? rates[selectedRateID] : undefined;
             return getDestinationListSections({
-                destinations: Object.values(rates),
+                destinations: rates,
                 searchValue,
                 selectedOptions: selectedRate
                     ? [{rateID: selectedRate.customUnitRateID, name: selectedRate.name ?? '', currency: selectedRate.currency ?? CONST.CURRENCY.USD, isSelected: true}]
