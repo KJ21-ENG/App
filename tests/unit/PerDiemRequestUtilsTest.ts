@@ -83,6 +83,195 @@ describe('PerDiemRequestUtils', () => {
         expect(tokenizeSearchResult).toStrictEqual(searchResultList);
     });
 
+    describe('getDestinationListSections sections and order', () => {
+        // Per diem rates as a workspace stores them, keyed by rate ID: [rate ID, name, currency]. The IDs are not
+        // numbers, so the rates keep this order, which is the order equal names are listed in.
+        const destinationRows: Array<[string, string | undefined, string | undefined]> = [
+            ['germany-bonn', 'germany - bonn', 'EUR'],
+            ['zone-9', 'Zone 9', undefined],
+            ['zurich-accent', 'Zürich', 'CHF'],
+            ['paris-b', 'France - Paris', 'EUR'],
+            ['unnamed', undefined, 'EUR'],
+            ['zone-10', 'Zone 10', undefined],
+            ['zurich', 'Zurich', 'CHF'],
+            ['paris-a', 'France - Paris', 'EUR'],
+            ['empty', '', 'EUR'],
+            ['berlin', 'Germany - Berlin', 'EUR'],
+            ['bogota', 'Colombia - Bogotá', 'COP'],
+            ['curacao', 'Curaçao', 'ANG'],
+            ['cuba', 'Cuba - Havana', undefined],
+        ];
+
+        // Names compare by character code: the empty name first, capitals before lower case, "10" before "9", plain
+        // letters before accented ones, equal names in the stored order, and a rate without a name last.
+        const sortedRateIDs = ['empty', 'bogota', 'cuba', 'curacao', 'paris-b', 'paris-a', 'berlin', 'zone-10', 'zone-9', 'zurich', 'zurich-accent', 'germany-bonn', 'unnamed'];
+
+        function createRates(rows: Array<[string, string | undefined, string | undefined]>): Record<string, Rate> {
+            return Object.fromEntries(rows.map(([rateID, name, currency]) => [rateID, {customUnitRateID: rateID, name, currency, enabled: true, rate: 100}]));
+        }
+
+        const allRates = createRates(destinationRows);
+
+        /** Builds the sections the way DestinationPicker asks for them: from the rates, the search text and the selected rate ID */
+        function getSections(
+            rates: Record<string, Rate>,
+            {searchValue = '', selectedRateID, recentlyUsedDestinations}: {searchValue?: string; selectedRateID?: string; recentlyUsedDestinations?: string[]} = {},
+        ) {
+            const selectedRate = selectedRateID ? rates[selectedRateID] : undefined;
+            return getDestinationListSections({
+                destinations: Object.values(rates),
+                searchValue,
+                selectedOptions: selectedRate
+                    ? [{rateID: selectedRate.customUnitRateID, name: selectedRate.name ?? '', currency: selectedRate.currency ?? CONST.CURRENCY.USD, isSelected: true}]
+                    : [],
+                recentlyUsedDestinations,
+                translate: translateLocal,
+            });
+        }
+
+        /** Each section's title and index, the rate IDs it lists in order, and which of them are marked selected */
+        function summarize(sections: DestinationTreeSection[]) {
+            return sections.map((section) => ({
+                title: section.title,
+                sectionIndex: section.sectionIndex,
+                rateIDs: section.data.map((option) => option.keyForList),
+                selectedRateIDs: section.data.filter((option) => option.isSelected).map((option) => option.keyForList),
+            }));
+        }
+
+        it('lists every destination by name, comparing character codes, with equal names in the stored order', () => {
+            expect(summarize(getSections(allRates))).toStrictEqual([{title: translateLocal('common.all'), sectionIndex: 4, rateIDs: sortedRateIDs, selectedRateIDs: []}]);
+        });
+
+        it('builds each row from the rate name, ID and currency', () => {
+            const rates = createRates([
+                ['unnamed', undefined, 'EUR'],
+                ['cuba', 'Cuba - Havana', undefined],
+                ['berlin', 'Germany - Berlin', 'EUR'],
+            ]);
+
+            expect(getSections(rates)).toStrictEqual([
+                {
+                    title: '',
+                    sectionIndex: 2,
+                    data: [
+                        {
+                            text: 'Cuba - Havana',
+                            keyForList: 'cuba',
+                            searchText: 'Cuba - Havana',
+                            tooltipText: 'Cuba - Havana',
+                            isDisabled: false,
+                            isSelected: false,
+                            currency: CONST.CURRENCY.USD,
+                        },
+                        {
+                            text: 'Germany - Berlin',
+                            keyForList: 'berlin',
+                            searchText: 'Germany - Berlin',
+                            tooltipText: 'Germany - Berlin',
+                            isDisabled: false,
+                            isSelected: false,
+                            currency: 'EUR',
+                        },
+                        {text: '', keyForList: 'unnamed', searchText: '', tooltipText: '', isDisabled: false, isSelected: false, currency: 'EUR'},
+                    ],
+                },
+            ]);
+        });
+
+        it('lists the selected destination first, and again without the selected mark in All', () => {
+            expect(summarize(getSections(allRates, {selectedRateID: 'zone-9'}))).toStrictEqual([
+                {title: '', sectionIndex: 1, rateIDs: ['zone-9'], selectedRateIDs: ['zone-9']},
+                {title: translateLocal('common.all'), sectionIndex: 4, rateIDs: sortedRateIDs, selectedRateIDs: []},
+            ]);
+        });
+
+        it('lists up to five recently used destinations in name order, leaving out the selected one and unknown rate IDs', () => {
+            const recentlyUsedDestinations = ['zurich', 'unnamed', 'berlin', 'not-a-rate', 'zone-9', 'cuba', 'curacao', 'empty'];
+
+            expect(summarize(getSections(allRates, {selectedRateID: 'berlin', recentlyUsedDestinations}))).toStrictEqual([
+                {title: '', sectionIndex: 1, rateIDs: ['berlin'], selectedRateIDs: ['berlin']},
+                {title: translateLocal('common.recent'), sectionIndex: 3, rateIDs: ['empty', 'cuba', 'curacao', 'zone-9', 'zurich'], selectedRateIDs: []},
+                {title: translateLocal('common.all'), sectionIndex: 4, rateIDs: sortedRateIDs, selectedRateIDs: []},
+            ]);
+        });
+
+        const searchCases: Array<[string, string[], string[]]> = [
+            ['GERMANY', ['berlin', 'germany-bonn'], []],
+            ['fr par', ['paris-b', 'paris-a'], ['paris-a']],
+            [' paris ', ['paris-b', 'paris-a'], ['paris-a']],
+            ['zone 1', ['zone-10'], []],
+            ['ü', ['zurich-accent'], []],
+            ['a b', ['bogota', 'cuba', 'berlin', 'germany-bonn'], []],
+            ['xyz', [], []],
+            ['  ', sortedRateIDs, ['paris-a']],
+        ];
+
+        it.each(searchCases)('lists the destinations that match every word of the search "%s" in name order, marking the selected one', (searchValue, rateIDs, selectedRateIDs) => {
+            const sections = getSections(allRates, {searchValue, selectedRateID: 'paris-a', recentlyUsedDestinations: ['zurich', 'cuba']});
+
+            expect(summarize(sections)).toStrictEqual([{title: '', sectionIndex: 0, rateIDs, selectedRateIDs}]);
+        });
+
+        it('lists fewer destinations than the search box limit in one section, without the selected one or a recent section', () => {
+            const rates = createRates(destinationRows.slice(0, CONST.STANDARD_LIST_ITEM_LIMIT - 1));
+
+            expect(summarize(getSections(rates, {selectedRateID: 'zone-9', recentlyUsedDestinations: ['zurich', 'zone-10']}))).toStrictEqual([
+                {title: '', sectionIndex: 1, rateIDs: ['zone-9'], selectedRateIDs: ['zone-9']},
+                {
+                    title: '',
+                    sectionIndex: 2,
+                    rateIDs: ['empty', 'bogota', 'paris-b', 'paris-a', 'berlin', 'zone-10', 'zurich', 'zurich-accent', 'germany-bonn', 'unnamed'],
+                    selectedRateIDs: [],
+                },
+            ]);
+        });
+
+        it('lists as many destinations as the search box limit with the recent and All sections', () => {
+            const rates = createRates(destinationRows.slice(0, CONST.STANDARD_LIST_ITEM_LIMIT));
+
+            expect(summarize(getSections(rates, {selectedRateID: 'zone-9', recentlyUsedDestinations: ['zurich', 'zone-10', 'curacao']}))).toStrictEqual([
+                {title: '', sectionIndex: 1, rateIDs: ['zone-9'], selectedRateIDs: ['zone-9']},
+                {title: translateLocal('common.recent'), sectionIndex: 3, rateIDs: ['curacao', 'zone-10', 'zurich'], selectedRateIDs: []},
+                {
+                    title: translateLocal('common.all'),
+                    sectionIndex: 4,
+                    rateIDs: ['empty', 'bogota', 'curacao', 'paris-b', 'paris-a', 'berlin', 'zone-10', 'zone-9', 'zurich', 'zurich-accent', 'germany-bonn', 'unnamed'],
+                    selectedRateIDs: [],
+                },
+            ]);
+        });
+
+        it('lists only the selected destination when it is the only one, and nothing when there are no destinations', () => {
+            const rates = createRates([['berlin', 'Germany - Berlin', 'EUR']]);
+
+            expect(summarize(getSections(rates, {selectedRateID: 'berlin'}))).toStrictEqual([{title: '', sectionIndex: 1, rateIDs: ['berlin'], selectedRateIDs: ['berlin']}]);
+            expect(getSections({})).toStrictEqual([]);
+        });
+
+        it('shows a renamed or added destination when the rates change, and the earlier list again for the earlier rates', () => {
+            const changedRates = createRates([
+                ...destinationRows.map(([rateID, name, currency]): [string, string | undefined, string | undefined] =>
+                    rateID === 'zone-9' ? [rateID, 'Austria - Vienna', undefined] : [rateID, name, currency],
+                ),
+                ['oslo', 'Norway - Oslo', 'NOK'],
+            ]);
+
+            expect(summarize(getSections(allRates))).toStrictEqual([{title: translateLocal('common.all'), sectionIndex: 4, rateIDs: sortedRateIDs, selectedRateIDs: []}]);
+            expect(summarize(getSections(changedRates))).toStrictEqual([
+                {
+                    title: translateLocal('common.all'),
+                    sectionIndex: 4,
+                    rateIDs: ['empty', 'zone-9', 'bogota', 'cuba', 'curacao', 'paris-b', 'paris-a', 'berlin', 'oslo', 'zone-10', 'zurich', 'zurich-accent', 'germany-bonn', 'unnamed'],
+                    selectedRateIDs: [],
+                },
+            ]);
+            expect(summarize(getSections(changedRates, {searchValue: 'vienna'}))).toStrictEqual([{title: '', sectionIndex: 0, rateIDs: ['zone-9'], selectedRateIDs: []}]);
+            expect(summarize(getSections(allRates))).toStrictEqual([{title: translateLocal('common.all'), sectionIndex: 4, rateIDs: sortedRateIDs, selectedRateIDs: []}]);
+            expect(getSections(allRates, {selectedRateID: 'cuba'})).toStrictEqual(getSections(allRates, {selectedRateID: 'cuba'}));
+        });
+    });
+
     describe('getCustomUnitID', () => {
         it('should return the correct custom unit ID', async () => {
             const policy: Policy = {
