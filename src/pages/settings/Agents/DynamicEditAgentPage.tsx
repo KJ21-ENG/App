@@ -47,9 +47,9 @@ function DynamicEditAgentPage({route, navigation}: DynamicEditAgentPageProps) {
     const {translate} = useLocalize();
     const styles = useThemeStyles();
     const icons = useMemoizedLazyExpensifyIcons(['Trashcan', 'ChatBubble', 'MagnifyingGlass', 'Users']);
-    const [accountID, accountIDMetadata] = useAgentAccountID(route.params.accountID, navigation);
+    const [accountID, accountIDMetadata, personalDetailsAccountID] = useAgentAccountID(route.params.accountID, navigation);
     const [agent, agentMetadata] = useOnyx(`${ONYXKEYS.COLLECTION.AGENT}${accountID}`);
-    const [personalDetails, personalDetailsMetadata] = usePersonalDetail(accountID);
+    const [personalDetails, personalDetailsMetadata] = usePersonalDetail(personalDetailsAccountID);
     const [allPolicies] = useOnyx(ONYXKEYS.COLLECTION.POLICY);
     const {showConfirmModal} = useConfirmModal();
     const showRuleBotGuardModal = useRuleBotGuardModal();
