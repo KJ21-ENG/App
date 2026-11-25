@@ -44,8 +44,8 @@ const mockUpdate = jest.spyOn(Onyx, 'update');
 type CapturedUpdate = Omit<AnyOnyxUpdate<OnyxKey>, 'value'> & {value?: unknown};
 type WriteOptions = {optimisticData: CapturedUpdate[]; successData: CapturedUpdate[]; failureData: CapturedUpdate[]};
 
-function getWriteOptions(): WriteOptions {
-    const options = mockWrite.mock.calls.at(0)?.at(2);
+function getWriteOptions(callIndex = 0): WriteOptions {
+    const options = mockWrite.mock.calls.at(callIndex)?.at(2);
     if (!options || typeof options !== 'object' || !('optimisticData' in options)) {
         throw new Error('write was not called with optimistic options');
     }
@@ -525,6 +525,36 @@ describe('updateAgentPrompt', () => {
         jest.clearAllMocks();
     });
 
+    afterEach(() => {
+        // A test may mark a real agent's record as held in this tab; the next one starts without it.
+        setHeldAgentRecords({});
+    });
+
+    it('ends on the newest prompt when an earlier save made before the record arrived is still queued', () => {
+        // Given a tab that saves the instructions once before it holds the real agent's record and once after it, while
+        // both requests are still queued. The queue runs them in order and applies their success data in that order.
+        const optimisticAccountID = 6029384715602943;
+        const realAccountID = 8203947561820399;
+        const realAgentKey = `${ONYXKEYS.COLLECTION.AGENT}${realAccountID}`;
+        registerAgentAccountIDMapping(optimisticAccountID, realAccountID);
+        updateAgentPrompt(optimisticAccountID, 'First prompt', 'Created prompt');
+        setHeldAgentRecords({[realAgentKey]: {prompt: 'Created prompt'}});
+        updateAgentPrompt(optimisticAccountID, 'Second prompt', 'First prompt');
+
+        // When the second save is shown optimistically and both requests then succeed, in order
+        const first = getWriteOptions(0);
+        const second = getWriteOptions(1);
+        let record: Record<string, unknown> = {prompt: 'Created prompt'};
+        for (const update of [...second.optimisticData, ...first.successData, ...second.successData]) {
+            if (update.key === realAgentKey && isRecord(update.value)) {
+                record = {...record, ...update.value};
+            }
+        }
+
+        // Then the record ends on the newest prompt, as the server does
+        expect(record.prompt).toBe('Second prompt');
+    });
+
     it("saves the new prompt through the success data while this tab does not hold the real agent's record", () => {
         // Given a tab that already resolves the real accountID from another tab's mapping, but does not hold the real
         // agent's record yet, so an optimistic merge would save a record without its owner
@@ -596,6 +626,25 @@ describe('updateAgentPrompt', () => {
 describe('deleteAgent', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+    });
+
+    it("does not restore the real agent's details on failure when it did not change them", () => {
+        // Given a tab that resolves the real accountID but does not hold the real agent's details yet, so the deletion
+        // writes no placeholder for them. Restoring them on failure would merge into a list the tab applying the failure may
+        // not hold the real agent in, and save it without the agent's login.
+        const optimisticAccountID = 4718293056471830;
+        const realAccountID = 9031827465903183;
+        registerAgentAccountIDMapping(optimisticAccountID, realAccountID);
+
+        // When the agent is deleted from a screen that still shows the temporary agent
+        deleteAgent(optimisticAccountID, undefined, undefined, false);
+
+        // Then neither the optimistic data nor the failure data writes the real agent's personal detail
+        const {optimisticData, failureData} = getWriteOptions();
+        const writesRealDetail = (updates: CapturedUpdate[]) =>
+            updates.some((update) => update.key === ONYXKEYS.PERSONAL_DETAILS_LIST && isRecord(update.value) && String(realAccountID) in update.value);
+        expect(writesRealDetail(optimisticData)).toBe(false);
+        expect(writesRealDetail(failureData)).toBe(false);
     });
 
     it('calls write with DELETE_AGENT command and correct params', () => {
