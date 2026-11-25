@@ -26,7 +26,8 @@ function useWorkspaceAgentsTable(policy: OnyxEntry<Policy>) {
     const workspaceAgents: AgentRowData[] = [];
     for (const key of Object.keys(manageableWorkspaceAgents)) {
         const accountID = Number(key.slice(ONYXKEYS.COLLECTION.AGENT.length));
-        const agent = agents.find((agentItem) => agentItem.accountID === accountID);
+        // Rows are keyed by the agent record's accountID; a new agent's row may show its real details under another ID.
+        const agent = agents.find((agentItem) => agentItem.keyForList === String(accountID));
 
         if (!agent) {
             Log.warn('Manageable agent is not found in agents list', {accountID, policyID});

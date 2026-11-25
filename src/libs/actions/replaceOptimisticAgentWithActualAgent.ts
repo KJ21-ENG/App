@@ -1,3 +1,4 @@
+import {isClientTheLeader} from '@libs/ActiveClientManager';
 import {isValidAgentAccountID, registerAgentAccountIDMapping, setHeldAgentRecords} from '@libs/AgentAccountIDMapping';
 import Navigation, {navigationRef} from '@libs/Navigation/Navigation';
 import TransitionTracker from '@libs/Navigation/TransitionTracker';
@@ -185,7 +186,11 @@ function clearOptimisticAgentsWhenSafe(accountIDs: Map<number, number>) {
     if (accountIDsToClear.size === 0) {
         return;
     }
-    remapReportParticipants(accountIDsToClear);
+    // A merge saves the whole report from this tab's copy. The leader applied CreateAgent's response, so its copy of the
+    // DM is current; another tab's copy can still miss newer fields, so only the leader repairs participants.
+    if (isClientTheLeader()) {
+        remapReportParticipants(accountIDsToClear);
+    }
     clearOptimisticAgentData(accountIDsToClear);
 }
 
