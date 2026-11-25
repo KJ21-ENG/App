@@ -469,6 +469,8 @@ describe('DynamicEditAgentPage', () => {
             expect(JSON.stringify(toJSON())).toContain('Pending instructions');
             expect(JSON.stringify(toJSON())).toContain('Created agent');
             expect(JSON.stringify(toJSON())).not.toContain('notFound.notHere');
+            // and delete is off, because this tab doesn't hold the real agent's record yet
+            expect(screen.getByText('editAgentPage.deleteAgent').props.onPress).toBeUndefined();
 
             // When the real agent's record arrives
             await act(async () => {
@@ -481,6 +483,45 @@ describe('DynamicEditAgentPage', () => {
             expect(JSON.stringify(toJSON())).toContain('Created agent');
             expect(JSON.stringify(toJSON())).toContain('Created instructions');
             expect(JSON.stringify(toJSON())).not.toContain('notFound.notHere');
+            // and delete is on again now that this tab holds the whole real agent
+            expect(screen.getByText('editAgentPage.deleteAgent').props.onPress).toBeDefined();
+        });
+
+        it('shows the saved name and keeps delete off when the details reach this tab before the mapping', async () => {
+            // Given an Edit screen on a new agent in a second tab that received the personal details write, which removes
+            // the temporary details, before the mapping, so it can't tell which real agent replaced them yet
+            const optimisticAccountID = 8203917465028174;
+            const realAccountID = 12350;
+            const route = createMock<DynamicEditAgentPageRoute>({params: {accountID: optimisticAccountID}});
+            await Onyx.set(`${ONYXKEYS.COLLECTION.AGENT}${optimisticAccountID}`, {prompt: 'Pending instructions', fallbackDisplayName: 'Pending agent'});
+            await Onyx.merge(ONYXKEYS.PERSONAL_DETAILS_LIST, {[realAccountID]: {accountID: realAccountID, displayName: 'Created agent', login: 'agent+12350@expensify.com'}});
+            const {toJSON} = render(
+                <DynamicEditAgentPage
+                    route={route}
+                    navigation={mockNavigation}
+                />,
+            );
+
+            // When the screen renders in that state
+            await act(async () => waitForBatchedUpdates());
+
+            // Then it shows the temporary record's saved name and instructions instead of a blank name or not-found, and
+            // delete is off while the agent is settling
+            expect(JSON.stringify(toJSON())).toContain('Pending agent');
+            expect(JSON.stringify(toJSON())).toContain('Pending instructions');
+            expect(JSON.stringify(toJSON())).not.toContain('notFound.notHere');
+            expect(screen.getByText('editAgentPage.deleteAgent').props.onPress).toBeUndefined();
+
+            // When the mapping and the real agent's record arrive
+            await act(async () => {
+                await Onyx.merge(ONYXKEYS.OPTIMISTIC_AGENT_ACCOUNT_ID_MAPPING, {[optimisticAccountID]: realAccountID});
+                await Onyx.set(`${ONYXKEYS.COLLECTION.AGENT}${realAccountID}`, {prompt: 'Created instructions'});
+                await waitForBatchedUpdates();
+            });
+
+            // Then the screen moves to the real agent, and delete is on again now that this tab holds the whole real agent
+            expect(mockSetParams).toHaveBeenCalledWith({accountID: String(realAccountID)});
+            expect(screen.getByText('editAgentPage.deleteAgent').props.onPress).toBeDefined();
         });
 
         it('opens an optimistic route after creation has already completed', async () => {
